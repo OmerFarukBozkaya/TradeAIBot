@@ -76,7 +76,7 @@ class Binance:
                         'symbol'] != "GTOUSDT" and s['symbol'] != "SRMUSDT"):
                 list_coin.append(s['symbol'])
         return list_coin
-    def minimum_hareket(basamak):
+    def minimum_hareket(self,basamak):
         if (basamak == 1):
             return 0
         if (basamak == 0.1):
