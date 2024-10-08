@@ -1,11 +1,8 @@
-from Indikator import Indikator
 from Binance import Binance
 from Stratejiler import Al_Sat
-from Araclar import Araclar
 
 binance = Binance()
-araclar= Araclar()
-
-print(araclar.piyasa_acik_mi())
+alsat = Al_Sat()
 
 
+alsat.dynamic_strategy(coinlist=binance.secili_list(),periyot="5m",gercek=False,sonislem="SAT",nakit=100)

@@ -1,4 +1,5 @@
 from binance.client import Client       #   pip install python-binance
+from Indikator import Indikator
 class Binance:
     def __init__(self, api_key=None, api_secret=None):
         """
@@ -92,37 +93,11 @@ class Binance:
         if (basamak == 0.000001):
             return 6
     def secili_list(self):
-        return ['BTCUSDT', 'ETHUSDT', 'BNBUSDT', 'NEOUSDT', 'LTCUSDT', 'QTUMUSDT', 'ADAUSDT', 'XRPUSDT', 'EOSUSDT',
-                'IOTAUSDT',
-                'XLMUSDT', 'ONTUSDT', 'TRXUSDT', 'ETCUSDT', 'ICXUSDT', 'NULSUSDT', 'VETUSDT', 'LINKUSDT', 'WAVESUSDT',
-                'BTTUSDT', 'HOTUSDT', 'ZILUSDT', 'ZRXUSDT', 'FETUSDT', 'BATUSDT', 'ZECUSDT', 'IOSTUSDT', 'CELRUSDT',
-                'DASHUSDT', 'NANOUSDT', 'OMGUSDT', 'THETAUSDT', 'ENJUSDT', 'MITHUSDT', 'MATICUSDT', 'ATOMUSDT',
-                'ONEUSDT', 'FTMUSDT',
-                'ALGOUSDT', 'DOGEUSDT', 'DUSKUSDT', 'ANKRUSDT', 'WINUSDT', 'COSUSDT', 'COCOSUSDT', 'MTLUSDT',
-                'TOMOUSDT',
-                'PERLUSDT', 'DENTUSDT', 'MFTUSDT', 'KEYUSDT', 'DOCKUSDT', 'WANUSDT', 'FUNUSDT', 'CVCUSDT', 'CHZUSDT',
-                'BANDUSDT',
-                'BEAMUSDT', 'XTZUSDT', 'RENUSDT', 'RVNUSDT', 'HBARUSDT', 'NKNUSDT', 'STXUSDT', 'KAVAUSDT', 'ARPAUSDT',
-                'IOTXUSDT',
-                'RLCUSDT', 'CTXCUSDT', 'BCHUSDT', 'TROYUSDT', 'VITEUSDT', 'OGNUSDT', 'WRXUSDT', 'BTSUSDT',
-                'LSKUSDT', 'BNTUSDT', 'LTOUSDT', 'AIONUSDT', 'MBLUSDT', 'COTIUSDT', 'STPTUSDT', 'DATAUSDT', 'SOLUSDT',
-                'CTSIUSDT', 'HIVEUSDT', 'CHRUSDT', 'ARDRUSDT', 'MDTUSDT', 'STMXUSDT', 'KNCUSDT', 'REPUSDT', 'LRCUSDT',
-                'PNTUSDT',
-                'COMPUSDT', 'SCUSDT', 'ZENUSDT', 'SNXUSDT', 'VTHOUSDT', 'DGBUSDT', 'SXPUSDT', 'DCRUSDT', 'STORJUSDT',
-                'MANAUSDT',
-                'BALUSDT', 'BLZUSDT', 'IRISUSDT', 'KMDUSDT', 'JSTUSDT', 'ANTUSDT', 'CRVUSDT', 'SANDUSDT', 'OCEANUSDT',
-                'NMRUSDT', 'DOTUSDT', 'LUNAUSDT', 'RSRUSDT', 'WNXMUSDT', 'TRBUSDT', 'SUSHIUSDT', 'KSMUSDT', 'EGLDUSDT',
-                'DIAUSDT', 'RUNEUSDT', 'FIOUSDT', 'UMAUSDT', 'BELUSDT', 'WINGUSDT', 'UNIUSDT', 'NBSUSDT', 'OXTUSDT',
-                'SUNUSDT',
-                'AVAXUSDT', 'HNTUSDT', 'FLMUSDT', 'ORNUSDT', 'UTKUSDT', 'XVSUSDT', 'ALPHAUSDT', 'AAVEUSDT', 'NEARUSDT',
-                'FILUSDT',
-                'INJUSDT', 'AUDIOUSDT', 'CTKUSDT', 'AKROUSDT', 'AXSUSDT', 'HARDUSDT', 'DNTUSDT', 'STRAXUSDT',
-                'UNFIUSDT', 'ROSEUSDT',
-                'AVAUSDT', 'XEMUSDT', 'SKLUSDT', 'GRTUSDT', '1INCHUSDT', 'REEFUSDT', 'CELOUSDT', 'RIFUSDT', 'BTCSTUSDT',
-                'TRUUSDT',
-                'CKBUSDT', 'TWTUSDT', 'FIROUSDT', 'LITUSDT', 'SFPUSDT', 'DODOUSDT', 'CAKEUSDT', 'BADGERUSDT', 'FISUSDT',
-                'OMUSDT',
-                'PONDUSDT', 'DEGOUSDT', 'ALICEUSDT', 'LINAUSDT']
+        return ['BTCUSDT','ETHUSDT','BIFIUSDT','BNBUSDT','SOLUSDT','XRPUSDT','DOGEUSDT','TONUSDT','TRXUSDT','ADAUSDT',
+                'AVAXUSDT','SHIBUSDT','WBTCUSDT','LINKUSDT','BCHUSDT','DOTUSDT','NEARUSDT','LTCUSDT','SUIUSDT','APTUSDT',
+                'TAOUSDT','UNIUSDT','PEPEUSDT','ICPUSDT','WBETHUSDT','FETUSDT','POLUSDT','RENDERUSDT','ETCUSDT','XLMUSDT',
+                'STXUSDT','IMXUSDT','WIFUSDT','AAVEUSDT','FILUSDT','OPUSDT','HBARUSDT','ARBUSDT','INJUSDT','VETUSDT','ATOMUSDT',
+                'FTMUSDT','RONINUSDT','RUNEUSDT','GRTUSDT','MINAUSDT','MANAUSDT','IOTAUSDT','QTUMUSDT','CVCUSDT','UNFIUSDT',]
     def data(self,ad, adet, zaman, mod):
         """
         :param ad: Coin Adi (str)
@@ -181,3 +156,39 @@ class Binance:
             return satishacmi
         elif (mod == 11):
             return gozardiedilebilir
+
+    def piyasa_durumu(self,periyod):
+        """
+        Piyasa koşullarına göre en uygun stratejiyi seçer.
+        - Yüksek volatilite ve güçlü trendler için ATR_ADX_Strategy seçilir.
+        - Daha yatay ve sakin piyasa için SMA_Cross ve Pivot_Point gibi stratejiler.
+        - Stratejilerin geçmiş performansına da bakarak karar verir.
+
+        atr = Indikator.ATR(high, low, close)
+        adx = Indikator.ADX(high, low, close)
+        rsi = Indikator.RSI(close)
+
+        # Piyasa volatilitesi yüksek ve trend güçlü ise ATR-ADX stratejisini seç
+        if atr[-1] > atr[-2] and adx[-1] > 25:
+            return "ATR_ADX_Strategy"
+
+        # Yüksek volatilite ama trend zayıfsa Pivot Point stratejisini seç
+        if atr[-1] > atr[-2] and adx[-1] < 20:
+            return "Pivot_Point"
+
+        # Trend güçlü değilse, SMA-Cross gibi basit hareketli ortalamalara dayan stratejileri seç
+        if adx[-1] < 20 and rsi[-1] > 50:
+            return "SMA_Cross"
+        """
+        degerler=[]
+        for coin in self.secili_list():
+            deger=[]
+            high = self.data(coin,1000,periyod,2)
+            low = self.data(coin, 1000, periyod, 3)
+            close = self.data(coin, 1000, periyod, 4)
+
+            atr = Indikator.ATR(high, low, close)
+            adx = Indikator.ADX(high, low, close)
+            rsi = Indikator.RSI(close)
+
+        #return sum(degerler)/len(degerler)

@@ -4,6 +4,12 @@ from email.mime.text import MIMEText
 import traceback
 import time
 from datetime import datetime
+from Binance import Binance
+from Indikator import Indikator
+import csv
+import pandas as pd
+from openpyxl.workbook import Workbook
+
 class Araclar:
     def __init__(self, from_email=None, to_email=None, email_password=None):
         if from_email and to_email and email_password :
@@ -84,3 +90,39 @@ class Araclar:
         else:
             return False
 
+    def veri_seti_olustur(self):
+        bn = Binance()
+        indikator = Indikator()
+        close = bn.data("BTCUSDT", 1000, "4h", 4)
+        low = bn.data("BTCUSDT", 1000, "4h", 3)
+        high = bn.data("BTCUSDT", 1000, "4h", 2)
+        acilis = bn.data("BTCUSDT", 1000, "4h", 1)
+        opendate = bn.data("BTCUSDT", 1000, "4h", 0)
+        rsi = indikator.RSI(close)
+        ema21 = indikator.EMA(close, 21)
+        ema7 = indikator.EMA(close, 7)
+        atr = indikator.ATR(high, low, close)
+        adx = indikator.ADX(high, low, close)
+        sma50 = indikator.SMA(close, 50)
+        sma200 = indikator.SMA(close, 200)
+        # Listeleri bir dataframe'e dönüştürüyoruz ve eksik olan yerleri None (veya NaN) ile dolduruyoruz
+        df = pd.DataFrame({
+            'opendate': opendate,
+            'acilis': acilis,
+            'high': high,
+            'low': low,
+            'close': close,
+            'rsi': rsi,
+            'ema21': ema21,
+            'ema7': ema7,
+            'atr': atr,
+            'adx': adx,
+            'sma50': sma50,
+            'sma200': sma200
+        })
+
+        # Eksik olan değerleri None (veya NaN) ile doldurma
+        df = df.apply(lambda col: col.tolist() + [None] * (df['opendate'].size - col.size) if col.size < df[
+            'opendate'].size else col)
+
+        df.to_excel('veriler.xlsx', index=False)
