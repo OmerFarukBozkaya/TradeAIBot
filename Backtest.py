@@ -116,7 +116,10 @@ class Backtest:
         profitable_trade_counts = []
         losing_trade_counts = []
 
-        colors = ['orange', 'green', 'purple', 'red', 'brown', 'pink', 'gray', 'olive', 'cyan','blue']
+        colors = ['orange','green','purple','red','brown','pink','gray','olive','cyan','blue','gold','lightblue','lightgreen',
+            'magenta','salmon','teal','violet','darkorange','darkgreen','darkviolet','deepskyblue','dodgerblue','crimson',
+            'khaki','chartreuse','lavender','lightcoral','mediumseagreen','orangered','indigo','slategray','cornflowerblue',
+            'mediumslateblue','lightsteelblue','palevioletred','springgreen','seashell','peru','steelblue','tan','wheat']
 
         # Seçilen stratejiye göre alım ve satım noktaları (yeşil ve kırmızı yuvarlaklar)
         buy_points = []
