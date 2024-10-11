@@ -177,7 +177,7 @@ class Backtest:
         ax3.axhline(0, color='black', linestyle='--')
 
         # Legend sadece 1. grafikte gösterilecek
-        ax1.legend(loc='upper left')
+        ax1.legend(loc='upper left', bbox_to_anchor=(1, 1))
 
         plt.tight_layout()
         plt.show()
