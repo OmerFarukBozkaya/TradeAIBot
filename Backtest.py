@@ -62,10 +62,11 @@ class Backtest:
             },
             {
                 "name": "Breakout",
-                "buy_condition": lambda i: max_high_20[i-1] is not None and adx[i] is not None and \
-                                           max_high_20[i-1] < close[i] and adx[i]>30,
-                "sell_condition": lambda i: max_low_20[i-1] is not None and adx[i] is not None and \
-                                            max_low_20[i-1] > close[i]
+                "buy_condition": lambda i: max_high_20[i - 1] is not None and adx[i] is not None and \
+                                           max_high_20[i - 1] < close[i] and adx[i] > 30,
+                "sell_condition": lambda i: max_low_20[i - 1] is not None and adx[i] is not None and
+                                            low[i - 1] is not None and ((max_low_20[i - 1] > close[i]) or
+                                        (close[i] > buy_price * 1.05 and close[i] < buy_price * 0.98) or (low[i - 1] * 0.98 > close[i]))
             },
             {
                 "name": "Ma Cross",
@@ -73,8 +74,8 @@ class Backtest:
                                            adx[i] is not None and ma_9[i] is not None and ma_50[i] is not None and \
                                            ma_9[i-1] < ma_50[i-1] and ma_9[i] > ma_50[i] and adx[i] > 30,
                 "sell_condition": lambda i: ma_9[i-1] is not None and ma_50[i-1] is not None and \
-                                           ma_9[i] is not None and ma_50[i] is not None and ma_9[i] < ma_50[i] and \
-                                           ma_9[i-1] > ma_50[i-1]
+                                           ma_9[i] is not None and ma_50[i] is not None and ((ma_9[i] < ma_50[i] and
+                                           ma_9[i-1] > ma_50[i-1]) or (close[i]>ma_9[i]*1.03 and close[i]<ma_9[i]*0.99) or (ma_50[i]*0.99>close[i]))
             },
             {
                 "name": "BB(RSI)",
@@ -120,7 +121,7 @@ class Backtest:
             'magenta','salmon','teal','violet','darkorange','darkgreen','darkviolet','deepskyblue','dodgerblue','crimson',
             'khaki','chartreuse','lavender','lightcoral','mediumseagreen','orangered','indigo','slategray','cornflowerblue',
             'mediumslateblue','lightsteelblue','palevioletred','springgreen','seashell','peru','steelblue','tan','wheat']
-
+        
         # Seçilen stratejiye göre alım ve satım noktaları (yeşil ve kırmızı yuvarlaklar)
         buy_points = []
         sell_points = []
@@ -212,4 +213,4 @@ class Backtest:
         plt.show()
 
 # Test etme
-Backtest.Test(canli_veriler=True)
+Backtest.Test(canli_veriler=True, periyot="4h",coin="BTCUSDT",selected_strategy_name="Breakout")
