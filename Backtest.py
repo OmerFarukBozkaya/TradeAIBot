@@ -5,7 +5,7 @@ import matplotlib.gridspec as gridspec
 
 class Backtest:
     @staticmethod
-    def Test(canli_veriler, selected_strategy_name=None):
+    def Test(canli_veriler,coin="BTCUSDT",periyot="4h",adet=1000, selected_strategy_name=None):
         close = open("close-test.txt", "r").read().split(",")
         low = open("low-test.txt", "r").read().split(",")
         high = open("high-test.txt", "r").read().split(",")
@@ -18,9 +18,6 @@ class Backtest:
         if canli_veriler:
             from Binance import Binance
             binance = Binance()
-            coin = "BTCUSDT"
-            adet = 1000
-            periyot = "4h"
             close = binance.data(coin, adet, periyot, 4)
             low = binance.data(coin, adet, periyot, 3)
             high = binance.data(coin, adet, periyot, 2)
@@ -37,6 +34,10 @@ class Backtest:
         bb_rsi_down = bb_rsi[0]
         bb_rsi_mid = bb_rsi[1]
         bb_rsi_up = bb_rsi[2]
+        bb=IndikatorTest.BB(close)
+        bb_down = bb[0]
+        bb_mid = bb[1]
+        bb_up = bb[2]
         max_high_20 = IndikatorTest.Max_Last(high, 20)
         max_low_20 = IndikatorTest.Max_Last(low, 20)
         ma_9 = IndikatorTest.SMA(close, 9)
@@ -69,15 +70,31 @@ class Backtest:
             {
                 "name": "Ma Cross",
                 "buy_condition": lambda i: ma_9[i-1] is not None and ma_50[i-1] is not None and \
-                                           adx[i] is not None and ma_9[i] is not None and ma_50 is not None and \
+                                           adx[i] is not None and ma_9[i] is not None and ma_50[i] is not None and \
                                            ma_9[i-1] < ma_50[i-1] and ma_9[i] > ma_50[i] and adx[i] > 30,
                 "sell_condition": lambda i: ma_9[i-1] is not None and ma_50[i-1] is not None and \
                                            ma_9[i] is not None and ma_50[i] is not None and ma_9[i] < ma_50[i] and \
                                            ma_9[i-1] > ma_50[i-1]
+            },
+            {
+                "name": "BB(RSI)",
+                "buy_condition": lambda i: bb_rsi_down[i - 1] is not None and bb_rsi_down[i] is not None and rsi_values[i - 1]
+                                           is not None and rsi_values[i] is not None and bb_rsi_down[i - 1] > rsi_values[i - 1]
+                                           and bb_rsi_down[i] < rsi_values[i],
+                "sell_condition": lambda i: bb_rsi_up[i - 1] is not None and bb_rsi_up[i] is not None and rsi_values[i - 1]
+                                           is not None and rsi_values[i] is not None and bb_rsi_up[i - 1] < rsi_values[i - 1]
+                                            and bb_rsi_up[i] > rsi_values[i]
+            },
+            {
+                "name": "BB(close)",
+                "buy_condition": lambda i: bb_down[i - 1] is not None and bb_down[i] is not None and
+                                           bb_down[i - 1] > close[i - 1] and bb_down[i] < close[i],
+                "sell_condition": lambda i: bb_up[i - 1] is not None and bb_up[i] is not None and
+                                            bb_up[i - 1] < close[i - 1] and bb_up[i] > close[i]
             }
         ]
 
-        fig = plt.figure(figsize=(16, 20))
+        fig = plt.figure(figsize=(16, 24))
         gs = gridspec.GridSpec(len(strategies) + 1, 2, height_ratios=[2] + [1] * len(strategies))
 
         # 1. Grafik: Fiyat
@@ -86,10 +103,12 @@ class Backtest:
         ax1.set_ylabel('Fiyat', color='blue')
         ax1.plot(close, color='blue', label='Fiyat', linewidth=1.5)
         ax1.tick_params(axis='y', labelcolor='blue')
-        ax1.set_xticks(np.arange(0, len(close), step=50))
+        ax1.set_xticks(np.arange(0, len(close), step=25))
         ax1.set_ylim(min(close) * 0.95, max(close) * 1.05)
         ax1.yaxis.set_major_locator(plt.MaxNLocator(10))
         ax1.legend()
+        if selected_strategy_name is not None:
+            ax1.set_title(selected_strategy_name)
 
         capital_histories = []
         cumulative_profit_losses = []
@@ -97,7 +116,7 @@ class Backtest:
         profitable_trade_counts = []
         losing_trade_counts = []
 
-        colors = ['orange', 'green', 'purple', 'red', 'brown', 'pink', 'gray', 'olive', 'cyan']
+        colors = ['orange', 'green', 'purple', 'red', 'brown', 'pink', 'gray', 'olive', 'cyan','blue']
 
         # Seçilen stratejiye göre alım ve satım noktaları (yeşil ve kırmızı yuvarlaklar)
         buy_points = []
@@ -185,8 +204,9 @@ class Backtest:
             for sell_point in sell_points:
                 ax1.plot(sell_point, close[sell_point], 'ro', label="Satım Noktası")  # Kırmızı yuvarlak
 
+
         plt.tight_layout()
         plt.show()
 
 # Test etme
-Backtest.Test(True)  # Örnek olarak MACD stratejisi seçildi
+Backtest.Test(canli_veriler=True)
