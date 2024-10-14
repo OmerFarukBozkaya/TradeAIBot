@@ -74,13 +74,24 @@ class Indikator:
     @staticmethod
     def FIB(src):
         fibonacci_levels = [0, 0.236, 0.382, 0.5, 0.618, 1.0]
-        prices = src[-144:]
-        start_price = min(prices)
-        end_price = max(prices)
-        price_range = end_price - start_price
-        fibonacci_values = [start_price + level * price_range for level in fibonacci_levels]
+        results = []
 
-        return fibonacci_values
+        # İlk 143 mum için None ekleyin
+        for i in range(143):
+            results.append([None] * len(fibonacci_levels))  # None olan seviyeler
+
+        # 144. mumdan itibaren hesaplama yap
+        for i in range(143, len(src)):
+            prices = src[i - 143:i + 1]  # Son 144 mumun fiyatlarını al
+            start_price = min(prices)
+            end_price = max(prices)
+            price_range = end_price - start_price
+
+            # Fibonacci değerlerini hesapla
+            fibonacci_values = [start_price + level * price_range for level in fibonacci_levels]
+            results.append(fibonacci_values)  # Hesaplanan değerleri ekle
+
+        return results
 
     @staticmethod
     def MACD(src, fast_length=12, slow_length=26, signal_length=9, sma_source="EMA", sma_signal="EMA"):
@@ -104,15 +115,6 @@ class Indikator:
         for i in range(length, len(src)):
             momentum[i] = src[i] - src[i - length]
         return momentum
-
-    @staticmethod
-    def Stochastic_RSI(src, length=14):
-        rsi = Indikator.RSI(src, length)
-        stoch_rsi = np.zeros(len(rsi))
-        for i in range(length, len(rsi)):
-            rsi_window = rsi[i - length:i]
-            stoch_rsi[i] = (rsi[i] - np.min(rsi_window)) / (np.max(rsi_window) - np.min(rsi_window))
-        return stoch_rsi
 
     @staticmethod
     def ATR(high, low, close, length=14):
@@ -178,3 +180,71 @@ class Indikator:
             adx[i] = (adx[i - 1] * (adxlen - 1) + dx[i]) / adxlen
 
         return adx
+
+    @staticmethod
+    def Ichimoku_Bulutu(high, low):
+        """
+        Ichimoku Bulutu indikatörünün bileşenlerini liste olarak hesaplar.
+
+        :param high: En yüksek fiyatların listesi
+        :param low: En düşük fiyatların listesi
+        :return: Tenkan Sen, Kijun Sen, Senkou Span A, Senkou Span B listeleri
+        """
+        tenkan_sen_list = []
+        kijun_sen_list = []
+        senkou_span_a_list = []
+        senkou_span_b_list = []
+
+        for i in range(len(high)):
+            if i >= 8:  # Tenkan Sen için yeterli veri var mı (9 periyot)
+                tenkan_sen = (max(high[i - 8:i + 1]) + min(low[i - 8:i + 1])) / 2
+            else:
+                tenkan_sen = np.nan  # Yeterli veri yoksa NaN
+            tenkan_sen_list.append(tenkan_sen)
+
+            if i >= 25:  # Kijun Sen için yeterli veri var mı (26 periyot)
+                kijun_sen = (max(high[i - 25:i + 1]) + min(low[i - 25:i + 1])) / 2
+            else:
+                kijun_sen = np.nan
+            kijun_sen_list.append(kijun_sen)
+
+            # Senkou Span A, sadece Tenkan ve Kijun hesaplandıktan sonra anlamlıdır
+            if i >= 25:
+                senkou_span_a = (tenkan_sen_list[i] + kijun_sen_list[i]) / 2
+            else:
+                senkou_span_a = np.nan
+            senkou_span_a_list.append(senkou_span_a)
+
+            # Senkou Span B, 52 periyot için yeterli veri olmalı
+            if i >= 51:
+                senkou_span_b = (max(high[i - 51:i + 1]) + min(low[i - 51:i + 1])) / 2
+            else:
+                senkou_span_b = np.nan
+            senkou_span_b_list.append(senkou_span_b)
+
+        return tenkan_sen_list, kijun_sen_list, senkou_span_a_list, senkou_span_b_list
+
+    @staticmethod
+    def Donchian_Kanali(high, low, length=20):
+        """
+        Donchian Kanalı indikatörünü liste olarak hesaplar.
+
+        :param high: En yüksek fiyatların listesi
+        :param low: En düşük fiyatların listesi
+        :param length: Donchian kanalının hesaplanacağı periyot (varsayılan: 20)
+        :return: Üst bant ve Alt bant listeleri
+        """
+        upper_band_list = []
+        lower_band_list = []
+
+        for i in range(len(high)):
+            if i >= length - 1:  # Yeterli veri var mı (length periyot)
+                upper_band = max(high[i - length + 1:i + 1])
+                lower_band = min(low[i - length + 1:i + 1])
+            else:
+                upper_band = np.nan
+                lower_band = np.nan
+            upper_band_list.append(upper_band)
+            lower_band_list.append(lower_band)
+
+        return upper_band_list, lower_band_list
