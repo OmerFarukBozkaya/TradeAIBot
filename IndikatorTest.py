@@ -36,10 +36,10 @@ class IndikatorTest:
         print(f"Momentum: {indikator.Momentum(close)[-1] == test_indikator.Momentum(close)[-1]}")
         print(f"ATR: {indikator.ATR(high, low, close)[-1] == test_indikator.ATR(high, low, close)[-1]}")
         print(f"ADX: {indikator.ADX(high, low, close)[-1] == test_indikator.ADX(high, low, close)[-1]}")
-        print(
-            f"Ichimoku: {indikator.Ichimoku_Bulutu(high, low)[0][-1] == test_indikator.Ichimoku_Bulutu(high, low)[0][-1]}")
-        print(
-            f"Donchain: {indikator.Donchian_Kanali(high, low)[0][-1] == test_indikator.Donchian_Kanali(high, low)[0][-1]}")
+        print(f"Ichimoku: {indikator.Ichimoku_Bulutu(high, low)[0][-1] == test_indikator.Ichimoku_Bulutu(high, low)[0][-1]}")
+        print(f"Donchain: {indikator.Donchian_Kanali(high, low)[0][-1] == test_indikator.Donchian_Kanali(high, low)[0][-1]}")
+
+
     @staticmethod
     def EMA(src, length):
         alpha = 2 / (length + 1)
@@ -90,16 +90,29 @@ class IndikatorTest:
             rsi[i] = 100.0 - (100.0 / (1.0 + rs))
 
         return rsi
+
     @staticmethod
     def FIB(src):
         fibonacci_levels = [0, 0.236, 0.382, 0.5, 0.618, 1.0]
-        prices = src[-144:]
-        start_price = min(prices)
-        end_price = max(prices)
-        price_range = end_price - start_price
-        fibonacci_values = [start_price + level * price_range for level in fibonacci_levels]
+        results = []
 
-        return fibonacci_values
+        # İlk 143 mum için None ekleyin
+        for i in range(143):
+            results.append([None] * len(fibonacci_levels))  # None olan seviyeler
+
+        # 144. mumdan itibaren hesaplama yap
+        for i in range(143, len(src)):
+            prices = src[i - 143:i + 1]  # Son 144 mumun fiyatlarını al
+            start_price = min(prices)
+            end_price = max(prices)
+            price_range = end_price - start_price
+
+            # Fibonacci değerlerini hesapla
+            fibonacci_values = [start_price + level * price_range for level in fibonacci_levels]
+            results.append(fibonacci_values)  # Hesaplanan değerleri ekle
+
+        return results
+
     @staticmethod
     def MACD(src, fast_length=12, slow_length=26, signal_length=9, sma_source="EMA", sma_signal="EMA"):
         close_series = pd.Series(src)
@@ -245,43 +258,6 @@ class IndikatorTest:
             lower_band_list.append(lower_band)
 
         return upper_band_list, lower_band_list
-
-    @staticmethod
-    def calculate_pmai(price_list, period=14):
-        """
-        PMAI (Price Momentum Acceleration Index) hesaplar.
-
-        Args:
-            price_list (list): Fiyat verilerinin listesi.
-            period (int): Momentum ve ivme hesaplamaları için kullanılan dönem sayısı.
-
-        Returns:
-            list: PMAI değerlerinin listesi.
-        """
-        # Momentum hesapla
-        momentum = IndikatorTest.Momentum(price_list, period)
-
-        # Momentum değişim hızı hesapla (Acceleration)
-        acceleration = []
-        for i in range(period + 1, len(momentum)):
-            acc = (momentum[i] - momentum[i - 1]) / 1  # Zaman 1 olarak kabul edilir
-            acceleration.append(acc)
-
-        # İlk `period+1` değerini NaN ile doldur
-        acceleration = [np.nan] * (period + 1) + acceleration
-
-        # PMAI hesapla (Acceleration değerlerini normalize ederek)
-        pmai = []
-        for i in range(len(acceleration)):
-            if np.isnan(acceleration[i]):
-                pmai.append(np.nan)
-            else:
-                # PMAI değerini normalize et ve %0-%100 aralığına getir
-                normalized_pmai = 100 * (acceleration[i] / max(acceleration[period + 1:], default=1))
-                pmai.append(normalized_pmai)
-
-        return pmai
-
     @staticmethod
     def calculate_momentum(price_list, period=14):
         momentum = []
@@ -289,7 +265,6 @@ class IndikatorTest:
             mom = price_list[i] - price_list[i - period]
             momentum.append(mom)
         return [np.nan] * period + momentum
-
     @staticmethod
     def PMAI(src, length=14):
         """
@@ -325,3 +300,81 @@ class IndikatorTest:
                 pmai.append(normalized_pmai)
 
         return pmai
+    @staticmethod
+    def Max_Last(src,length=20):
+        # Sonuçları saklamak için bir liste oluştur
+        max_values = []
+
+        # İlk 19 değer için sonuç eklemeyeceğiz (çünkü 20 mum eksik)
+        for i in range(len(src)):
+            if i < length-1:
+                max_values.append(None)  # İlk 19 adım için sonuç eklenmez
+            else:
+                # Son 20 mumun maksimumunu al
+                max_in_window = max(src[i - (length-1):i + 1])
+                max_values.append(max_in_window)
+        return max_values
+
+    @staticmethod
+    def CMI(close, high, low):
+        # Trend göstergesi - EMA ile ölç
+        trend = np.array(IndikatorTest.EMA(close, length=14))
+
+        # Momentum göstergesi - RSI kullan
+        momentum = np.array(IndikatorTest.RSI(close, length=14))
+
+        # Volatilite göstergesi - Bollinger Band ve ATR kullan
+        lower_band, mid_band, upper_band = IndikatorTest.BB(close)
+        atr = np.array(IndikatorTest.ATR(high, low, close, length=14))
+
+        # Normalize et ve ortalama hesapla
+        trend_normalized = (trend - np.nanmin(trend)) / (np.nanmax(trend) - np.nanmin(trend))
+        momentum_normalized = (momentum - np.nanmin(momentum)) / (np.nanmax(momentum) - np.nanmin(momentum))
+        atr_normalized = (atr - np.nanmin(atr)) / (np.nanmax(atr) - np.nanmin(atr))
+
+        # Tüm değerleri birleştirip CMI oluştur
+        cmi = (trend_normalized + momentum_normalized + atr_normalized) / 3
+
+        return cmi
+
+    @staticmethod
+    def DMO(src, length=14):
+        dmo_values = []
+        for i in range(len(src)):
+            if i >= length:
+                # Momentum hesaplaması (Close_t - Close_{t-period})
+                mom = src[i] - src[i - length]
+
+                # Volatilite hesaplaması
+                volatility = np.mean([abs(src[j] - src[j - 1]) for j in range(i - length + 1, i + 1)])
+
+                # DMO hesaplama
+                dmo = mom / volatility if volatility != 0 else 0
+            else:
+                dmo = None  # İlk period öncesi yeterli veri olmadığı için None
+
+            dmo_values.append(dmo)
+
+        return dmo_values
+
+    @staticmethod
+    def VMZI(src, length=14):
+        vmzi_values = [None] * length  # İlk 'period' kadar None olacak çünkü hesaplama yapılamaz
+
+        for i in range(length, len(src)):
+            # Momentum hesapla
+            momentum = src[i] - src[i - length]
+
+            # Volatilite (standart sapma) hesapla
+            volatility = np.std(src[i - length:i])
+
+            if volatility != 0:  # Volatilite sıfırsa bölme hatası olmasın diye kontrol ediyoruz
+                vmzi = momentum / volatility
+            else:
+                vmzi = 0
+
+            vmzi_values.append(vmzi)
+
+        return vmzi_values
+
+#IndikatorTest.IndikatorResultTest(True)
