@@ -24,10 +24,35 @@ islemgecmisi.addHandler(handler)
 
 class Al_Sat:
     def iskelet(self, coinlist, periyot, gercek, sonislem, nakit,stop_lose_var=True,stop_takip=False, mumbekle=True, alis_fiyati=0):
+        """
+        Değiştirilmesi gereken değerler
+
+        0)Stratejinin adı
+        1)Alıncak fiyat verileri
+        2)Indikatörler ve indikatörün sağlıklı sonuç verebilmesi için merekli olan minimum veri miktarı
+        3)Alım şartı
+        4)Stop lose takip etmesi için gerekli şart
+        5)Stop lose değeri hesaplama
+        6)Stop lose varsayılan değeri hesaplama
+        7)Hedeflenen satış şartı
+        8)Hata oluştuğunda tekrardan çağırılacak fonksiyon
+
+        """
+        """        
+        :param coinlist: list  
+        :param periyot: string
+        :param gercek: bool
+        :param sonislem: string
+        :param nakit: float
+        :param stop_lose_var: bool
+        :param stop_takip: bool
+        :param mumbekle: bool
+        :param alis_fiyati: float
+        """
         binance = Binance()
         araclar = Araclar()
         alis=alis_fiyati
-        strateji_adi = "iskelet"
+        strateji_adi = "iskelet"    # [0]
         logging.info(f"{periyot} {strateji_adi} Calisiyor ... {gercek}")
         print(f"{periyot} {strateji_adi} Calisiyor ... {gercek}", time.ctime())
         while sonislem == "AL":
@@ -40,7 +65,7 @@ class Al_Sat:
                 sahip_olduklarim = binance.sahip_olduklarim()
 
                 if sonislem == "SAT":
-                    # Sahip olunan coinleri liste dışı bırak
+                    # Eğer alım yapacaksam sahip olunan coinleri liste dışı bırak
                     for sil in sahip_olduklarim.keys():
                         try:
                             coinlist.remove(sil[0])
@@ -49,18 +74,20 @@ class Al_Sat:
 
                 for coin in coinlist:
                     # Veri çek
+                    # [1]
                     close = binance.data(coin, 1000, periyot, 4)
 
+                    # [2]
                     if len(close)<50:
                         continue
-                    # MA indikatörlerini hesapla
+                    # İndikatörleri hesapla
                     """
                     Gerekli indikatörler burda hesaplanacak
                     """
 
                     # AL işlemi
                     if sonislem == "SAT":
-                        if close : # Alım şartı
+                        if close : # Alım şartı [3]
                             sonislem = "AL"
                             adet = round((nakit / close[-1]), binance.minimum_hareket(
                                 float(binance.client.get_symbol_info(coin)["filters"][1]["minQty"])))
@@ -80,11 +107,11 @@ class Al_Sat:
                     else:
                         if stop_lose_var:
                             # Stop-Lose hesapla
-                            if (close or stop_takip): # Takip etmesi için gereken şart
-                                stop_lose = close  # Yeni stop lose
+                            if (close or stop_takip): # Takip etmesi için gereken şart  # [4]
+                                stop_lose = close  # Yeni stop lose     # [5]
                                 stop_takip = True
                             else:
-                                stop_lose = close # Varsayılan stop lose
+                                stop_lose = close # Varsayılan stop lose    # [6]
 
                             # Stop-Lose
                             if close[-1] < stop_lose: # Stop lose kontrolü
@@ -104,7 +131,7 @@ class Al_Sat:
                                 araclar.mail_gonder(f"SAT [Stop Lose] | {strateji_adi} {periyot}", f"{coin} satildi")
                                 return
                         # SAT işlemi
-                        if close:   # Hedeflenen satış şartı
+                        if close:   # Hedeflenen satış şartı    # [7]
                             sonislem = "SAT"
                             adet = 0
                             adim = binance.minimum_hareket(
@@ -125,7 +152,7 @@ class Al_Sat:
                 hata = traceback.format_exc()
                 logging.error(f"Hata oluştu: {hata}")
                 araclar.mail_gonder(f"HATA | {strateji_adi} {periyot}", hata)
-                self.iskelet(coinlist, periyot, gercek, sonislem, nakit,stop_lose_var,stop_takip,mumbekle,alis)
+                self.iskelet(coinlist, periyot, gercek, sonislem, nakit,stop_lose_var,stop_takip,mumbekle,alis)     # [8]
     def BB_RSI(self, coinlist, periyot, gercek, sonislem, nakit, mumbekle=True):
         binance = Binance()
         araclar = Araclar()
