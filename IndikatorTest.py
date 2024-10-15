@@ -377,4 +377,21 @@ class IndikatorTest:
 
         return vmzi_values
 
+    @staticmethod
+    def FDI(src, length=14):
+        fdi_values = [None] * (length * 2)  # İlk 2 period boyunca None olacak, çünkü hesaplama yapılamaz
+
+        for i in range(length * 2, len(src)):
+            # Önce değişim oranını hesapla
+            price_change_ratio_now = (src[i] - src[i - length]) / src[i - length]
+            price_change_ratio_past = (src[i - length] - src[i - length * 2]) / src[
+                i - length * 2]
+
+            # Fiyat-Değişim İvmesi (FDI) hesapla
+            fdi = price_change_ratio_now - price_change_ratio_past
+
+            fdi_values.append(fdi)
+
+        return fdi_values
+
 #IndikatorTest.IndikatorResultTest(True)
