@@ -4,21 +4,37 @@ import numpy as np
 import matplotlib.gridspec as gridspec
 import os
 import pandas as pd
+import csv
+from Binance import Binance
 
 class Backtest:
     @staticmethod
-    def Test(canli_veriler,coin="BTCUSDT",periyot="4h",adet=1000, selected_strategy_name=None,kayit_et=False):
-        close = open("close-test.txt", "r").read().split(",")
-        low = open("low-test.txt", "r").read().split(",")
-        high = open("high-test.txt", "r").read().split(",")
+    def Test(canli_veriler,coin="BTCUSDT",periyot="4h",adet=1000, selected_strategy_name=None,kayit_et=False,hisse=False):
+        close = []
+        low = []
+        high = []
+        if canli_veriler == False and hisse == False:
+            close = open("close-test.txt", "r").read().split(",")
+            low = open("low-test.txt", "r").read().split(",")
+            high = open("high-test.txt", "r").read().split(",")
+            for i in range(len(close)):
+                close[i] = float(close[i])
+                low[i] = float(low[i])
+                high[i] = float(high[i])
+        elif canli_veriler == False and hisse == True:
+            file_name='THYAO Geçmiş Verileri.csv'
+            with open(file_name, mode='r', newline='', encoding='utf-8') as file:
+                csv_reader = csv.reader(file)
+                next(csv_reader)
+                for row in csv_reader:
+                    close.append(float(row[1].replace(",",".")))
+                    low.append(float(row[4].replace(",", ".")))
+                    high.append(float(row[3].replace(",", ".")))
+                close.reverse()
+                high.reverse()
+                low.reverse()
 
-        for i in range(len(close)):
-            close[i] = float(close[i])
-            low[i] = float(low[i])
-            high[i] = float(high[i])
-
-        if canli_veriler:
-            from Binance import Binance
+        elif canli_veriler == True and hisse == False:
             binance = Binance()
             close = binance.data(coin, adet, periyot, 4)
             low = binance.data(coin, adet, periyot, 3)
@@ -51,6 +67,7 @@ class Backtest:
         dmo=IndikatorTest.DMO(close)
         vmzi=IndikatorTest.VMZI(close)
         fdi = IndikatorTest.FDI(close)
+        vama=IndikatorTest.VAMA(close,14)
 
         # Strateji listesi (Strateji adı, alım koşulu, satım koşulu)
         strategies = [
@@ -150,6 +167,14 @@ class Backtest:
                                            (fdi[i-1]>0 and  fdi[i-1] < fdi[i] and rsi_values[i] > 40 and macd_values[i] > macd_signal[i]),
                 "sell_condition": lambda i: fdi[i-1] is not None and fdi[i] is not None and rsi_values[i] is not None and
                                             (fdi[i-1]<0 and fdi[i-1] > fdi[i] and rsi_values[i] < 60 and macd_values[i] < macd_signal[i])
+            },
+            {
+                "name": "VAMA",
+                "buy_condition": lambda i: vama[i] is not None and
+
+                                           (vama[i]*1.02<close[i]),
+                "sell_condition": lambda i: vama[i] is not None and
+                                           (vama[i]*0.98>close[i])
             }
         ]
         if kayit_et != True:
