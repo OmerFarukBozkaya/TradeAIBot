@@ -50,6 +50,7 @@ class Backtest:
         cmi=IndikatorTest.CMI(close,high,low)
         dmo=IndikatorTest.DMO(close)
         vmzi=IndikatorTest.VMZI(close)
+        fdi = IndikatorTest.FDI(close)
 
         # Strateji listesi (Strateji adı, alım koşulu, satım koşulu)
         strategies = [
@@ -140,9 +141,16 @@ class Backtest:
                                            (vmzi[i]>1.5 and adx[i] > 25 and rsi_values[i] > 50),
                 "sell_condition": lambda i: vmzi[i] is not None and rsi_values[i] is not None and
                                             (vmzi[i]<0 and rsi_values[i] < 50)
+            },
+            {
+                "name": "FDI",
+                "buy_condition": lambda i: fdi[i-1] is not None and fdi[i] is not None and rsi_values[i] is not None and
+                                            macd_values[i] is not None and macd_signal[i] is not None and
+
+                                           (fdi[i-1]>0 and  fdi[i-1] < fdi[i] and rsi_values[i] > 40 and macd_values[i] > macd_signal[i]),
+                "sell_condition": lambda i: fdi[i-1] is not None and fdi[i] is not None and rsi_values[i] is not None and
+                                            (fdi[i-1]<0 and fdi[i-1] > fdi[i] and rsi_values[i] < 60 and macd_values[i] < macd_signal[i])
             }
-
-
         ]
 
         fig = plt.figure(figsize=(16, 24))
@@ -300,4 +308,4 @@ class Backtest:
         plt.show()
 
 # Test etme
-Backtest.Test(canli_veriler=True, periyot="4h",coin="BTCUSDT",selected_strategy_name="VMZI",kayit_et=True)
+Backtest.Test(canli_veriler=True, periyot="4h",coin="BTCUSDT",selected_strategy_name="FDI",kayit_et=False)
