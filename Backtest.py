@@ -152,22 +152,21 @@ class Backtest:
                                             (fdi[i-1]<0 and fdi[i-1] > fdi[i] and rsi_values[i] < 60 and macd_values[i] < macd_signal[i])
             }
         ]
+        if kayit_et != True:
+            fig = plt.figure(figsize=(16, 24))
+            gs = gridspec.GridSpec(len(strategies) + 1, 2, height_ratios=[2] + [1] * len(strategies))
 
-        fig = plt.figure(figsize=(16, 24))
-        gs = gridspec.GridSpec(len(strategies) + 1, 2, height_ratios=[2] + [1] * len(strategies))
-
-        # 1. Grafik: Fiyat
-        ax1 = fig.add_subplot(gs[0, :])
-        ax1.set_xlabel('Zaman (Periyotlar)')
-        ax1.set_ylabel('Fiyat', color='black')
-        ax1.plot(close, color='black', label='Fiyat', linewidth=1.5)
-        ax1.tick_params(axis='y', labelcolor='black')
-        ax1.set_xticks(np.arange(0, len(close), step=25))
-        ax1.set_ylim(min(close) * 0.95, max(close) * 1.05)
-        ax1.yaxis.set_major_locator(plt.MaxNLocator(10))
-        ax1.legend()
-        ax1.set_title(f"{coin} {periyot} {selected_strategy_name}")
-
+            # 1. Grafik: Fiyat
+            ax1 = fig.add_subplot(gs[0, :])
+            ax1.set_xlabel('Zaman (Periyotlar)')
+            ax1.set_ylabel('Fiyat', color='black')
+            ax1.plot(close, color='black', label='Fiyat', linewidth=1.5)
+            ax1.tick_params(axis='y', labelcolor='black')
+            ax1.set_xticks(np.arange(0, len(close), step=25))
+            ax1.set_ylim(min(close) * 0.95, max(close) * 1.05)
+            ax1.yaxis.set_major_locator(plt.MaxNLocator(10))
+            ax1.legend()
+            ax1.set_title(f"{coin} {periyot} {selected_strategy_name}")
         capital_histories = []
         cumulative_profit_losses = []
         total_profit_losses = []
@@ -205,7 +204,6 @@ class Backtest:
                         current_capital = 0
                         if selected_strategy_name == strategy["name"]:
                             buy_points.append(i)  # Alım noktasını kaydet
-
                 elif last_signal == 'green':
                     if strategy["sell_condition"](i):
                         last_signal = 'red'
@@ -237,27 +235,28 @@ class Backtest:
             final_capital = capital_history[-1]
             cumulative_total_profit_loss = ((final_capital - initial_capital) / initial_capital) * 100
 
-            # Her strateji için kapital ve kümülatif kâr/zarar grafiği
-            ax2 = fig.add_subplot(gs[idx + 1, 0])
-            ax2.plot(capital_history, marker='o', markersize=5, linewidth=2,
-                     color=colors[idx % len(colors)],
-                     label=f"{strategy['name']} Kapital\nSon Kapital: {final_capital:.2f}\nKümülatif Kâr/Zarar: {cumulative_total_profit_loss:.2f}%")
-            ax2.set_title(f"{strategy['name']} Kapital Durumu")
-            ax2.set_xlabel('İşlem Sayısı')
-            ax2.set_ylabel('Kapital (TL)')
-            ax2.axhline(initial_capital, color='black', linestyle='--')
-            ax2.legend()
+            if  kayit_et != True:
+                # Her strateji için kapital ve kümülatif kâr/zarar grafiği
+                ax2 = fig.add_subplot(gs[idx + 1, 0])
+                ax2.plot(capital_history, marker='o', markersize=5, linewidth=2,
+                         color=colors[idx % len(colors)],
+                         label=f"{strategy['name']} Kapital\nSon Kapital: {final_capital:.2f}\nKümülatif Kâr/Zarar: {cumulative_total_profit_loss:.2f}%")
+                ax2.set_title(f"{strategy['name']} Kapital Durumu")
+                ax2.set_xlabel('İşlem Sayısı')
+                ax2.set_ylabel('Kapital (TL)')
+                ax2.axhline(initial_capital, color='black', linestyle='--')
+                ax2.legend()
 
-            # Kârlı ve zararlı işlemler
-            ax3 = fig.add_subplot(gs[idx + 1, 1])
-            ax3.plot(cumulative_profit_loss, marker='o', markersize=5, linewidth=2,
-                     color=colors[idx % len(colors)],
-                     label=f"{strategy['name']} Kâr/Zarar\nKârlı İşlemler: {profitable_trades}\nZararlı İşlemler: {losing_trades}")
-            ax3.set_title(f"{strategy['name']} Kümülatif Kâr/Zarar (%)")
-            ax3.set_xlabel('İşlem Sayısı')
-            ax3.set_ylabel('Kâr/Zarar (%)')
-            ax3.axhline(0, color='black', linestyle='--')
-            ax3.legend()
+                # Kârlı ve zararlı işlemler
+                ax3 = fig.add_subplot(gs[idx + 1, 1])
+                ax3.plot(cumulative_profit_loss, marker='o', markersize=5, linewidth=2,
+                         color=colors[idx % len(colors)],
+                         label=f"{strategy['name']} Kâr/Zarar\nKârlı İşlemler: {profitable_trades}\nZararlı İşlemler: {losing_trades}")
+                ax3.set_title(f"{strategy['name']} Kümülatif Kâr/Zarar (%)")
+                ax3.set_xlabel('İşlem Sayısı')
+                ax3.set_ylabel('Kâr/Zarar (%)')
+                ax3.axhline(0, color='black', linestyle='--')
+                ax3.legend()
 
             #Excel çıktısı oluştur.
             if kayit_et:
@@ -296,16 +295,13 @@ class Backtest:
 
             print(f"Sonuçlar {output_file} dosyasına kaydedildi.")
 
-        # 1. grafikte alım ve satım noktalarını göster
-        if selected_strategy_name is not None:
-            for buy_point in buy_points:
-                ax1.plot(buy_point, close[buy_point], 'go', label="Alım Noktası")  # Yeşil yuvarlak
-            for sell_point in sell_points:
-                ax1.plot(sell_point, close[sell_point], 'ro', label="Satım Noktası")  # Kırmızı yuvarlak
+        if kayit_et != True:
+            # 1. grafikte alım ve satım noktalarını göster
+            if selected_strategy_name is not None:
+                for buy_point in buy_points:
+                    ax1.plot(buy_point, close[buy_point], 'go', label="Alım Noktası")  # Yeşil yuvarlak
+                for sell_point in sell_points:
+                    ax1.plot(sell_point, close[sell_point], 'ro', label="Satım Noktası")  # Kırmızı yuvarlak
 
-
-        plt.tight_layout()
-        plt.show()
-
-# Test etme
-Backtest.Test(canli_veriler=True, periyot="4h",coin="BTCUSDT",selected_strategy_name="FDI",kayit_et=False)
+            plt.tight_layout()
+            plt.show()
