@@ -39,7 +39,6 @@ class IndikatorTest:
         print(f"Ichimoku: {indikator.Ichimoku_Bulutu(high, low)[0][-1] == test_indikator.Ichimoku_Bulutu(high, low)[0][-1]}")
         print(f"Donchain: {indikator.Donchian_Kanali(high, low)[0][-1] == test_indikator.Donchian_Kanali(high, low)[0][-1]}")
 
-
     @staticmethod
     def EMA(src, length):
         alpha = 2 / (length + 1)
@@ -394,4 +393,19 @@ class IndikatorTest:
 
         return fdi_values
 
-#IndikatorTest.IndikatorResultTest(True)
+    @staticmethod
+    def VAMA(src, length=14):
+        prices = np.array(src)
+        vama = np.zeros(len(prices))
+
+        for i in range(length, len(prices)):
+            # Hareketli ortalama hesapla
+            ma = np.mean(prices[i - length:i])
+
+            # Volatiliteyi hesapla (standart sapma)
+            volatility = np.std(prices[i - length:i])
+
+            # VAMA hesapla
+            vama[i] = ma + volatility
+
+        return vama
