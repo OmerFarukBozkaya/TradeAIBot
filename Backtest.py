@@ -2,10 +2,12 @@ from IndikatorTest import IndikatorTest
 import matplotlib.pyplot as plt
 import numpy as np
 import matplotlib.gridspec as gridspec
+import os
+import pandas as pd
 
 class Backtest:
     @staticmethod
-    def Test(canli_veriler,coin="BTCUSDT",periyot="4h",adet=1000, selected_strategy_name=None):
+    def Test(canli_veriler,coin="BTCUSDT",periyot="4h",adet=1000, selected_strategy_name=None,kayit_et=False):
         close = open("close-test.txt", "r").read().split(",")
         low = open("low-test.txt", "r").read().split(",")
         high = open("high-test.txt", "r").read().split(",")
@@ -171,6 +173,8 @@ class Backtest:
         # Seçilen stratejiye göre alım ve satım noktaları (yeşil ve kırmızı yuvarlaklar)
         buy_points = []
         sell_points = []
+        # Excel'e yazılacak veriler için bir liste oluştur
+        excel_data = []
 
         # Her strateji için ayrı bir subplot
         for idx, strategy in enumerate(strategies):
@@ -247,6 +251,43 @@ class Backtest:
             ax3.axhline(0, color='black', linestyle='--')
             ax3.legend()
 
+            #Excel çıktısı oluştur.
+            if kayit_et:
+                strategy_name = strategy['name']
+                cumulative_total_profit_loss = ((capital_histories[idx][
+                                                     -1] - 100) / 100) * 100  # Son kapital ile kümülatif kâr/zarar
+                profitable_trades = profitable_trade_counts[idx]
+                losing_trades = losing_trade_counts[idx]
+
+                # Veriyi ekle
+                excel_data.append({
+                    'coin': coin,
+                    'periyot': periyot,
+                    'strategy name': strategy_name,
+                    'kümülatif kar zarar (%)': cumulative_total_profit_loss,
+                    'karlı işlemler': profitable_trades,
+                    'zararlı işlemler': losing_trades
+                })
+
+        if kayit_et:
+            # Excel dosyasına yazma işlemi
+            output_file = "strategy_results.xlsx"
+
+            # Eğer dosya varsa, mevcut verileri oku
+            if os.path.exists(output_file):
+                existing_df = pd.read_excel(output_file, engine='openpyxl')
+            else:
+                existing_df = pd.DataFrame()  # Eğer dosya yoksa boş bir DataFrame oluştur
+
+            # Yeni veriyi mevcut verilerle birleştir
+            df = pd.DataFrame(excel_data)
+            combined_df = pd.concat([existing_df, df], ignore_index=True)
+
+            # Genişletilmiş veri çerçevesini aynı dosyaya tekrar kaydet
+            combined_df.to_excel(output_file, index=False, engine='openpyxl')
+
+            print(f"Sonuçlar {output_file} dosyasına kaydedildi.")
+
         # 1. grafikte alım ve satım noktalarını göster
         if selected_strategy_name is not None:
             for buy_point in buy_points:
@@ -259,4 +300,4 @@ class Backtest:
         plt.show()
 
 # Test etme
-Backtest.Test(canli_veriler=True, periyot="4h",coin="BTCUSDT",selected_strategy_name="VMZI")
+Backtest.Test(canli_veriler=True, periyot="4h",coin="BTCUSDT",selected_strategy_name="VMZI",kayit_et=True)
