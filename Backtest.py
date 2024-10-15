@@ -27,6 +27,8 @@ class Backtest:
         pmai_sma = IndikatorTest.SMA(pmai_values, 14)
         rsi_values = IndikatorTest.RSI(close)
         adx = IndikatorTest.ADX(high, low, close)
+        atr = IndikatorTest.ATR(high, low, close)
+        atr_14 = IndikatorTest.SMA(atr,14)
         macd = IndikatorTest.MACD(close)
         macd_values = macd[0]
         macd_signal = macd[1]
@@ -42,27 +44,34 @@ class Backtest:
         max_low_20 = IndikatorTest.Max_Last(low, 20)
         ma_9 = IndikatorTest.SMA(close, 9)
         ma_50 = IndikatorTest.SMA(close, 50)
+        fib = IndikatorTest.FIB(close)
+        cmi=IndikatorTest.CMI(close,high,low)
+        dmo=IndikatorTest.DMO(close)
+        vmzi=IndikatorTest.VMZI(close)
 
         # Strateji listesi (Strateji adı, alım koşulu, satım koşulu)
         strategies = [
             {
                 "name": "PMAI & RSI",
-                "buy_condition": lambda i: pmai_values[i] is not None and pmai_sma[i] is not None and \
-                                           rsi_values[i] is not None and adx[i] is not None and \
+                "buy_condition": lambda i: pmai_values[i] is not None and pmai_sma[i] is not None and
+                                           rsi_values[i] is not None and adx[i] is not None and
+
                                            pmai_values[i] > pmai_sma[i] * 1.2 and rsi_values[i] > 50 and adx[i] > 25,
                 "sell_condition": lambda i: pmai_values[i] is not None and pmai_values[i] < 30
             },
             {
                 "name": "MACD",
                 "buy_condition": lambda i: macd_values[i] is not None and macd_signal[i] is not None and \
-                                           rsi_values[i] is not None and \
+                                           rsi_values[i] is not None and
+
                                            macd_values[i] > macd_signal[i] and rsi_values[i] > 50,
                 "sell_condition": lambda i: macd_values[i] is not None and macd_signal[i] is not None and \
                                             macd_values[i] < macd_signal[i]
             },
             {
                 "name": "Breakout",
-                "buy_condition": lambda i: max_high_20[i - 1] is not None and adx[i] is not None and \
+                "buy_condition": lambda i: max_high_20[i - 1] is not None and adx[i] is not None and
+
                                            max_high_20[i - 1] < close[i] and adx[i] > 30,
                 "sell_condition": lambda i: max_low_20[i - 1] is not None and adx[i] is not None and
                                             low[i - 1] is not None and ((max_low_20[i - 1] > close[i]) or
@@ -71,7 +80,8 @@ class Backtest:
             {
                 "name": "Ma Cross",
                 "buy_condition": lambda i: ma_9[i-1] is not None and ma_50[i-1] is not None and \
-                                           adx[i] is not None and ma_9[i] is not None and ma_50[i] is not None and \
+                                           adx[i] is not None and ma_9[i] is not None and ma_50[i] is not None and
+
                                            ma_9[i-1] < ma_50[i-1] and ma_9[i] > ma_50[i] and adx[i] > 30,
                 "sell_condition": lambda i: ma_9[i-1] is not None and ma_50[i-1] is not None and \
                                            ma_9[i] is not None and ma_50[i] is not None and ((ma_9[i] < ma_50[i] and
@@ -80,8 +90,9 @@ class Backtest:
             {
                 "name": "BB(RSI)",
                 "buy_condition": lambda i: bb_rsi_down[i - 1] is not None and bb_rsi_down[i] is not None and rsi_values[i - 1]
-                                           is not None and rsi_values[i] is not None and bb_rsi_down[i - 1] > rsi_values[i - 1]
-                                           and bb_rsi_down[i] < rsi_values[i],
+                                           is not None and rsi_values[i] is not None and
+
+                                           bb_rsi_down[i - 1] > rsi_values[i - 1] and bb_rsi_down[i] < rsi_values[i],
                 "sell_condition": lambda i: bb_rsi_up[i - 1] is not None and bb_rsi_up[i] is not None and rsi_values[i - 1]
                                            is not None and rsi_values[i] is not None and bb_rsi_up[i - 1] < rsi_values[i - 1]
                                             and bb_rsi_up[i] > rsi_values[i]
@@ -89,10 +100,47 @@ class Backtest:
             {
                 "name": "BB(close)",
                 "buy_condition": lambda i: bb_down[i - 1] is not None and bb_down[i] is not None and
+
                                            bb_down[i - 1] > close[i - 1] and bb_down[i] < close[i],
                 "sell_condition": lambda i: bb_up[i - 1] is not None and bb_up[i] is not None and
-                                            bb_up[i - 1] < close[i - 1] and bb_up[i] > close[i]
+                                            (bb_up[i - 1] < close[i - 1] and bb_up[i] > close[i]) or (bb_down[i]*0.99>close[i]) or
+                                            (bb_mid[i-1]<close[i-1] and bb_mid[i]>close[i]) or (close[i]<buy_price * 0.97)
+            },
+            {
+                "name": "RSI Aşırı Alım/Satım",
+                "buy_condition": lambda i: rsi_values[i] is not None and
+
+                                           rsi_values[i]<30,
+                "sell_condition": lambda i: rsi_values[i-1] is not None and rsi_values[i]>70 or
+                                            (rsi_values[i-1]>50 and rsi_values[i]<50) or (rsi_values[i]<25)
+            },
+            {
+                "name": "Fibonacci Retracement",
+                "buy_condition": lambda i: fib[i-1][0] is not None and fib[i][0] is not None and
+
+                                           (close[i-1] > fib[i-1][1] and close[i] < fib[i][1]),
+                "sell_condition": lambda i: fib[i][0] is not None and (fib[i][4]<close[i]) or (buy_price * 0.97 > close[i]) or
+                                            (close[i] > buy_price * 1.05 and fib[i][2]*0.99 > close[i] and fib[i-1][2] < close[i-1] )
+            },
+            {
+                "name": "DMO",
+                "buy_condition": lambda i: dmo[i] is not None and adx[i] is not None and rsi_values[i] is not None and atr[i] is not None and
+                                           atr_14[i] is not None and
+
+                                           (dmo[i]>1.5 and adx[i] > 25 and rsi_values[i] > 50 and atr[i]<atr_14[i]),
+                "sell_condition": lambda i: dmo[i] is not None and adx[i] is not None and
+                                            (dmo[i]<0.8 or adx[i] < 20)
+            },
+            {
+                "name": "VMZI",
+                "buy_condition": lambda i: vmzi[i] is not None and adx[i] is not None and rsi_values[i] is not None and
+
+                                           (vmzi[i]>1.5 and adx[i] > 25 and rsi_values[i] > 50),
+                "sell_condition": lambda i: vmzi[i] is not None and rsi_values[i] is not None and
+                                            (vmzi[i]<0 and rsi_values[i] < 50)
             }
+
+
         ]
 
         fig = plt.figure(figsize=(16, 24))
@@ -101,27 +149,25 @@ class Backtest:
         # 1. Grafik: Fiyat
         ax1 = fig.add_subplot(gs[0, :])
         ax1.set_xlabel('Zaman (Periyotlar)')
-        ax1.set_ylabel('Fiyat', color='blue')
-        ax1.plot(close, color='blue', label='Fiyat', linewidth=1.5)
-        ax1.tick_params(axis='y', labelcolor='blue')
+        ax1.set_ylabel('Fiyat', color='black')
+        ax1.plot(close, color='black', label='Fiyat', linewidth=1.5)
+        ax1.tick_params(axis='y', labelcolor='black')
         ax1.set_xticks(np.arange(0, len(close), step=25))
         ax1.set_ylim(min(close) * 0.95, max(close) * 1.05)
         ax1.yaxis.set_major_locator(plt.MaxNLocator(10))
         ax1.legend()
-        if selected_strategy_name is not None:
-            ax1.set_title(selected_strategy_name)
+        ax1.set_title(f"{coin} {periyot} {selected_strategy_name}")
 
         capital_histories = []
         cumulative_profit_losses = []
         total_profit_losses = []
         profitable_trade_counts = []
         losing_trade_counts = []
-
         colors = ['orange','green','purple','red','brown','pink','gray','olive','cyan','blue','gold','lightblue','lightgreen',
             'magenta','salmon','teal','violet','darkorange','darkgreen','darkviolet','deepskyblue','dodgerblue','crimson',
             'khaki','chartreuse','lavender','lightcoral','mediumseagreen','orangered','indigo','slategray','cornflowerblue',
             'mediumslateblue','lightsteelblue','palevioletred','springgreen','seashell','peru','steelblue','tan','wheat']
-        
+
         # Seçilen stratejiye göre alım ve satım noktaları (yeşil ve kırmızı yuvarlaklar)
         buy_points = []
         sell_points = []
@@ -213,4 +259,4 @@ class Backtest:
         plt.show()
 
 # Test etme
-Backtest.Test(canli_veriler=True, periyot="4h",coin="BTCUSDT",selected_strategy_name="Breakout")
+Backtest.Test(canli_veriler=True, periyot="4h",coin="BTCUSDT",selected_strategy_name="VMZI")
