@@ -156,39 +156,3 @@ class Binance:
             return satishacmi
         elif (mod == 11):
             return gozardiedilebilir
-
-    def piyasa_durumu(self,periyod):
-        """
-        Piyasa koşullarına göre en uygun stratejiyi seçer.
-        - Yüksek volatilite ve güçlü trendler için ATR_ADX_Strategy seçilir.
-        - Daha yatay ve sakin piyasa için SMA_Cross ve Pivot_Point gibi stratejiler.
-        - Stratejilerin geçmiş performansına da bakarak karar verir.
-
-        atr = Indikator.ATR(high, low, close)
-        adx = Indikator.ADX(high, low, close)
-        rsi = Indikator.RSI(close)
-
-        # Piyasa volatilitesi yüksek ve trend güçlü ise ATR-ADX stratejisini seç
-        if atr[-1] > atr[-2] and adx[-1] > 25:
-            return "ATR_ADX_Strategy"
-
-        # Yüksek volatilite ama trend zayıfsa Pivot Point stratejisini seç
-        if atr[-1] > atr[-2] and adx[-1] < 20:
-            return "Pivot_Point"
-
-        # Trend güçlü değilse, SMA-Cross gibi basit hareketli ortalamalara dayan stratejileri seç
-        if adx[-1] < 20 and rsi[-1] > 50:
-            return "SMA_Cross"
-        """
-        degerler=[]
-        for coin in self.secili_list():
-            deger=[]
-            high = self.data(coin,1000,periyod,2)
-            low = self.data(coin, 1000, periyod, 3)
-            close = self.data(coin, 1000, periyod, 4)
-
-            atr = Indikator.ATR(high, low, close)
-            adx = Indikator.ADX(high, low, close)
-            rsi = Indikator.RSI(close)
-
-        #return sum(degerler)/len(degerler)
