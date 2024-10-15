@@ -4,6 +4,8 @@ Proje notlari.txt
 trade_performance.json
 trading_log.log
 __pycache__
-test.py
-veriler.xlsx
+stratejiler.xlsx
 islem_gecmisi.log
+close-test.txt
+high-test.txt
+low-test.txt
