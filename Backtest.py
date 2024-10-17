@@ -9,11 +9,12 @@ from Binance import Binance
 
 class Backtest:
     @staticmethod
-    def Test(canli_veriler,coin="BTCUSDT",periyot="4h",adet=1000, selected_strategy_name=None,kayit_et=False,hisse=False):
+    def Test(canli_veriler,coin="BTCUSDT",file_name='THYAO Geçmiş Verileri.csv',periyot="4h",adet=1000, selected_strategy_name=None,kayit_et=False,hisse=False):
         close = []
         low = []
         high = []
-        if canli_veriler == False and hisse == False:
+        #Veri ithali
+        if canli_veriler == False and hisse == False:   # Kayıtlı coin verileri
             close = open("close-test.txt", "r").read().split(",")
             low = open("low-test.txt", "r").read().split(",")
             high = open("high-test.txt", "r").read().split(",")
@@ -21,8 +22,7 @@ class Backtest:
                 close[i] = float(close[i])
                 low[i] = float(low[i])
                 high[i] = float(high[i])
-        elif canli_veriler == False and hisse == True:
-            file_name='THYAO Geçmiş Verileri.csv'
+        elif canli_veriler == False and hisse == True:  # csv den hisse verilerini oku
             with open(file_name, mode='r', newline='', encoding='utf-8') as file:
                 csv_reader = csv.reader(file)
                 next(csv_reader)
@@ -34,7 +34,7 @@ class Backtest:
                 high.reverse()
                 low.reverse()
 
-        elif canli_veriler == True and hisse == False:
+        elif canli_veriler == True and hisse == False:  # Canlı coin verileri
             binance = Binance()
             close = binance.data(coin, adet, periyot, 4)
             low = binance.data(coin, adet, periyot, 3)
@@ -68,6 +68,8 @@ class Backtest:
         vmzi=IndikatorTest.VMZI(close)
         fdi = IndikatorTest.FDI(close)
         vama=IndikatorTest.VAMA(close,14)
+        ichimoku_bulutu=IndikatorTest.Ichimoku_Bulutu(high, low)
+        tso = IndikatorTest.TSO(high,low,close)
 
         # Strateji listesi (Strateji adı, alım koşulu, satım koşulu)
         strategies = [
@@ -175,10 +177,35 @@ class Backtest:
                                            (vama[i]*1.02<close[i]),
                 "sell_condition": lambda i: vama[i] is not None and
                                            (vama[i]*0.98>close[i])
+            },
+            {
+                "name": "Ichimoku Bulutu",
+                "buy_condition": lambda i: ichimoku_bulutu[0][i] is not None and ichimoku_bulutu[1][i] is not None and
+                                           ichimoku_bulutu[2][i] is not None and ichimoku_bulutu[3][i] is not None and
+                                           ichimoku_bulutu[0][i - 1] is not None and ichimoku_bulutu[1][i-1] is not None and
+                                            #ichimoku_bulutu[0][i]>close[i] and ichimoku_bulutu[1][i]>close[i] and
+                                            #ichimoku_bulutu[2][i]>close[i] and ichimoku_bulutu[3][i]>close[i] and
+                                           (
+                                            ichimoku_bulutu[0][i-1] < ichimoku_bulutu[1][i-1] and ichimoku_bulutu[0][i] > ichimoku_bulutu[1][i]),
+                "sell_condition": lambda i: ichimoku_bulutu[0][i] is not None and ichimoku_bulutu[1][i] is not None and
+                                           ichimoku_bulutu[2][i] is not None and ichimoku_bulutu[3][i] is not None and
+                                           ichimoku_bulutu[0][i - 1] is not None and ichimoku_bulutu[1][i-1] is not None and
+
+                                            ((ichimoku_bulutu[0][i]<close[i] and ichimoku_bulutu[1][i]<close[i] and
+                                            ichimoku_bulutu[2][i]<close[i] and ichimoku_bulutu[3][i]<close[i]) or (
+                                            ichimoku_bulutu[0][i-1] > ichimoku_bulutu[1][i-1] and ichimoku_bulutu[0][i] < ichimoku_bulutu[1][i]))
+            },
+            {
+                "name": "TSO",
+                "buy_condition": lambda i: tso[i] is not None and
+
+                                           (tso[i] == 1),
+                "sell_condition": lambda i: tso[i] is not None and
+                                           (tso[i] == -1)
             }
         ]
         if kayit_et != True:
-            fig = plt.figure(figsize=(16, 24))
+            fig = plt.figure(figsize=(16, 30))
             gs = gridspec.GridSpec(len(strategies) + 1, 2, height_ratios=[2] + [1] * len(strategies))
 
             # 1. Grafik: Fiyat
