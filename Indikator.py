@@ -314,3 +314,82 @@ class Indikator:
                 vmzi = 0
             vmzi_values.append(vmzi)
         return vmzi_values
+
+    @staticmethod
+    def FDI(src, length=14):
+        fdi_values = [None] * (length * 2)  # İlk 2 period boyunca None olacak, çünkü hesaplama yapılamaz
+
+        for i in range(length * 2, len(src)):
+            # Önce değişim oranını hesapla
+            price_change_ratio_now = (src[i] - src[i - length]) / src[i - length]
+            price_change_ratio_past = (src[i - length] - src[i - length * 2]) / src[
+                i - length * 2]
+
+            # Fiyat-Değişim İvmesi (FDI) hesapla
+            fdi = price_change_ratio_now - price_change_ratio_past
+
+            fdi_values.append(fdi)
+
+        return fdi_values
+
+    @staticmethod
+    def VAMA(src, length=14):
+        prices = np.array(src)
+        vama = np.zeros(len(prices))
+
+        for i in range(length, len(prices)):
+            # Hareketli ortalama hesapla
+            ma = np.mean(prices[i - length:i])
+
+            # Volatiliteyi hesapla (standart sapma)
+            volatility = np.std(prices[i - length:i])
+
+            # VAMA hesapla
+            vama[i] = ma + volatility
+
+        return vama
+
+    @staticmethod
+    # CCI hesaplama fonksiyonu
+    def CCI(high, low, close, period=20, length=5):
+        high = np.array(high)
+        low = np.array(low)
+        close = np.array(close)
+
+        # Typical Price (TP) hesapla
+        tp = (high + low + close) / 3
+
+        # SMA hesapla (Basit Hareketli Ortalama)
+        sma_tp = pd.Series(tp).rolling(window=period).mean().to_numpy()
+
+        # Mean Deviation (Ortalama Sapma) hesapla
+        mean_deviation = pd.Series(tp).rolling(window=period).apply(
+            lambda x: np.mean(np.abs(x - np.mean(x)))).to_numpy()
+
+        # CCI hesapla
+        cci = (tp - sma_tp) / (0.015 * mean_deviation)
+        # CCI ortalamasını hesaplayıp geri döndürme
+        cci = pd.Series(cci)
+        return cci.rolling(window=length).mean().to_numpy()
+
+    @staticmethod
+    def TSO(high, low, close, period_ema_short=12, period_ema_long=26):
+        # EMA hesaplama fonksiyonu
+
+        # EMA kısa ve uzun dönem hesaplamaları
+        ema_short = Indikator.EMA(close, period_ema_short)
+        ema_long = Indikator.EMA(close, period_ema_long)
+
+        # CCI hesaplaması (yüksek, düşük ve kapanış fiyatlarını aynı şekilde kullandık basitlik için)
+        cci_values = Indikator.CCI(high, low, close)
+
+        # TSO hesaplama: EMA farkı (trend yönü) ve CCI (aşırı alım/satım) birleşimi
+        tso = np.zeros_like(close)
+        for i in range(len(close)):
+            if ema_short[i] > ema_long[i] and cci_values[i] > 0:
+                tso[i] = 1  # Güçlü bir yükseliş trendi
+            elif ema_short[i] < ema_long[i] and cci_values[i] < 0:
+                tso[i] = -1  # Güçlü bir düşüş trendi
+            else:
+                tso[i] = 0  # Nötr ya da zayıf trend
+        return tso
