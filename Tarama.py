@@ -9,7 +9,7 @@ class Tarama:
         macd_signal = macd[1]
         rsi=Indikator.RSI(close)
         if macd_signal[-1] is not None and macd_values[-1] is not None and rsi[-1] is not None:
-            if macd_values[-1] > macd_signal[-1] and rsi>50:
+            if macd_values[-1] > macd_signal[-1] and rsi[-1]>50:
                 return "BUY"
             elif macd_values[-1] < macd_signal[-1]:
                 return "SELL"
@@ -23,9 +23,9 @@ class Tarama:
         adx=Indikator.ADX(high,low,close)
         rsi = Indikator.RSI(close)
         if vmzi[-1] is not None and adx[-1] is not None and rsi[-1] is not None:
-            if vmzi[-1] > 1.5 and adx[-1] > 25 and rsi > 50:
+            if vmzi[-1] > 1.5 and adx[-1] > 25 and rsi[-1] > 50:
                 return "BUY"
-            elif vmzi[-1] < 0 and rsi < 50:
+            elif vmzi[-1] < 0 and rsi[-1] < 50:
                 return "SELL"
             else:
                 return False
@@ -49,9 +49,9 @@ class Tarama:
     def TSO(high,low,close):
         tso = Indikator.TSO(high,low,close)
         if tso[-1] is not None:
-            if tso == 1:
+            if tso[-1] == 1:
                 return "BUY"
-            elif tso == -1:
+            elif tso[-1] == -1:
                 return "SELL"
             else:
                 return False
@@ -82,9 +82,9 @@ class Tarama:
         macd_values = macd[0]
         macd_signal = macd[1]
         if fdi[-2] is not None and rsi[-1] is not None and macd_values[-1] is not None and macd_signal[-1] is not None:
-            if fdi[-2] > 0 and fdi[-2] < fdi[-1] and rsi > 40 and macd_values>macd_signal:
+            if fdi[-2] > 0 and fdi[-2] < fdi[-1] and rsi[-1] > 40 and macd_values>macd_signal:
                 return "BUY"
-            elif fdi[-2] < 0 and fdi[-2] > fdi[-1] and rsi < 60 and macd_values<macd_signal:
+            elif fdi[-2] < 0 and fdi[-2] > fdi[-1] and rsi[-1] < 60 and macd_values<macd_signal:
                 return "SELL"
             else:
                 return False
