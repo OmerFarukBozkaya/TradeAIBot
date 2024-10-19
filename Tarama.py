@@ -82,9 +82,9 @@ class Tarama:
         macd_values = macd[0]
         macd_signal = macd[1]
         if fdi[-2] is not None and rsi[-1] is not None and macd_values[-1] is not None and macd_signal[-1] is not None:
-            if fdi[-2] > 0 and fdi[-2] < fdi[-1] and rsi[-1] > 40 and macd_values>macd_signal:
+            if fdi[-2] > 0 and fdi[-2] < fdi[-1] and rsi[-1] > 40 and macd_values[-1]>macd_signal[-1]:
                 return "BUY"
-            elif fdi[-2] < 0 and fdi[-2] > fdi[-1] and rsi[-1] < 60 and macd_values<macd_signal:
+            elif fdi[-2] < 0 and fdi[-2] > fdi[-1] and rsi[-1] < 60 and macd_values[-1]<macd_signal[-1]:
                 return "SELL"
             else:
                 return False
@@ -129,10 +129,8 @@ class Tarama:
         adx=Indikator.ADX(high,low,close)
         rsi=Indikator.RSI(close)
         atr=Indikator.ATR(high,low, close)
-        atr_14=Indikator.SMA(atr,14)
         bb = Indikator.BB(close)
         bb_down = bb[0]
-        bb_mid = bb[1]
         bb_up = bb[2]
         if dmo[-1] is not None and adx[-1] is not None and rsi[-1] is not None and bb_down[-1] is not None:
             if dmo[-1] > 1.0 and adx[-1] > 20 and rsi[-1] > 50 and close[-1] >= bb_up[-1]:
@@ -256,7 +254,7 @@ class Tarama:
                 elif macd == "SELL":
                     resault_1h["MACD"]["SELL"].append(coin)
 
-                #   MA Cross Stratejisi
+                #   MA_Cross Stratejisi
                 ma_cross = Tarama.MA_Cross(high,low,close)
                 if ma_cross == None or ma_cross == False:
                     continue
@@ -442,7 +440,6 @@ class Tarama:
                           ))
             if gonder:
                 araclar.mail_gonder(f"Tarama |{periyot}", mesaj)
-
         elif periyot == "4h":
             #   DMO,VMZI,VAMA,Ma Cross
             mesaj = ""
@@ -474,7 +471,7 @@ class Tarama:
                           f"SELL:\n"
                           f"{resault_4h['VAMA']['SELL']}\n"
                           ))
-            if len(resault_4h['MA Cross']['BUY']) > 0 or len(resault_4h['MA Cross']['SELL']) > 0:
+            if len(resault_4h['MA_Cross']['BUY']) > 0 or len(resault_4h['MA_Cross']['SELL']) > 0:
                 gonder = True
                 mesaj = (mesaj +
                          (f"MA Cross\n"
