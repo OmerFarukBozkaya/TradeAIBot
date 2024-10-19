@@ -29,7 +29,6 @@ elif com == "4":
     periyot=input("Periyot (15m,1h,4h,1d):")
     while True:
         araclar.mum_olusmasini_bekle(periyot)
-        print("BAŞLADI")
         Tarama.Tara(binance.secili_list(),periyot)
 
 #alsat.dynamic_strategy(coinlist=binance.secili_list(),periyot="5m",gercek=False,sonislem="SAT",nakit=100)
