@@ -146,12 +146,12 @@ class Backtest:
             },
             {
                 "name": "DMO",
-                "buy_condition": lambda i: dmo[i] is not None and adx[i] is not None and rsi_values[i] is not None and atr[i] is not None and
-                                           atr_14[i] is not None and
+                "buy_condition": lambda i: dmo[i] is not None and adx[i] is not None and rsi_values[i] is not None and bb_up[i] is not None and
 
-                                           (dmo[i]>1.5 and adx[i] > 25 and rsi_values[i] > 50 and atr[i]<atr_14[i]),
+                #(dmo[i]>1.5 and adx[i] > 25 and rsi_values[i] > 50 and atr[i]<atr_14[i])
+                                           (dmo[i]>1.0 and adx[i] > 20 and rsi_values[i] > 50 and close[i]>=bb_up[i]),
                 "sell_condition": lambda i: dmo[i] is not None and adx[i] is not None and
-                                            (dmo[i]<0.8 or adx[i] < 20)
+                                            (dmo[i]<0.8 or adx[i] < 20 or (rsi_values[i]<50 and close[i] <= bb_down[i]))
             },
             {
                 "name": "VMZI",
@@ -202,7 +202,17 @@ class Backtest:
                                            (tso[i] == 1),
                 "sell_condition": lambda i: tso[i] is not None and
                                            (tso[i] == -1)
+            },
+            {
+                "name": "Ma Range Breakout",
+                "buy_condition": lambda i: ma_50[i-1] is not None and ma_50[i] is not None and
+
+                                           (ma_50[i-1] > close[i-1] and ma_50[i] < close[i]),
+                "sell_condition": lambda i: ma_50[i-1] is not None and ma_50[i] is not None and
+
+                                           (ma_50[i-1] < close[i-1] and ma_50[i] > close[i]),
             }
+
         ]
         if kayit_et != True:
             fig = plt.figure(figsize=(16, 30))
@@ -312,21 +322,40 @@ class Backtest:
 
             #Excel çıktısı oluştur.
             if kayit_et:
-                strategy_name = strategy['name']
-                cumulative_total_profit_loss = ((capital_histories[idx][
-                                                     -1] - 100) / 100) * 100  # Son kapital ile kümülatif kâr/zarar
-                profitable_trades = profitable_trade_counts[idx]
-                losing_trades = losing_trade_counts[idx]
+                if selected_strategy_name==None:
+                    strategy_name = strategy['name']
+                    cumulative_total_profit_loss = ((capital_histories[idx][
+                                                         -1] - 100) / 100) * 100  # Son kapital ile kümülatif kâr/zarar
+                    profitable_trades = profitable_trade_counts[idx]
+                    losing_trades = losing_trade_counts[idx]
 
-                # Veriyi ekle
-                excel_data.append({
-                    'coin': coin,
-                    'periyot': periyot,
-                    'strategy name': strategy_name,
-                    'kümülatif kar zarar (%)': cumulative_total_profit_loss,
-                    'karlı işlemler': profitable_trades,
-                    'zararlı işlemler': losing_trades
-                })
+                    # Veriyi ekle
+                    excel_data.append({
+                        'coin': coin,
+                        'periyot': periyot,
+                        'strategy name': strategy_name,
+                        'kümülatif kar zarar (%)': cumulative_total_profit_loss,
+                        'karlı işlemler': profitable_trades,
+                        'zararlı işlemler': losing_trades
+                    })
+                elif selected_strategy_name == strategy['name'] :
+                    strategy_name = strategy['name']
+                    cumulative_total_profit_loss = ((capital_histories[idx][
+                                                         -1] - 100) / 100) * 100  # Son kapital ile kümülatif kâr/zarar
+                    profitable_trades = profitable_trade_counts[idx]
+                    losing_trades = losing_trade_counts[idx]
+
+                    # Veriyi ekle
+                    excel_data.append({
+                        'coin': coin,
+                        'periyot': periyot,
+                        'strategy name': strategy_name,
+                        'kümülatif kar zarar (%)': cumulative_total_profit_loss,
+                        'karlı işlemler': profitable_trades,
+                        'zararlı işlemler': losing_trades
+                    })
+
+
 
         if kayit_et:
             # Excel dosyasına yazma işlemi
@@ -344,8 +373,6 @@ class Backtest:
 
             # Genişletilmiş veri çerçevesini aynı dosyaya tekrar kaydet
             combined_df.to_excel(output_file, index=False, engine='openpyxl')
-
-            print(f"Sonuçlar {output_file} dosyasına kaydedildi.")
 
         if kayit_et != True:
             # 1. grafikte alım ve satım noktalarını göster
