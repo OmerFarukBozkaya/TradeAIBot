@@ -431,14 +431,14 @@ class Tarama:
                           f"SELL:\n"
                           f"{resault_1h['MACD']['SELL']}\n"
                           ))
-            if len(resault_1h['MA Cross']['BUY']) > 0 or len(resault_1h['MA Cross']['SELL']) > 0:
+            if len(resault_1h['MA_Cross']['BUY']) > 0 or len(resault_1h['MA_Cross']['SELL']) > 0:
                 gonder = True
                 mesaj = (mesaj +
                          (f"TSO\n"
                           f"BUY:\n"
-                          f"{resault_1h['MA Cross']['BUY']}\n"
+                          f"{resault_1h['MA_Cross']['BUY']}\n"
                           f"SELL:\n"
-                          f"{resault_1h['MA Cross']['SELL']}\n"
+                          f"{resault_1h['MA_Cross']['SELL']}\n"
                           ))
             if gonder:
                 araclar.mail_gonder(f"Tarama |{periyot}", mesaj)
@@ -479,9 +479,9 @@ class Tarama:
                 mesaj = (mesaj +
                          (f"MA Cross\n"
                           f"BUY:\n"
-                          f"{resault_4h['MA Cross']['BUY']}\n"
+                          f"{resault_4h['MA_Cross']['BUY']}\n"
                           f"SELL:\n"
-                          f"{resault_4h['MA Cross']['SELL']}\n"
+                          f"{resault_4h['MA_Cross']['SELL']}\n"
                           ))
             if gonder:
                 araclar.mail_gonder(f"Tarama |{periyot}", mesaj)
@@ -525,14 +525,14 @@ class Tarama:
                           f"SELL:\n"
                           f"{resault_1d['VAMA']['SELL']}\n"
                           ))
-            if len(resault_1d['MA Cross']['BUY']) > 0 or len(resault_1d['MA Cross']['SELL']) > 0:
+            if len(resault_1d['MA_Cross']['BUY']) > 0 or len(resault_1d['MA_Cross']['SELL']) > 0:
                 gonder = True
                 mesaj = (mesaj +
                          (f"MA Cross\n"
                           f"BUY:\n"
-                          f"{resault_1d['MA Cross']['BUY']}\n"
+                          f"{resault_1d['MA_Cross']['BUY']}\n"
                           f"SELL:\n"
-                          f"{resault_1d['MA Cross']['SELL']}\n"
+                          f"{resault_1d['MA_Cross']['SELL']}\n"
                           ))
             if len(resault_1d['FDI']['BUY']) > 0 or len(resault_1d['FDI']['SELL']) > 0:
                 gonder = True
