@@ -6,9 +6,7 @@ import time
 from datetime import datetime
 from Binance import Binance
 from Indikator import Indikator
-import csv
 import pandas as pd
-from openpyxl.workbook import Workbook
 
 class Araclar:
     def __init__(self, from_email=None, to_email=None, email_password=None):
@@ -136,3 +134,42 @@ class Araclar:
         }
         if time.time() % zaman_dilimleri[periyot] > 10:
             time.sleep(zaman_dilimleri[periyot] - (time.time() % zaman_dilimleri[periyot]))
+
+    @staticmethod
+    def strategy_result_analyze(input="strategy_results.xlsx", output_file='strategy_results_analyze.xlsx'):
+        # Excel dosyasını oku
+        df = pd.read_excel(input)
+
+        # Stratejilerin kümülatif kar zarar ortalamasını ve başarılı olup olmadığını hesaplama
+        grouped = df.groupby(['periyot', 'strategy name']).agg(
+            karlilik_ortalamasi=pd.NamedAgg(column='kümülatif kar zarar (%)', aggfunc='mean'),
+            toplam_karli_islem=pd.NamedAgg(column='karlı işlemler', aggfunc='sum'),
+            toplam_zararli_islem=pd.NamedAgg(column='zararlı işlemler', aggfunc='sum')
+        ).reset_index()
+
+        # (Karlı işlemler / Zararlı işlemler) oranını hesapla ve başarılı stratejilere '*' ekle
+        grouped['is_successful'] = (grouped['toplam_karli_islem'] / grouped['toplam_zararli_islem']) > 1
+        grouped['strategy_summary'] = grouped['strategy name'] + " " + grouped['karlilik_ortalamasi'].round(2).astype(
+            str)
+        grouped.loc[grouped['is_successful'], 'strategy_summary'] = '*' + grouped['strategy_summary']
+
+        # Her periyot için ayrı pivot tablolar oluştur ve sıralama işlemi yap
+        pivot_tables = []
+        for period in grouped['periyot'].unique():
+            period_group = grouped[grouped['periyot'] == period]
+            period_group_sorted = period_group.sort_values('karlilik_ortalamasi', ascending=False)
+
+            # Sadece strategy_summary ve karlilik_ortalamasi'ni al
+            period_summary = period_group_sorted[['strategy_summary', 'karlilik_ortalamasi']]
+            period_summary.columns = [period + ' Strategy Summary',
+                                      period + ' Karlilik Ortalaması']  # Sütun adlarını değiştir
+            pivot_tables.append(period_summary)
+
+        # Tüm pivot tabloları birleştir
+        final_table = pd.concat(pivot_tables, axis=1)
+
+        # Sonucu bir Excel dosyasına yaz
+
+        final_table.to_excel(output_file, index=False)
+
+        print(f"Sonuçlar {output_file} dosyasına başarıyla kaydedildi.")
