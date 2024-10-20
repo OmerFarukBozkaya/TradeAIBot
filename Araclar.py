@@ -148,7 +148,8 @@ class Araclar:
         grouped = df.groupby(['periyot', 'strategy name']).agg(
             karlilik_ortalamasi=pd.NamedAgg(column='kümülatif kar zarar (%)', aggfunc='mean'),
             toplam_karli_islem=pd.NamedAgg(column='karlı işlemler', aggfunc='sum'),
-            toplam_zararli_islem=pd.NamedAgg(column='zararlı işlemler', aggfunc='sum')
+            toplam_zararli_islem=pd.NamedAgg(column='zararlı işlemler', aggfunc='sum'),
+            ortalama_islem_sonucu = pd.NamedAgg(column='ortalama işlem sonucu', aggfunc='mean')
         ).reset_index()
 
         # (Karlı işlemler / Zararlı işlemler) oranını hesapla ve başarılı stratejilere '*' ekle
@@ -164,11 +165,12 @@ class Araclar:
 
             # Sadece strategy_summary, karlilik_ortalamasi, toplam karlı ve toplam zararlı işlemleri al
             period_summary = period_group_sorted[['strategy_summary', 'karlilik_ortalamasi',
-                                                  'toplam_karli_islem', 'toplam_zararli_islem']]
+                                                  'toplam_karli_islem', 'toplam_zararli_islem','ortalama_islem_sonucu']]
             period_summary.index = range(len(period_summary))  # Satırları sıfırdan numaralandır
             period_summary.columns = [f'{period} Strategy', f'{period} Karlilik Ortalaması',
                                       f'{period} Karlı İşlemler',
-                                      f'{period} Zararlı İşlemler']  # Sütun adlarını değiştir
+                                      f'{period} Zararlı İşlemler',
+                                      f'{period} Ortalama İşlem Sonucu']  # Sütun adlarını değiştir
             pivot_tables.append(period_summary)
 
         # Tüm pivot tabloları birleştir (eksik değerleri doldurmayacak şekilde)
