@@ -150,7 +150,7 @@ class Stratejiler:
         if bb_down[-1] is not None and bb_up[-1] is not None and adx[-1] is not None:
             if bb_down[-1] > close[-1] and adx[-1] > 25:
                 return "BUY"
-            elif (close[-1] > bb_up[-1] and adx < 20):
+            elif (close[-1] > bb_up[-1] and adx[-1] < 20):
                 return "SELL"
             else:
                 return False
