@@ -211,6 +211,15 @@ class Backtest:
                 "sell_condition": lambda i: ma_50[i-1] is not None and ma_50[i] is not None and
 
                                            (ma_50[i-1] < close[i-1] and ma_50[i] > close[i]),
+            },
+            {
+                "name": "BB ADX",
+                "buy_condition": lambda i: bb_down[i] is not None and adx[i] is not None and
+
+                                           (close[i] < bb_down[i] and adx[i] > 25),
+                "sell_condition": lambda i: bb_down[i] is not None and adx[i] is not None and
+
+                                            (close[i] > bb_up[i] and adx[i] < 20),
             }
 
         ]
@@ -328,7 +337,10 @@ class Backtest:
                                                          -1] - 100) / 100) * 100  # Son kapital ile kümülatif kâr/zarar
                     profitable_trades = profitable_trade_counts[idx]
                     losing_trades = losing_trade_counts[idx]
-
+                    if len(cumulative_profit_loss) > 0:
+                        ortalama_islem = IndikatorTest.SMA(cumulative_profit_loss, len(cumulative_profit_loss))[-1]
+                    else:
+                        ortalama_islem = 0
                     # Veriyi ekle
                     excel_data.append({
                         'coin': coin,
@@ -336,7 +348,8 @@ class Backtest:
                         'strategy name': strategy_name,
                         'kümülatif kar zarar (%)': cumulative_total_profit_loss,
                         'karlı işlemler': profitable_trades,
-                        'zararlı işlemler': losing_trades
+                        'zararlı işlemler': losing_trades,
+                        'ortalama işlem sonucu': ortalama_islem
                     })
                 elif selected_strategy_name == strategy['name'] :
                     strategy_name = strategy['name']
@@ -344,6 +357,10 @@ class Backtest:
                                                          -1] - 100) / 100) * 100  # Son kapital ile kümülatif kâr/zarar
                     profitable_trades = profitable_trade_counts[idx]
                     losing_trades = losing_trade_counts[idx]
+                    if len(cumulative_profit_loss) > 0:
+                        ortalama_islem = IndikatorTest.SMA(cumulative_profit_loss, len(cumulative_profit_loss))[-1]
+                    else:
+                        ortalama_islem = 0
 
                     # Veriyi ekle
                     excel_data.append({
@@ -352,7 +369,8 @@ class Backtest:
                         'strategy name': strategy_name,
                         'kümülatif kar zarar (%)': cumulative_total_profit_loss,
                         'karlı işlemler': profitable_trades,
-                        'zararlı işlemler': losing_trades
+                        'zararlı işlemler': losing_trades,
+                        'ortalama işlem sonucu':ortalama_islem
                     })
 
 
