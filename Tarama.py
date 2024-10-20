@@ -1,147 +1,7 @@
-from Indikator import Indikator
 from Binance import Binance
 from Araclar import Araclar
+from Stratejiler import Stratejiler
 class Tarama:
-    @staticmethod
-    def MACD(close):
-        macd=Indikator.MACD(close)
-        macd_values = macd[0]
-        macd_signal = macd[1]
-        rsi=Indikator.RSI(close)
-        if macd_signal[-1] is not None and macd_values[-1] is not None and rsi[-1] is not None:
-            if macd_values[-1] > macd_signal[-1] and rsi[-1]>50:
-                return "BUY"
-            elif macd_values[-1] < macd_signal[-1]:
-                return "SELL"
-            else:
-                return False
-        else:
-            return None
-    @staticmethod
-    def VMZI(high,low,close):
-        vmzi=Indikator.VMZI(close)
-        adx=Indikator.ADX(high,low,close)
-        rsi = Indikator.RSI(close)
-        if vmzi[-1] is not None and adx[-1] is not None and rsi[-1] is not None:
-            if vmzi[-1] > 1.5 and adx[-1] > 25 and rsi[-1] > 50:
-                return "BUY"
-            elif vmzi[-1] < 0 and rsi[-1] < 50:
-                return "SELL"
-            else:
-                return False
-        else:
-            return None
-
-    @staticmethod
-    def VAMA(close):
-        vama = Indikator.VAMA(close)
-        if vama[-1] is not None:
-            if vama[-1] * 1.02 < close[-1]:
-                return "BUY"
-            elif vama[-1] * 0.98 > close[-1]:
-                return "SELL"
-            else:
-                return False
-        else:
-            return None
-
-    @staticmethod
-    def TSO(high,low,close):
-        tso = Indikator.TSO(high,low,close)
-        if tso[-1] is not None:
-            if tso[-1] == 1:
-                return "BUY"
-            elif tso[-1] == -1:
-                return "SELL"
-            else:
-                return False
-        else:
-            return None
-
-    @staticmethod
-    def BB_RSI(close):
-        rsi = Indikator.RSI(close)
-        bb_rsi=Indikator.BB(rsi)
-        bb_rsi_down=bb_rsi[0]
-        bb_rsi_up=bb_rsi[2]
-        if rsi[-2] is not None and bb_rsi_down[-2] is not None and bb_rsi_up[-2] is not None:
-            if bb_rsi_down[-2] > rsi[-2] and bb_rsi_down[-1] < rsi[-1]:
-                return "BUY"
-            elif bb_rsi_up[-2] < rsi[-2] and bb_rsi_up[-1] > rsi[-1]:
-                return "SELL"
-            else:
-                return False
-        else:
-            return None
-
-    @staticmethod
-    def FDI(close):
-        fdi = Indikator.FDI(close)
-        rsi = Indikator.RSI(close)
-        macd= Indikator.MACD(close)
-        macd_values = macd[0]
-        macd_signal = macd[1]
-        if fdi[-2] is not None and rsi[-1] is not None and macd_values[-1] is not None and macd_signal[-1] is not None:
-            if fdi[-2] > 0 and fdi[-2] < fdi[-1] and rsi[-1] > 40 and macd_values[-1]>macd_signal[-1]:
-                return "BUY"
-            elif fdi[-2] < 0 and fdi[-2] > fdi[-1] and rsi[-1] < 60 and macd_values[-1]<macd_signal[-1]:
-                return "SELL"
-            else:
-                return False
-        else:
-            return None
-
-    @staticmethod
-    def BB_Close(close):
-        bb = Indikator.BB(close)
-        bb_down = bb[0]
-        bb_mid = bb[1]
-        bb_up = bb[2]
-        if bb_down[-2] is not None and bb_mid[-2] is not None and bb_up[-2] is not None:
-            if bb_down[-2] > close[-2] and bb_down[-1] < close[-1]:
-                return "BUY"
-            elif ((bb_up[-2] < close[-2] and bb_up[-1] > close[-1]) or (bb_down[-1] * 0.99 > close[-1]) or
-                  (bb_mid[-2] < close[-2] and bb_mid[-1] > close[-1])):
-                return "SELL"
-            else:
-                return False
-        else:
-            return None
-
-    @staticmethod
-    def MA_Cross(high,low,close):
-        ma_9 = Indikator.SMA(close,9)
-        ma_50 = Indikator.SMA(close,50)
-        adx = Indikator.ADX(high,low,close)
-        if ma_9[-2] is not None and ma_50[-2] is not None and adx[-1] is not None:
-            if ma_9[-2] < ma_50[-2] and ma_9[-1] > ma_50[-1] and adx[-1] > 30:
-                return "BUY"
-            elif (ma_9[-2] > ma_50[-2] and ma_9[-1] < ma_50[-1]) or (ma_50[-1] * 0.99 > close[-1]):
-                return "SELL"
-            else:
-                return False
-        else:
-            return None
-
-    @staticmethod
-    def DMO(high, low, close):
-        dmo=Indikator.DMO(close)
-        adx=Indikator.ADX(high,low,close)
-        rsi=Indikator.RSI(close)
-        atr=Indikator.ATR(high,low, close)
-        bb = Indikator.BB(close)
-        bb_down = bb[0]
-        bb_up = bb[2]
-        if dmo[-1] is not None and adx[-1] is not None and rsi[-1] is not None and bb_down[-1] is not None:
-            if dmo[-1] > 1.0 and adx[-1] > 20 and rsi[-1] > 50 and close[-1] >= bb_up[-1]:
-                return "BUY"
-            elif dmo[-1] < 0.8 or adx[-1] < 20 or (rsi[-1]<50 and close[-1] <= bb_down[-1]):
-                return "SELL"
-            else:
-                return False
-        else:
-            return None
-
     @staticmethod
     def Tara(coinlist,periyot):
         binance = Binance()
@@ -195,7 +55,7 @@ class Tarama:
                 high = binance.data(coin, 1000, periyot, 2)
 
                 #   BB(close) Stratejisi
-                bb_close = Tarama.BB_Close(close)
+                bb_close = Stratejiler.BB_Close(close)
                 if bb_close == None or bb_close == False:
                     continue
                 elif bb_close == "BUY":
@@ -204,7 +64,7 @@ class Tarama:
                     resault_15m["BB(close)"]["SELL"].append(coin)
 
                 #   BB(RSI) Stratejisi
-                bb_rsi = Tarama.BB_RSI(close)
+                bb_rsi = Stratejiler.BB_RSI(close)
                 if bb_rsi == None or bb_rsi == False:
                     continue
                 elif bb_rsi == "BUY":
@@ -219,7 +79,7 @@ class Tarama:
                 high = binance.data(coin, 1000, periyot, 2)
 
                 #   TSO Stratejisi
-                tso = Tarama.TSO(high,low, close)
+                tso = Stratejiler.TSO(high,low, close)
                 if tso == None or tso == False:
                     continue
                 elif tso == "BUY":
@@ -228,7 +88,7 @@ class Tarama:
                     resault_1h["TSO"]["SELL"].append(coin)
 
                 #   BB(RSI) Stratejisi
-                bb_rsi = Tarama.BB_RSI(close)
+                bb_rsi = Stratejiler.BB_RSI(close)
                 if bb_rsi == None or bb_rsi == False:
                     continue
                 elif bb_rsi == "BUY":
@@ -237,7 +97,7 @@ class Tarama:
                     resault_1h["BB(RSI)"]["SELL"].append(coin)
 
                 #   FDI Stratejisi
-                fdi = Tarama.FDI(close)
+                fdi = Stratejiler.FDI(close)
                 if fdi == None or fdi == False:
                     continue
                 elif fdi == "BUY":
@@ -246,7 +106,7 @@ class Tarama:
                     resault_1h["FDI"]["SELL"].append(coin)
 
                 #   MACD Stratejisi
-                macd = Tarama.MACD(close)
+                macd = Stratejiler.MACD(close)
                 if macd == None or macd == False:
                     continue
                 elif macd == "BUY":
@@ -255,7 +115,7 @@ class Tarama:
                     resault_1h["MACD"]["SELL"].append(coin)
 
                 #   MA_Cross Stratejisi
-                ma_cross = Tarama.MA_Cross(high,low,close)
+                ma_cross = Stratejiler.MA_Cross(high,low,close)
                 if ma_cross == None or ma_cross == False:
                     continue
                 elif ma_cross == "BUY":
@@ -270,7 +130,7 @@ class Tarama:
                 high = binance.data(coin, 1000, periyot, 2)
 
                 #   DMO Stratejisi
-                dmo = Tarama.DMO(high,low,close)
+                dmo = Stratejiler.DMO(high,low,close)
                 if dmo == None or dmo == False:
                     continue
                 elif dmo == "BUY":
@@ -279,7 +139,7 @@ class Tarama:
                     resault_4h["DMO"]["SELL"].append(coin)
 
                 #   VMZI Stratejisi
-                vmzi = Tarama.VMZI(high, low, close)
+                vmzi = Stratejiler.VMZI(high, low, close)
                 if vmzi == None or vmzi == False:
                     continue
                 elif vmzi == "BUY":
@@ -288,7 +148,7 @@ class Tarama:
                     resault_4h["VMZI"]["SELL"].append(coin)
 
                 #   VAMA Stratejisi
-                vama = Tarama.VAMA(close)
+                vama = Stratejiler.VAMA(close)
                 if vama == None or vama == False:
                     continue
                 elif vama == "BUY":
@@ -297,7 +157,7 @@ class Tarama:
                     resault_4h["VAMA"]["SELL"].append(coin)
 
                 #   MA Cross Stratejisi
-                ma_cross = Tarama.MA_Cross(high,low,close)
+                ma_cross = Stratejiler.MA_Cross(high,low,close)
                 if ma_cross == None or ma_cross == False:
                     continue
                 elif ma_cross == "BUY":
@@ -312,7 +172,7 @@ class Tarama:
                 high = binance.data(coin, 1000, periyot, 2)
 
                 #   MACD Stratejisi
-                macd=Tarama.MACD(close)
+                macd=Stratejiler.MACD(close)
                 if macd == None or macd == False:
                     continue
                 elif macd == "BUY":
@@ -321,7 +181,7 @@ class Tarama:
                     resault_1d["MACD"]["SELL"].append(coin)
 
                 #   DMO Stratejisi
-                dmo = Tarama.DMO(high,low,close)
+                dmo = Stratejiler.DMO(high,low,close)
                 if dmo == None or dmo == False:
                     continue
                 elif dmo == "BUY":
@@ -330,7 +190,7 @@ class Tarama:
                     resault_1d["DMO"]["SELL"].append(coin)
 
                 #   VMZI Stratejisi
-                vmzi = Tarama.VMZI(high, low, close)
+                vmzi = Stratejiler.VMZI(high, low, close)
                 if vmzi == None or vmzi == False:
                     continue
                 elif vmzi == "BUY":
@@ -339,7 +199,7 @@ class Tarama:
                     resault_1d["VMZI"]["SELL"].append(coin)
 
                 #   VAMA Stratejisi
-                vama = Tarama.VAMA(close)
+                vama = Stratejiler.VAMA(close)
                 if vama == None or vama == False:
                     continue
                 elif vama == "BUY":
@@ -348,7 +208,7 @@ class Tarama:
                     resault_1d["VAMA"]["SELL"].append(coin)
 
                 #   MA Cross Stratejisi
-                ma_cross = Tarama.MA_Cross(high,low,close)
+                ma_cross = Stratejiler.MA_Cross(high,low,close)
                 if ma_cross == None or ma_cross == False:
                     continue
                 elif ma_cross == "BUY":
@@ -357,7 +217,7 @@ class Tarama:
                     resault_1d["MA_Cross"]["SELL"].append(coin)
 
                 #   FDI Stratejisi
-                fdi = Tarama.FDI(close)
+                fdi = Stratejiler.FDI(close)
                 if fdi == None or fdi == False:
                     continue
                 elif fdi == "BUY":
