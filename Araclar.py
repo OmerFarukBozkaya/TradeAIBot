@@ -178,3 +178,14 @@ class Araclar:
         final_table.to_excel(output_file, index=False)
 
         print(f"Sonuçlar {output_file} dosyasına başarıyla kaydedildi.")
+
+    @staticmethod
+    def listeden_sahip_olduklarimi_cikar(list):
+        # Eğer alım yapacaksam sahip olunan coinleri liste dışı bırak
+        binance = Binance()
+        for sil in binance.sahip_olduklarim().keys():
+            try:
+                list.remove(sil[0])
+            except:
+                continue
+        return list
