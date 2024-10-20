@@ -45,14 +45,12 @@ class Backtest:
         pmai_sma = IndikatorTest.SMA(pmai_values, 14)
         rsi_values = IndikatorTest.RSI(close)
         adx = IndikatorTest.ADX(high, low, close)
-        atr = IndikatorTest.ATR(high, low, close)
-        atr_14 = IndikatorTest.SMA(atr,14)
+        ema_200 = IndikatorTest.EMA(close,200)
         macd = IndikatorTest.MACD(close)
         macd_values = macd[0]
         macd_signal = macd[1]
         bb_rsi = IndikatorTest.BB(rsi_values)
         bb_rsi_down = bb_rsi[0]
-        bb_rsi_mid = bb_rsi[1]
         bb_rsi_up = bb_rsi[2]
         bb=IndikatorTest.BB(close)
         bb_down = bb[0]
@@ -63,7 +61,6 @@ class Backtest:
         ma_9 = IndikatorTest.SMA(close, 9)
         ma_50 = IndikatorTest.SMA(close, 50)
         fib = IndikatorTest.FIB(close)
-        cmi=IndikatorTest.CMI(close,high,low)
         dmo=IndikatorTest.DMO(close)
         vmzi=IndikatorTest.VMZI(close)
         fdi = IndikatorTest.FDI(close)
@@ -217,9 +214,20 @@ class Backtest:
                 "buy_condition": lambda i: bb_down[i] is not None and adx[i] is not None and
 
                                            (close[i] < bb_down[i] and adx[i] > 25),
-                "sell_condition": lambda i: bb_down[i] is not None and adx[i] is not None and
+                "sell_condition": lambda i: bb_up[i] is not None and adx[i] is not None and
 
                                             (close[i] > bb_up[i] and adx[i] < 20),
+            },
+            {
+                "name": "MACD EMA",
+                "buy_condition": lambda i: macd_values[i-1] is not None and macd_values[i] is not None and
+                                            macd_signal[i-1] is not None and macd_signal[i] is not None and ema_200[i] is not None and
+
+                                           (macd_values[i] > macd_signal[i] and macd_values[i-1] < macd_signal[i-1] and close[i] > ema_200[i]),
+                "sell_condition": lambda i: macd_values[i-1] is not None and macd_values[i] is not None and
+                                            macd_signal[i-1] is not None and macd_signal[i] is not None and
+
+                                            (macd_values[i] < macd_signal[i] and macd_values[i-1] > macd_signal[i-1]),
             }
 
         ]
