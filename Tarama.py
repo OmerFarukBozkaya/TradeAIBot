@@ -22,11 +22,13 @@ class Tarama:
         resault_4h = indikator_sablonu
         resault_1d = indikator_sablonu
         for coin in coinlist:
+            #   Veri ithali
+            close = binance.data(coin, 1000, periyot, 4)
+            low = binance.data(coin, 1000, periyot, 3)
+            high = binance.data(coin, 1000, periyot, 2)
+            #   Hesaplamalar
             if periyot == "15m":
                 #   BB(close),BB(RSI),BB_ADX
-                close = binance.data(coin, 1000, periyot, 4)
-                low = binance.data(coin, 1000, periyot, 3)
-                high = binance.data(coin, 1000, periyot, 2)
 
                 #   BB(close) Stratejisi
                 bb_close = Stratejiler.BB_Close(close)
@@ -54,12 +56,8 @@ class Tarama:
                     resault_15m["BB_ADX"]["BUY"].append(coin)
                 elif bb_adx == "SELL":
                     resault_15m["BB_ADX"]["SELL"].append(coin)
-
             elif periyot == "1h":
                 #   BB_ADX,TSO,BB(RSI),FDI,MACD,MA Cross
-                close = binance.data(coin, 1000, periyot, 4)
-                low = binance.data(coin, 1000, periyot, 3)
-                high = binance.data(coin, 1000, periyot, 2)
 
                 #   BB_ADX Stratejisi
                 bb_adx = Stratejiler.BB_ADX(high, low, close)
@@ -114,12 +112,8 @@ class Tarama:
                     resault_1h["MA_Cross"]["BUY"].append(coin)
                 elif ma_cross == "SELL":
                     resault_1h["MA_Cross"]["SELL"].append(coin)
-
             elif periyot == "4h":
                 #   DMO,VMZI,VAMA,Ma Cross
-                close = binance.data(coin, 1000, periyot, 4)
-                low = binance.data(coin, 1000, periyot, 3)
-                high = binance.data(coin, 1000, periyot, 2)
 
                 #   DMO Stratejisi
                 dmo = Stratejiler.DMO(high,low,close)
@@ -156,12 +150,8 @@ class Tarama:
                     resault_4h["MA_Cross"]["BUY"].append(coin)
                 elif ma_cross == "SELL":
                     resault_4h["MA_Cross"]["SELL"].append(coin)
-
             elif periyot == "1d":
                 #   MACD,DMO,VMZI,VAMA,Ma Cross,FDI
-                close = binance.data(coin, 1000, periyot, 4)
-                low = binance.data(coin, 1000, periyot, 3)
-                high = binance.data(coin, 1000, periyot, 2)
 
                 #   MACD Stratejisi
                 macd=Stratejiler.MACD(close)
@@ -217,6 +207,7 @@ class Tarama:
                 elif fdi == "SELL":
                     resault_1d["FDI"]["SELL"].append(coin)
 
+        #   Mail gönderme
         if periyot == "15m":
             #   BB_ADX,BB(close),BB(RSI)
             mesaj=""
