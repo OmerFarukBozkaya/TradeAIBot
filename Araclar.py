@@ -56,13 +56,16 @@ class Araclar:
             time.sleep(bekle)
             self.mail_gonder(baslik, mesaj, bekle, smtp_server, smtp_port)  # Recursive olarak tekrar dene
 
-    def saniye_to_hms(self,seconds):
+    @staticmethod
+    def saniye_to_hms(seconds):
         hours = seconds // 3600
         minutes = (seconds % 3600) // 60
         seconds = seconds % 60
-        return hours, minutes, seconds
+        # Saat, dakika ve saniyeleri sıfır ile doldurup 2 basamaklı hale getir
+        return f"{int(hours):02}:{int(minutes):02}:{int(seconds):02}"
 
-    def piyasa_acik_mi(self):
+    @staticmethod
+    def piyasa_acik_mi():
         # Şu anki tarihi ve saati al
         simdi = datetime.now()
 
@@ -88,7 +91,8 @@ class Araclar:
         else:
             return False
 
-    def veri_seti_olustur(self):
+    @staticmethod
+    def veri_seti_olustur():
         bn = Binance()
         indikator = Indikator()
         close = bn.data("BTCUSDT", 1000, "4h", 4)
@@ -149,8 +153,7 @@ class Araclar:
 
         # (Karlı işlemler / Zararlı işlemler) oranını hesapla ve başarılı stratejilere '*' ekle
         grouped['is_successful'] = (grouped['toplam_karli_islem'] / grouped['toplam_zararli_islem']) > 1
-        grouped['strategy_summary'] = grouped['strategy name'] + " " + grouped['karlilik_ortalamasi'].round(2).astype(
-            str)
+        grouped['strategy_summary'] = grouped['strategy name']
         grouped.loc[grouped['is_successful'], 'strategy_summary'] = '*' + grouped['strategy_summary']
 
         # Her periyot için ayrı pivot tablolar oluştur ve sıralama işlemi yap
@@ -159,17 +162,19 @@ class Araclar:
             period_group = grouped[grouped['periyot'] == period]
             period_group_sorted = period_group.sort_values('karlilik_ortalamasi', ascending=False)
 
-            # Sadece strategy_summary ve karlilik_ortalamasi'ni al
-            period_summary = period_group_sorted[['strategy_summary', 'karlilik_ortalamasi']]
-            period_summary.columns = [period + ' Strategy Summary',
-                                      period + ' Karlilik Ortalaması']  # Sütun adlarını değiştir
+            # Sadece strategy_summary, karlilik_ortalamasi, toplam karlı ve toplam zararlı işlemleri al
+            period_summary = period_group_sorted[['strategy_summary', 'karlilik_ortalamasi',
+                                                  'toplam_karli_islem', 'toplam_zararli_islem']]
+            period_summary.index = range(len(period_summary))  # Satırları sıfırdan numaralandır
+            period_summary.columns = [f'{period} Strategy', f'{period} Karlilik Ortalaması',
+                                      f'{period} Karlı İşlemler',
+                                      f'{period} Zararlı İşlemler']  # Sütun adlarını değiştir
             pivot_tables.append(period_summary)
 
-        # Tüm pivot tabloları birleştir
-        final_table = pd.concat(pivot_tables, axis=1)
+        # Tüm pivot tabloları birleştir (eksik değerleri doldurmayacak şekilde)
+        final_table = pd.concat(pivot_tables, axis=1, ignore_index=False)
 
         # Sonucu bir Excel dosyasına yaz
-
         final_table.to_excel(output_file, index=False)
 
         print(f"Sonuçlar {output_file} dosyasına başarıyla kaydedildi.")
