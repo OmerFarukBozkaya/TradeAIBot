@@ -47,8 +47,6 @@ class Araclar:
             # E-posta gönderme
             server.sendmail(self.from_email, self.to_email, message.as_string())
             server.quit()
-            print("E-posta başarıyla gönderildi.")
-
         except Exception as e:
             # Hata durumunda e-posta gönderimi tekrar denenir
             hata = traceback.format_exc()
