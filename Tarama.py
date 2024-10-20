@@ -6,7 +6,7 @@ class Tarama:
     def Tara(coinlist,periyot):
         binance = Binance()
         araclar = Araclar()
-        resault_15m={"BB(close)":{'BUY':[],'SELL':[]},
+        indikator_sablonu={"BB(close)":{'BUY':[],'SELL':[]},
                  "TSO":{'BUY':[],'SELL':[]},
                  "BB(RSI)":{'BUY':[],'SELL':[]},
                  "FDI":{'BUY':[],'SELL':[]},
@@ -15,41 +15,15 @@ class Tarama:
                  "VAMA":{'BUY':[],'SELL':[]},
                  "MA_Cross": {'BUY': [], 'SELL': []},
                  "DMO": {'BUY': [], 'SELL': []},
+                 "BB_ADX":{'BUY': [], 'SELL': []}
         }
-        resault_1h = {"BB(close)":{'BUY':[],'SELL':[]},
-                 "TSO":{'BUY':[],'SELL':[]},
-                 "BB(RSI)":{'BUY':[],'SELL':[]},
-                 "FDI":{'BUY':[],'SELL':[]},
-                 "VMZI":{'BUY':[],'SELL':[]},
-                 "MACD":{'BUY':[],'SELL':[]},
-                 "VAMA":{'BUY':[],'SELL':[]},
-                 "MA_Cross": {'BUY': [], 'SELL': []},
-                 "DMO": {'BUY': [], 'SELL': []},
-        }
-        resault_4h = {"BB(close)":{'BUY':[],'SELL':[]},
-                 "TSO":{'BUY':[],'SELL':[]},
-                 "BB(RSI)":{'BUY':[],'SELL':[]},
-                 "FDI":{'BUY':[],'SELL':[]},
-                 "VMZI":{'BUY':[],'SELL':[]},
-                 "MACD":{'BUY':[],'SELL':[]},
-                 "VAMA":{'BUY':[],'SELL':[]},
-                 "MA_Cross": {'BUY': [], 'SELL': []},
-                 "DMO": {'BUY': [], 'SELL': []},
-        }
-        resault_1d = {"BB(close)":{'BUY':[],'SELL':[]},
-                 "TSO":{'BUY':[],'SELL':[]},
-                 "BB(RSI)":{'BUY':[],'SELL':[]},
-                 "FDI":{'BUY':[],'SELL':[]},
-                 "VMZI":{'BUY':[],'SELL':[]},
-                 "MACD":{'BUY':[],'SELL':[]},
-                 "VAMA":{'BUY':[],'SELL':[]},
-                 "MA_Cross": {'BUY': [], 'SELL': []},
-                 "DMO": {'BUY': [], 'SELL': []},
-        }
-
+        resault_15m = indikator_sablonu
+        resault_1h = indikator_sablonu
+        resault_4h = indikator_sablonu
+        resault_1d = indikator_sablonu
         for coin in coinlist:
             if periyot == "15m":
-                #   BB(close),BB(RSI)
+                #   BB(close),BB(RSI),BB_ADX
                 close = binance.data(coin, 1000, periyot, 4)
                 low = binance.data(coin, 1000, periyot, 3)
                 high = binance.data(coin, 1000, periyot, 2)
@@ -72,11 +46,29 @@ class Tarama:
                 elif bb_rsi == "SELL":
                     resault_15m["BB(RSI)"]["SELL"].append(coin)
 
+                #   BB_ADX Stratejisi
+                bb_adx = Stratejiler.BB_ADX(high, low, close)
+                if bb_adx == None or bb_adx == False:
+                    continue
+                elif bb_adx == "BUY":
+                    resault_15m["BB_ADX"]["BUY"].append(coin)
+                elif bb_adx == "SELL":
+                    resault_15m["BB_ADX"]["SELL"].append(coin)
+
             elif periyot == "1h":
-                #   TSO,BB(RSI),FDI,MACD,MA Cross
+                #   BB_ADX,TSO,BB(RSI),FDI,MACD,MA Cross
                 close = binance.data(coin, 1000, periyot, 4)
                 low = binance.data(coin, 1000, periyot, 3)
                 high = binance.data(coin, 1000, periyot, 2)
+
+                #   BB_ADX Stratejisi
+                bb_adx = Stratejiler.BB_ADX(high, low, close)
+                if bb_adx == None or bb_adx == False:
+                    continue
+                elif bb_adx == "BUY":
+                    resault_1h["BB_ADX"]["BUY"].append(coin)
+                elif bb_adx == "SELL":
+                    resault_1h["BB_ADX"]["SELL"].append(coin)
 
                 #   TSO Stratejisi
                 tso = Stratejiler.TSO(high,low, close)
@@ -226,9 +218,18 @@ class Tarama:
                     resault_1d["FDI"]["SELL"].append(coin)
 
         if periyot == "15m":
-            #   BB(close),BB(RSI)
+            #   BB_ADX,BB(close),BB(RSI)
             mesaj=""
             gonder = False
+            if len(resault_15m['BB_ADX']['BUY'])>0 or len(resault_15m['BB_ADX']['SELL']) >0:
+                gonder=True
+                mesaj = (mesaj +
+                         (f"BB_ADX\n"
+                         f"BUY:\n"
+                         f"{resault_15m['BB_ADX']['BUY']}\n"
+                         f"SELL:\n"
+                         f"{resault_15m['BB_ADX']['SELL']}\n\n"
+                         ))
             if len(resault_15m['BB(close)']['BUY'])>0 or len(resault_15m['BB(close)']['SELL']) >0:
                 gonder=True
                 mesaj = (mesaj +
@@ -236,7 +237,7 @@ class Tarama:
                          f"BUY:\n"
                          f"{resault_15m['BB(close)']['BUY']}\n"
                          f"SELL:\n"
-                         f"{resault_15m['BB(close)']['SELL']}\n"
+                         f"{resault_15m['BB(close)']['SELL']}\n\n"
                          ))
             if len(resault_15m['BB(RSI)']['BUY'])>0 or len(resault_15m['BB(RSI)']['SELL']) >0:
                 gonder=True
@@ -245,14 +246,23 @@ class Tarama:
                          f"BUY:\n"
                          f"{resault_15m['BB(RSI)']['BUY']}\n"
                          f"SELL:\n"
-                         f"{resault_15m['BB(RSI)']['SELL']}\n"
+                         f"{resault_15m['BB(RSI)']['SELL']}\n\n"
                          ))
             if gonder:
                 araclar.mail_gonder(f"Tarama |{periyot}",mesaj)
         elif periyot == "1h":
-            #   TSO,BB(RSI),FDI,MACD,MA Cross
+            #   BB_ADX,TSO,BB(RSI),FDI,MACD,MA Cross
             mesaj = ""
             gonder = False
+            if len(resault_1h['BB_ADX']['BUY']) > 0 or len(resault_1h['BB_ADX']['SELL']) > 0:
+                gonder = True
+                mesaj = (mesaj +
+                         (f"BB_ADX\n"
+                          f"BUY:\n"
+                          f"{resault_1h['BB_ADX']['BUY']}\n"
+                          f"SELL:\n"
+                          f"{resault_1h['BB_ADX']['SELL']}\n\n"
+                          ))
             if len(resault_1h['TSO']['BUY']) > 0 or len(resault_1h['TSO']['SELL']) > 0:
                 gonder = True
                 mesaj = (mesaj +
@@ -260,7 +270,7 @@ class Tarama:
                           f"BUY:\n"
                           f"{resault_1h['TSO']['BUY']}\n"
                           f"SELL:\n"
-                          f"{resault_1h['TSO']['SELL']}\n"
+                          f"{resault_1h['TSO']['SELL']}\n\n"
                           ))
             if len(resault_1h['BB(RSI)']['BUY']) > 0 or len(resault_1h['BB(RSI)']['SELL']) > 0:
                 gonder = True
@@ -269,7 +279,7 @@ class Tarama:
                           f"BUY:\n"
                           f"{resault_1h['BB(RSI)']['BUY']}\n"
                           f"SELL:\n"
-                          f"{resault_1h['BB(RSI)']['SELL']}\n"
+                          f"{resault_1h['BB(RSI)']['SELL']}\n\n"
                           ))
             if len(resault_1h['FDI']['BUY']) > 0 or len(resault_1h['FDI']['SELL']) > 0:
                 gonder = True
@@ -278,7 +288,7 @@ class Tarama:
                           f"BUY:\n"
                           f"{resault_1h['FDI']['BUY']}\n"
                           f"SELL:\n"
-                          f"{resault_1h['FDI']['SELL']}\n"
+                          f"{resault_1h['FDI']['SELL']}\n\n"
                           ))
             if len(resault_1h['MACD']['BUY']) > 0 or len(resault_1h['MACD']['SELL']) > 0:
                 gonder = True
@@ -287,7 +297,7 @@ class Tarama:
                           f"BUY:\n"
                           f"{resault_1h['MACD']['BUY']}\n"
                           f"SELL:\n"
-                          f"{resault_1h['MACD']['SELL']}\n"
+                          f"{resault_1h['MACD']['SELL']}\n\n"
                           ))
             if len(resault_1h['MA_Cross']['BUY']) > 0 or len(resault_1h['MA_Cross']['SELL']) > 0:
                 gonder = True
@@ -296,7 +306,7 @@ class Tarama:
                           f"BUY:\n"
                           f"{resault_1h['MA_Cross']['BUY']}\n"
                           f"SELL:\n"
-                          f"{resault_1h['MA_Cross']['SELL']}\n"
+                          f"{resault_1h['MA_Cross']['SELL']}\n\n"
                           ))
             if gonder:
                 araclar.mail_gonder(f"Tarama |{periyot}", mesaj)
@@ -311,7 +321,7 @@ class Tarama:
                           f"BUY:\n"
                           f"{resault_4h['DMO']['BUY']}\n"
                           f"SELL:\n"
-                          f"{resault_4h['DMO']['SELL']}\n"
+                          f"{resault_4h['DMO']['SELL']}\n\n"
                           ))
             if len(resault_4h['VMZI']['BUY']) > 0 or len(resault_4h['VMZI']['SELL']) > 0:
                 gonder = True
@@ -320,7 +330,7 @@ class Tarama:
                           f"BUY:\n"
                           f"{resault_4h['VMZI']['BUY']}\n"
                           f"SELL:\n"
-                          f"{resault_4h['VMZI']['SELL']}\n"
+                          f"{resault_4h['VMZI']['SELL']}\n\n"
                           ))
             if len(resault_4h['VAMA']['BUY']) > 0 or len(resault_4h['VAMA']['SELL']) > 0:
                 gonder = True
@@ -329,7 +339,7 @@ class Tarama:
                           f"BUY:\n"
                           f"{resault_4h['VAMA']['BUY']}\n"
                           f"SELL:\n"
-                          f"{resault_4h['VAMA']['SELL']}\n"
+                          f"{resault_4h['VAMA']['SELL']}\n\n"
                           ))
             if len(resault_4h['MA_Cross']['BUY']) > 0 or len(resault_4h['MA_Cross']['SELL']) > 0:
                 gonder = True
@@ -338,7 +348,7 @@ class Tarama:
                           f"BUY:\n"
                           f"{resault_4h['MA_Cross']['BUY']}\n"
                           f"SELL:\n"
-                          f"{resault_4h['MA_Cross']['SELL']}\n"
+                          f"{resault_4h['MA_Cross']['SELL']}\n\n"
                           ))
             if gonder:
                 araclar.mail_gonder(f"Tarama |{periyot}", mesaj)
@@ -353,7 +363,7 @@ class Tarama:
                           f"BUY:\n"
                           f"{resault_1d['MACD']['BUY']}\n"
                           f"SELL:\n"
-                          f"{resault_1d['MACD']['SELL']}\n"
+                          f"{resault_1d['MACD']['SELL']}\n\n"
                           ))
             if len(resault_1d['DMO']['BUY']) > 0 or len(resault_1d['DMO']['SELL']) > 0:
                 gonder = True
@@ -362,7 +372,7 @@ class Tarama:
                           f"BUY:\n"
                           f"{resault_1d['DMO']['BUY']}\n"
                           f"SELL:\n"
-                          f"{resault_1d['DMO']['SELL']}\n"
+                          f"{resault_1d['DMO']['SELL']}\n\n"
                           ))
             if len(resault_1d['VMZI']['BUY']) > 0 or len(resault_1d['VMZI']['SELL']) > 0:
                 gonder = True
@@ -371,7 +381,7 @@ class Tarama:
                           f"BUY:\n"
                           f"{resault_1d['VMZI']['BUY']}\n"
                           f"SELL:\n"
-                          f"{resault_1d['VMZI']['SELL']}\n"
+                          f"{resault_1d['VMZI']['SELL']}\n\n"
                           ))
             if len(resault_1d['VAMA']['BUY']) > 0 or len(resault_1d['VAMA']['SELL']) > 0:
                 gonder = True
@@ -380,7 +390,7 @@ class Tarama:
                           f"BUY:\n"
                           f"{resault_1d['VAMA']['BUY']}\n"
                           f"SELL:\n"
-                          f"{resault_1d['VAMA']['SELL']}\n"
+                          f"{resault_1d['VAMA']['SELL']}\n\n"
                           ))
             if len(resault_1d['MA_Cross']['BUY']) > 0 or len(resault_1d['MA_Cross']['SELL']) > 0:
                 gonder = True
@@ -389,7 +399,7 @@ class Tarama:
                           f"BUY:\n"
                           f"{resault_1d['MA_Cross']['BUY']}\n"
                           f"SELL:\n"
-                          f"{resault_1d['MA_Cross']['SELL']}\n"
+                          f"{resault_1d['MA_Cross']['SELL']}\n\n"
                           ))
             if len(resault_1d['FDI']['BUY']) > 0 or len(resault_1d['FDI']['SELL']) > 0:
                 gonder = True
@@ -398,7 +408,7 @@ class Tarama:
                           f"BUY:\n"
                           f"{resault_1d['FDI']['BUY']}\n"
                           f"SELL:\n"
-                          f"{resault_1d['FDI']['SELL']}\n"
+                          f"{resault_1d['FDI']['SELL']}\n\n"
                           ))
             if gonder:
                 araclar.mail_gonder(f"Tarama |{periyot}", mesaj)
