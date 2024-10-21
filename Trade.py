@@ -144,59 +144,59 @@ class Trade:
                     if periyot == "15m":
                         if Stratejiler.BB_Close(close) == "BUY":
                             strategy = Stratejiler.BB_Close(close)
-                            sonislem,adet = self.buy(coin, periyot, strategy.__name__, gercek, nakit, close)
+                            sonislem,adet = self.buy(coin, periyot, str(strategy.__name__), gercek, nakit, close)
                             coinlist = [coin]
                             break
                         if Stratejiler.BB_RSI(close) == "BUY":
                             strategy = Stratejiler.BB_RSI(close)
-                            sonislem,adet = self.buy(coin, periyot, strategy.__name__, gercek, nakit, close)
+                            sonislem,adet = self.buy(coin, periyot, str(strategy.__name__), gercek, nakit, close)
                             coinlist = [coin]
                             break
                         if Stratejiler.BB_ADX(high,low,close) == "BUY":
                             strategy = Stratejiler.BB_ADX(high,low,close)
-                            sonislem, adet = self.buy(coin, periyot, strategy.__name__, gercek, nakit, close)
+                            sonislem, adet = self.buy(coin, periyot, str(strategy.__name__), gercek, nakit, close)
                             coinlist = [coin]
                             break
                         if Stratejiler.MA_Cross(high,low,close) == "BUY":
                             strategy = Stratejiler.MA_Cross(high,low,close)
-                            sonislem, adet = self.buy(coin, periyot, strategy.__name__, gercek, nakit, close)
+                            sonislem, adet = self.buy(coin, periyot, str(strategy.__name__), gercek, nakit, close)
                             coinlist = [coin]
                             break
                         if Stratejiler.TSO(high,low,close) == "BUY":
                             strategy = Stratejiler.TSO(high,low,close)
-                            sonislem, adet = self.buy(coin, periyot, strategy.__name__, gercek, nakit, close)
+                            sonislem, adet = self.buy(coin, periyot, str(strategy.__name__), gercek, nakit, close)
                             coinlist = [coin]
                             break
                         if Stratejiler.VMZI(high,low,close) == "BUY":
                             strategy = Stratejiler.VMZI(high,low,close)
-                            sonislem, adet = self.buy(coin, periyot, strategy.__name__, gercek, nakit, close)
+                            sonislem, adet = self.buy(coin, periyot, str(strategy.__name__), gercek, nakit, close)
                             coinlist = [coin]
                             break
                         if Stratejiler.FDI(close) == "BUY":
                             strategy = Stratejiler.FDI(close)
-                            sonislem, adet = self.buy(coin, periyot, strategy.__name__, gercek, nakit, close)
+                            sonislem, adet = self.buy(coin, periyot, str(strategy.__name__), gercek, nakit, close)
                             coinlist = [coin]
                             break
                         if Stratejiler.DMO(high,low,close) == "BUY":
                             strategy = Stratejiler.DMO(high,low,close)
-                            sonislem, adet = self.buy(coin, periyot, strategy.__name__, gercek, nakit, close)
+                            sonislem, adet = self.buy(coin, periyot, str(strategy.__name__), gercek, nakit, close)
                             coinlist = [coin]
                             break
                         if Stratejiler.VAMA(close) == "BUY":
                             strategy = Stratejiler.VAMA(close)
-                            sonislem, adet = self.buy(coin, periyot, strategy.__name__, gercek, nakit, close)
+                            sonislem, adet = self.buy(coin, periyot, str(strategy.__name__), gercek, nakit, close)
                             coinlist = [coin]
                             break
                         if Stratejiler.MACD(close) == "BUY":
                             strategy = Stratejiler.MACD(close)
-                            sonislem, adet = self.buy(coin, periyot, strategy.__name__, gercek, nakit, close)
+                            sonislem, adet = self.buy(coin, periyot, str(strategy.__name__), gercek, nakit, close)
                             coinlist = [coin]
                             break
                     elif periyot == "1h":
                         if Stratejiler.TSO(high,low,close) == "BUY":
-                            sonislem,adet = self.buy(coin, periyot, "TSO", gercek, nakit, close)
                             strategy = Stratejiler.TSO(high,low,close)
-                            coinlist=[coin]
+                            sonislem, adet = self.buy(coin, periyot, str(strategy.__name__), gercek, nakit, close)
+                            coinlist = [coin]
                             break
                     elif periyot == "4h":
                         print(periyot)
