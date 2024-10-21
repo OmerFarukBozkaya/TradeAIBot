@@ -1,7 +1,7 @@
 from Indikator import Indikator
 class Stratejiler:
     @staticmethod
-    def MACD(close):
+    def MACD(high,low,close):
         macd = Indikator.MACD(close)
         macd_values = macd[0]
         macd_signal = macd[1]
@@ -32,7 +32,7 @@ class Stratejiler:
             return None
 
     @staticmethod
-    def VAMA(close):
+    def VAMA(high,low,close):
         vama = Indikator.VAMA(close)
         if vama[-1] is not None:
             if vama[-1] * 1.02 < close[-1]:
@@ -58,7 +58,7 @@ class Stratejiler:
             return None
 
     @staticmethod
-    def BB_RSI(close):
+    def BB_RSI(high,low,close):
         rsi = Indikator.RSI(close)
         bb_rsi = Indikator.BB(rsi)
         bb_rsi_down = bb_rsi[0]
@@ -74,7 +74,7 @@ class Stratejiler:
             return None
 
     @staticmethod
-    def FDI(close):
+    def FDI(high,low,close):
         fdi = Indikator.FDI(close)
         rsi = Indikator.RSI(close)
         macd = Indikator.MACD(close)
@@ -91,7 +91,7 @@ class Stratejiler:
             return None
 
     @staticmethod
-    def BB_Close(close):
+    def BB_Close(high,low,close):
         bb = Indikator.BB(close)
         bb_down = bb[0]
         bb_mid = bb[1]
