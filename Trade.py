@@ -204,7 +204,7 @@ class Trade:
                         print(periyot)
 
                 elif sonislem == "AL":
-                    print("satmaya çalışıyorum")
+                    print(f"{str(strategy.__name__)} ile satmaya çalışıyorum")
                     print(coin)
                     if strategy == "SELL":
                         sonislem = self.sell(coin,adet,periyot,close,strategy.__name__,gercek)
