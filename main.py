@@ -38,4 +38,5 @@ elif com == "4":
         araclar.mum_olusmasini_bekle(periyot)
         Tarama.Tara(binance.secili_list(),periyot)
 elif com == "5":
-    trade.TradeEt(binance.secili_list(),"1h","SAT",False,100)
+    periyot = input("Periyot (15m,1h,4h,1d):")
+    trade.TradeEt(binance.secili_list(),periyot,"SAT",False,100)
