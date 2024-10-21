@@ -29,7 +29,7 @@ for i in "${!TRADE_PERIODS[@]}"; do
     tmux new-window -t $SESSION_NAME -n "Trade_$period" "python3 $SCRIPT_PATH << EOF
 5
 $period
-True
+False
 1000
 SAT
 EOF
