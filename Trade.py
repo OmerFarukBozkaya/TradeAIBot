@@ -129,8 +129,7 @@ class Trade:
                 araclar.mail_gonder(f"HATA | {strateji_adi} {periyot}", hata)
                 self.iskelet(coinlist, periyot, gercek, sonislem, nakit,stop_lose_var,stop_takip,mumbekle,alis)     # [8]
 
-    def TradeEt(self,coinlist,periyot,sonislem,gercek,nakit):
-        strategy=None
+    def TradeEt(self,coinlist,periyot,sonislem,gercek,nakit,strategy):
         adet=None
         temp=coinlist
         while True:
@@ -152,11 +151,13 @@ class Trade:
                             sonislem,adet = self.buy(coin, periyot, str(strategy.__name__), gercek, nakit, close)
                             coinlist = [coin]
                             break
+                        """     TEST AMAÇLI KAPATTIM
                         if Stratejiler.BB_ADX(high,low,close) == "BUY":
                             strategy = Stratejiler.BB_ADX
                             sonislem, adet = self.buy(coin, periyot, str(strategy.__name__), gercek, nakit, close)
                             coinlist = [coin]
                             break
+                        """
                         if Stratejiler.MA_Cross(high,low,close) == "BUY":
                             strategy = Stratejiler.MA_Cross
                             sonislem, adet = self.buy(coin, periyot, str(strategy.__name__), gercek, nakit, close)
@@ -202,14 +203,13 @@ class Trade:
                         print(periyot)
                     elif periyot == "1d":
                         print(periyot)
-
                 elif sonislem == "AL":
                     print(f"{str(strategy.__name__)} ile satmaya çalışıyorum")
                     print(coin)
                     if strategy(high,low,close) == "SELL":
                         sonislem = self.sell(coin,adet,periyot,close,str(strategy.__name__),gercek)
                         coinlist=temp
-
+            time.sleep(10)
 
     def buy(self,coin,periyot,strateji_adi,gercek,nakit,close):
         adet = round((nakit / close[-1]), self.binance.minimum_hareket(
