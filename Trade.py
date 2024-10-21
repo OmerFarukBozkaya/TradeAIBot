@@ -129,7 +129,7 @@ class Trade:
                 araclar.mail_gonder(f"HATA | {strateji_adi} {periyot}", hata)
                 self.iskelet(coinlist, periyot, gercek, sonislem, nakit,stop_lose_var,stop_takip,mumbekle,alis)     # [8]
 
-    def TradeEt(self,coinlist,periyot,sonislem,gercek,nakit,strategy):
+    def TradeEt(self,coinlist,periyot,sonislem,gercek,nakit,strategy=None):
         adet=None
         temp=coinlist
         while True:
