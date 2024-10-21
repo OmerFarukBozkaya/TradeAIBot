@@ -14,6 +14,9 @@ class Araclar:
             self.from_email = from_email  # Nesnenin from_email değeri
             self.to_email = to_email  # Nesnenin to_email değeri
             self.email_password = email_password  # Nesnenin şifresi
+        elif(to_email is not None):
+            self.to_email = to_email
+            self.from_email,self.email_password,self.default_to_email = self.load_settings()
         else:
             self.from_email,self.email_password, self.to_email= self.load_settings()
 
