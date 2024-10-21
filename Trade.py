@@ -21,6 +21,7 @@ handler.setLevel(logging.INFO)
 formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
 handler.setFormatter(formatter)
 islemgecmisi.addHandler(handler)
+islemgecmisi.propagate = False
 
 class Trade:
     def __init__(self):
@@ -129,87 +130,49 @@ class Trade:
                 araclar.mail_gonder(f"HATA | {strateji_adi} {periyot}", hata)
                 self.iskelet(coinlist, periyot, gercek, sonislem, nakit,stop_lose_var,stop_takip,mumbekle,alis)     # [8]
 
-    def TradeEt(self,coinlist,periyot,sonislem,gercek,nakit,strategy=None):
-        adet=None
+    def TradeEt(self,coinlist,periyot,sonislem,gercek,nakit,sell_strategy=None):
         temp=coinlist
+        cik=False
+        buy_price=None
+        adet=None
+        strategys={"15m":[Stratejiler.BB_RSI,Stratejiler.BB_ADX,Stratejiler.BB_Close],
+                   "1h":[Stratejiler.BB_RSI,Stratejiler.TSO,Stratejiler.FDI,Stratejiler.BB_ADX,Stratejiler.BB_Close],
+                   "4h":[Stratejiler.DMO,Stratejiler.FDI,Stratejiler.VMZI],
+                   "1d":[Stratejiler.MACD,Stratejiler.DMO,Stratejiler.VAMA,Stratejiler.VMZI,Stratejiler.MA_Cross,Stratejiler.FDI]
+                   }
+        logging.info(f"Trade {periyot} Calisiyor ... {gercek}")
+        print(f"Trade {periyot} Calisiyor ... {gercek}", time.ctime())
         while True:
-            Araclar.mum_olusmasini_bekle(periyot)
-            for coin in coinlist:
-                close = self.binance.data(coin, 1000, periyot, 4)
-                low = self.binance.data(coin, 1000, periyot, 3)
-                high = self.binance.data(coin, 1000, periyot, 2)
-                if sonislem == "SAT":
-                    print("Almak için bakıcam")
-                    if periyot == "15m":
-                        if Stratejiler.BB_Close(high,low,close) == "BUY":
-                            strategy = Stratejiler.BB_Close
-                            sonislem,adet = self.buy(coin, periyot, str(strategy.__name__), gercek, nakit, close)
-                            coinlist = [coin]
-                            break
-                        if Stratejiler.BB_RSI(high,low,close) == "BUY":
-                            strategy = Stratejiler.BB_RSI
-                            sonislem,adet = self.buy(coin, periyot, str(strategy.__name__), gercek, nakit, close)
-                            coinlist = [coin]
-                            break
-                        """     TEST AMAÇLI KAPATTIM
-                        if Stratejiler.BB_ADX(high,low,close) == "BUY":
-                            strategy = Stratejiler.BB_ADX
-                            sonislem, adet = self.buy(coin, periyot, str(strategy.__name__), gercek, nakit, close)
-                            coinlist = [coin]
-                            break
-                        """
-                        if Stratejiler.MA_Cross(high,low,close) == "BUY":
-                            strategy = Stratejiler.MA_Cross
-                            sonislem, adet = self.buy(coin, periyot, str(strategy.__name__), gercek, nakit, close)
-                            coinlist = [coin]
-                            break
-                        if Stratejiler.TSO(high,low,close) == "BUY":
-                            strategy = Stratejiler.TSO
-                            sonislem, adet = self.buy(coin, periyot, str(strategy.__name__), gercek, nakit, close)
-                            coinlist = [coin]
-                            break
-                        if Stratejiler.VMZI(high,low,close) == "BUY":
-                            strategy = Stratejiler.VMZI
-                            sonislem, adet = self.buy(coin, periyot, str(strategy.__name__), gercek, nakit, close)
-                            coinlist = [coin]
-                            break
-                        if Stratejiler.FDI(high,low,close) == "BUY":
-                            strategy = Stratejiler.FDI
-                            sonislem, adet = self.buy(coin, periyot, str(strategy.__name__), gercek, nakit, close)
-                            coinlist = [coin]
-                            break
-                        if Stratejiler.DMO(high,low,close) == "BUY":
-                            strategy = Stratejiler.DMO
-                            sonislem, adet = self.buy(coin, periyot, str(strategy.__name__), gercek, nakit, close)
-                            coinlist = [coin]
-                            break
-                        if Stratejiler.VAMA(high,low,close) == "BUY":
-                            strategy = Stratejiler.VAMA
-                            sonislem, adet = self.buy(coin, periyot, str(strategy.__name__), gercek, nakit, close)
-                            coinlist = [coin]
-                            break
-                        if Stratejiler.MACD(high,low,close) == "BUY":
-                            strategy = Stratejiler.MACD
-                            sonislem, adet = self.buy(coin, periyot, str(strategy.__name__), gercek, nakit, close)
-                            coinlist = [coin]
-                            break
-                    elif periyot == "1h":
-                        if Stratejiler.TSO(high,low,close) == "BUY":
-                            strategy = Stratejiler.TSO
-                            sonislem, adet = self.buy(coin, periyot, str(strategy.__name__), gercek, nakit, close)
-                            coinlist = [coin]
-                            break
-                    elif periyot == "4h":
-                        print(periyot)
-                    elif periyot == "1d":
-                        print(periyot)
-                elif sonislem == "AL":
-                    print(f"{str(strategy.__name__)} ile satmaya çalışıyorum")
-                    print(coin)
-                    if strategy(high,low,close) == "SELL":
-                        sonislem = self.sell(coin,adet,periyot,close,str(strategy.__name__),gercek)
-                        coinlist=temp
-            time.sleep(10)
+            try:
+                Araclar.mum_olusmasini_bekle(periyot)
+                for coin in coinlist:
+                    close = self.binance.data(coin, 1000, periyot, 4)
+                    low = self.binance.data(coin, 1000, periyot, 3)
+                    high = self.binance.data(coin, 1000, periyot, 2)
+                    if sonislem == "SAT":
+                        for strategy in strategys[periyot]:
+                            if strategy(high, low, close) == "BUY":
+                                sell_strategy = strategy
+                                sonislem, adet = self.buy(coin, periyot, str(strategy.__name__), gercek, nakit, close)
+                                coinlist = [coin]
+                                buy_price=close[-1]
+                                cik = True
+                                break
+                    if cik:
+                        cik = False
+                        break
+                    elif sonislem == "AL":
+                        if sell_strategy(high, low, close) == "SELL":
+                            sonislem = self.sell(coin, adet, periyot, close, str(sell_strategy.__name__), gercek,buy_price)
+                            coinlist = temp
+                time.sleep(10)
+            except Exception as e:
+                logging.error(f"Bir hata olustu: {e}")
+                self.araclar.mail_gonder(f"HATA | Trade {periyot}",f"{e}")
+                time.sleep(5)  # Küçük bir gecikme sonrası tekrar dene
+                logging.info(f"Trade {periyot} Calisiyor ... {gercek}")
+                print(f"Trade {periyot} Calisiyor ... {gercek}", time.ctime())
+                continue  # Döngüye tekrar gir
 
     def buy(self,coin,periyot,strateji_adi,gercek,nakit,close):
         adet = round((nakit / close[-1]), self.binance.minimum_hareket(
@@ -224,15 +187,14 @@ class Trade:
         self.araclar.mail_gonder(f"AL | {strateji_adi} {periyot}",
                             f"{coin} alindi, Adet: {adet}, Maliyet: {close[-1]} USDT")
         return "AL",adet
-
-    def sell(self,coin,adet,periyot,close,strateji_adi,gercek):
+    def sell(self,coin,adet,periyot,close,strateji_adi,gercek,buy_price):
         adim = self.binance.minimum_hareket(float(self.binance.client.get_symbol_info(coin)["filters"][1]["minQty"]))
         logging.info(f"SAT | {coin} satıldı, Adet: {adet}, Fiyat: {close[-1]}")
-        islemgecmisi.info(f"{strateji_adi} SAT | {coin} satıldı, Adet: {adet}, Fiyat: {close[-1]}")
+        islemgecmisi.info(f"{strateji_adi} SAT | {coin} satıldı, Adet: {adet}, Fiyat: {close[-1]} Kar/Zarar:{((close[-1]/buy_price)-1)*100}%")
         if gercek:
             print("Gercekten satildi")
             mevcut_adedim = self.binance.sahip_olduklarim()[coin]
             adet = round(mevcut_adedim - (mevcut_adedim % float(adim)), adim)
             self.binance.sat(coin, adet)
-        self.araclar.mail_gonder(f"SAT | {strateji_adi} {periyot}", f"{coin} satildi")
+        self.araclar.mail_gonder(f"SAT | {strateji_adi} {periyot}", f"{coin} satildi, Adet: {adet}, Fiyat: {close[-1]} Kar/Zarar:{((close[-1]/buy_price)-1)*100}%")
         return "SAT"

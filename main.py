@@ -34,9 +34,16 @@ elif com == "3":
     backtest.Test(canli_veriler=True,periyot="1h",coin="SHIBUSDT", selected_strategy_name="BB(RSI)")
 elif com == "4":
     periyot=input("Periyot (15m,1h,4h,1d):")
-    while True:
-        araclar.mum_olusmasini_bekle(periyot)
-        Tarama.Tara(binance.secili_list(),periyot)
+    Tarama.Tara(binance.secili_list(), periyot)
 elif com == "5":
+    coinlist=[]
     periyot = input("Periyot (15m,1h,4h,1d):")
-    trade.TradeEt(binance.secili_list(),periyot,"SAT",False,100)
+    gercek = input("Gercek:") == "True"
+    nakit= float(input("Nakit:").replace(",","."))
+    sonislem=input("Son islem:")
+    if sonislem=="AL":
+        coin=input("Coin:")
+        coinlist.append(coin)
+    else:
+        coinlist=binance.secili_list()
+    trade.TradeEt(coinlist,periyot,sonislem,gercek,nakit)
