@@ -36,7 +36,7 @@ class Tarama:
                         #   BB(close),BB(RSI),BB_ADX
 
                         #   BB(close) Stratejisi
-                        bb_close = Stratejiler.BB_Close(close)
+                        bb_close = Stratejiler.BB_Close(high,low,close)
                         if bb_close == None or bb_close == False:
                             continue
                         elif bb_close == "BUY":
@@ -45,7 +45,7 @@ class Tarama:
                             resault_15m["BB(close)"]["SELL"].append(coin)
 
                         #   BB(RSI) Stratejisi
-                        bb_rsi = Stratejiler.BB_RSI(close)
+                        bb_rsi = Stratejiler.BB_RSI(high, low, close)
                         if bb_rsi == None or bb_rsi == False:
                             continue
                         elif bb_rsi == "BUY":
@@ -83,7 +83,7 @@ class Tarama:
                             resault_1h["TSO"]["SELL"].append(coin)
 
                         #   BB(RSI) Stratejisi
-                        bb_rsi = Stratejiler.BB_RSI(close)
+                        bb_rsi = Stratejiler.BB_RSI(high,low,close)
                         if bb_rsi == None or bb_rsi == False:
                             continue
                         elif bb_rsi == "BUY":
@@ -92,7 +92,7 @@ class Tarama:
                             resault_1h["BB(RSI)"]["SELL"].append(coin)
 
                         #   FDI Stratejisi
-                        fdi = Stratejiler.FDI(close)
+                        fdi = Stratejiler.FDI(high,low,close)
                         if fdi == None or fdi == False:
                             continue
                         elif fdi == "BUY":
@@ -101,7 +101,7 @@ class Tarama:
                             resault_1h["FDI"]["SELL"].append(coin)
 
                         #   MACD Stratejisi
-                        macd = Stratejiler.MACD(close)
+                        macd = Stratejiler.MACD(high,low,close)
                         if macd == None or macd == False:
                             continue
                         elif macd == "BUY":
@@ -139,7 +139,7 @@ class Tarama:
                             resault_4h["VMZI"]["SELL"].append(coin)
 
                         #   VAMA Stratejisi
-                        vama = Stratejiler.VAMA(close)
+                        vama = Stratejiler.VAMA(high,low,close)
                         if vama == None or vama == False:
                             continue
                         elif vama == "BUY":
@@ -159,7 +159,7 @@ class Tarama:
                         #   MACD,DMO,VMZI,VAMA,Ma Cross,FDI
 
                         #   MACD Stratejisi
-                        macd = Stratejiler.MACD(close)
+                        macd = Stratejiler.MACD(high,low,close)
                         if macd == None or macd == False:
                             continue
                         elif macd == "BUY":
@@ -186,7 +186,7 @@ class Tarama:
                             resault_1d["VMZI"]["SELL"].append(coin)
 
                         #   VAMA Stratejisi
-                        vama = Stratejiler.VAMA(close)
+                        vama = Stratejiler.VAMA(high,low,close)
                         if vama == None or vama == False:
                             continue
                         elif vama == "BUY":
@@ -204,7 +204,7 @@ class Tarama:
                             resault_1d["MA_Cross"]["SELL"].append(coin)
 
                         #   FDI Stratejisi
-                        fdi = Stratejiler.FDI(close)
+                        fdi = Stratejiler.FDI(high,low,close)
                         if fdi == None or fdi == False:
                             continue
                         elif fdi == "BUY":
