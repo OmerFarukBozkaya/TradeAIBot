@@ -2,6 +2,7 @@ from Binance import Binance
 from Araclar import Araclar
 from Stratejiler import Stratejiler
 import time
+import traceback
 class Tarama:
     @staticmethod
     def Tara(coinlist,periyot):
@@ -50,9 +51,10 @@ class Tarama:
                     araclar.mail_gonder(f"Tarama | {periyot}",mesaj)
 
                 time.sleep(10)
-            except Exception as e:
-                print(f"Bir hata olustu: {e}, {time.ctime()}")
+            except Exception:
+                hata = traceback.format_exc()
+                print(f"Bir hata olustu: {hata}, {time.ctime()}")
                 time.sleep(5)  # Küçük bir gecikme sonrası tekrar dene
-                araclar.mail_gonder("HATA | Tarama",f"{e}")
+                araclar.mail_gonder("HATA | Tarama",f"{strategy.__name__} {coin} {periyot} \n{hata}")
                 print(f"Tarama {periyot} Calisiyor ...", time.ctime())
                 continue  # Döngüye tekrar gir

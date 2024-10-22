@@ -161,9 +161,10 @@ class Trade:
                             sonislem = self.sell(coin, adet, periyot, close, str(sell_strategy.__name__), gercek,buy_price)
                             coinlist = temp
                 time.sleep(10)
-            except Exception as e:
-                logging.error(f"Bir hata olustu: {e}")
-                self.araclar.mail_gonder(f"HATA | Trade {periyot}",f"{e}")
+            except Exception:
+                hata = traceback.format_exc()
+                logging.error(f"Bir hata olustu: {hata}")
+                self.araclar.mail_gonder(f"HATA | Trade {periyot}",f"{strategy.__name__} {coin} {periyot} \n {hata}")
                 time.sleep(5)  # Küçük bir gecikme sonrası tekrar dene
                 logging.info(f"Trade {periyot} Calisiyor ... {gercek}")
                 print(f"Trade {periyot} Calisiyor ... {gercek}", time.ctime())
