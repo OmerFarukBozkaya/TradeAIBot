@@ -6,10 +6,10 @@ class Stratejiler:
         macd_values = macd[0]
         macd_signal = macd[1]
         rsi = Indikator.RSI(close)
-        if macd_signal[-1] is not None and macd_values[-1] is not None and rsi[-1] is not None:
-            if macd_values[-1] > macd_signal[-1] and rsi[-1] > 50:
+        if macd_signal[-3] is not None and macd_values[-3] is not None and rsi[-3] is not None:
+            if  (macd_values[-3] < macd_signal[-3] or rsi[-3] < 50) and macd_values[-2] > macd_signal[-2] and rsi[-2] > 50:
                 return "BUY"
-            elif macd_values[-1] < macd_signal[-1]:
+            elif macd_values[-2] < macd_signal[-2]:
                 return "SELL"
             else:
                 return False
@@ -21,10 +21,10 @@ class Stratejiler:
         vmzi = Indikator.VMZI(close)
         adx = Indikator.ADX(high, low, close)
         rsi = Indikator.RSI(close)
-        if vmzi[-1] is not None and adx[-1] is not None and rsi[-1] is not None:
-            if vmzi[-1] > 1.5 and adx[-1] > 25 and rsi[-1] > 50:
+        if vmzi[-3] is not None and adx[-3] is not None and rsi[-3] is not None:
+            if (vmzi[-3] < 1.5 or adx[-3] < 25 or rsi[-3] < 50) and vmzi[-2] > 1.5 and adx[-2] > 25 and rsi[-2] > 50:
                 return "BUY"
-            elif vmzi[-1] < 0 and rsi[-1] < 50:
+            elif vmzi[-2] < 0 and rsi[-2] < 50:
                 return "SELL"
             else:
                 return False
@@ -34,10 +34,10 @@ class Stratejiler:
     @staticmethod
     def VAMA(high,low,close):
         vama = Indikator.VAMA(close)
-        if vama[-1] is not None:
-            if vama[-1] * 1.02 < close[-1]:
+        if vama[-3] is not None:
+            if (vama[-3] * 1.02 > close[-3]) and vama[-2] * 1.02 < close[-2]:
                 return "BUY"
-            elif vama[-1] * 0.98 > close[-1]:
+            elif vama[-2] * 0.98 > close[-2]:
                 return "SELL"
             else:
                 return False
@@ -47,10 +47,10 @@ class Stratejiler:
     @staticmethod
     def TSO(high, low, close):
         tso = Indikator.TSO(high, low, close)
-        if tso[-1] is not None:
-            if tso[-1] == 1:
+        if tso[-3] is not None:
+            if tso[-3] != 1 and tso[-2] == 1:
                 return "BUY"
-            elif tso[-1] == -1:
+            elif tso[-2] == -1:
                 return "SELL"
             else:
                 return False
@@ -63,10 +63,10 @@ class Stratejiler:
         bb_rsi = Indikator.BB(rsi)
         bb_rsi_down = bb_rsi[0]
         bb_rsi_up = bb_rsi[2]
-        if rsi[-2] is not None and bb_rsi_down[-2] is not None and bb_rsi_up[-2] is not None:
-            if bb_rsi_down[-2] > rsi[-2] and bb_rsi_down[-1] < rsi[-1]:
+        if rsi[-3] is not None and bb_rsi_down[-3] is not None and bb_rsi_up[-3] is not None:
+            if bb_rsi_down[-3] > rsi[-3] and bb_rsi_down[-2] < rsi[-2]:
                 return "BUY"
-            elif bb_rsi_up[-2] < rsi[-2] and bb_rsi_up[-1] > rsi[-1]:
+            elif bb_rsi_up[-3] < rsi[-3] and bb_rsi_up[-2] > rsi[-2]:
                 return "SELL"
             else:
                 return False
@@ -80,10 +80,10 @@ class Stratejiler:
         macd = Indikator.MACD(close)
         macd_values = macd[0]
         macd_signal = macd[1]
-        if fdi[-2] is not None and rsi[-1] is not None and macd_values[-1] is not None and macd_signal[-1] is not None:
-            if fdi[-2] > 0 and fdi[-2] < fdi[-1] and rsi[-1] > 40 and macd_values[-1] > macd_signal[-1]:
+        if fdi[-4] is not None and rsi[-3] is not None and macd_values[-3] is not None and macd_signal[-3] is not None:
+            if (fdi[-4] < 0 or fdi[-4] > fdi[-3] or rsi[-3] < 40 or macd_values[-3] < macd_signal[-3]) and fdi[-3] > 0 and fdi[-3] < fdi[-2] and rsi[-2] > 40 and macd_values[-2] > macd_signal[-2]:
                 return "BUY"
-            elif fdi[-2] < 0 and fdi[-2] > fdi[-1] and rsi[-1] < 60 and macd_values[-1] < macd_signal[-1]:
+            elif fdi[-3] < 0 and fdi[-3] > fdi[-2] and rsi[-2] < 60 and macd_values[-2] < macd_signal[-2]:
                 return "SELL"
             else:
                 return False
@@ -96,11 +96,11 @@ class Stratejiler:
         bb_down = bb[0]
         bb_mid = bb[1]
         bb_up = bb[2]
-        if bb_down[-2] is not None and bb_mid[-2] is not None and bb_up[-2] is not None:
-            if bb_down[-2] > close[-2] and bb_down[-1] < close[-1]:
+        if bb_down[-3] is not None and bb_mid[-3] is not None and bb_up[-3] is not None:
+            if bb_down[-3] > close[-3] and bb_down[-2] < close[-2]:
                 return "BUY"
-            elif ((bb_up[-2] < close[-2] and bb_up[-1] > close[-1]) or (bb_down[-1] * 0.99 > close[-1]) or
-                  (bb_mid[-2] < close[-2] and bb_mid[-1] > close[-1])):
+            elif ((bb_up[-3] < close[-3] and bb_up[-2] > close[-2]) or (bb_down[-2] * 0.99 > close[-2]) or
+                  (bb_mid[-3] < close[-3] and bb_mid[-2] > close[-2])):
                 return "SELL"
             else:
                 return False
@@ -113,9 +113,9 @@ class Stratejiler:
         ma_50 = Indikator.SMA(close, 50)
         adx = Indikator.ADX(high, low, close)
         if ma_9[-2] is not None and ma_50[-2] is not None and adx[-1] is not None:
-            if ma_9[-2] < ma_50[-2] and ma_9[-1] > ma_50[-1] and adx[-1] > 30:
+            if ma_9[-3] < ma_50[-3] and ma_9[-2] > ma_50[-2] and adx[-2] > 30:
                 return "BUY"
-            elif (ma_9[-2] > ma_50[-2] and ma_9[-1] < ma_50[-1]) or (ma_50[-1] * 0.99 > close[-1]):
+            elif (ma_9[-3] > ma_50[-3] and ma_9[-2] < ma_50[-2]) or (ma_50[-2] * 0.99 > close[-2]):
                 return "SELL"
             else:
                 return False
@@ -131,10 +131,10 @@ class Stratejiler:
         bb = Indikator.BB(close)
         bb_down = bb[0]
         bb_up = bb[2]
-        if dmo[-1] is not None and adx[-1] is not None and rsi[-1] is not None and bb_down[-1] is not None:
-            if dmo[-1] > 1.0 and adx[-1] > 20 and rsi[-1] > 50 and close[-1] >= bb_up[-1]:
+        if dmo[-3] is not None and adx[-3] is not None and rsi[-3] is not None and bb_down[-2] is not None and bb_up[-3] is not None:
+            if (dmo[-3] < 1.0 or adx[-3] < 20 or rsi[-3] < 50 or close[-3] < bb_up[-3]) and dmo[-2] > 1.0 and adx[-2] > 20 and rsi[-2] > 50 and close[-2] >= bb_up[-2]:
                 return "BUY"
-            elif dmo[-1] < 0.8 or adx[-1] < 20 or (rsi[-1] < 50 and close[-1] <= bb_down[-1]):
+            elif dmo[-2] < 0.8 or adx[-2] < 20 or (rsi[-2] < 50 and close[-2] <= bb_down[-2]):
                 return "SELL"
             else:
                 return False
@@ -147,10 +147,10 @@ class Stratejiler:
         adx = Indikator.ADX(high, low, close)
         bb_down = bb[0]
         bb_up = bb[2]
-        if bb_down[-1] is not None and bb_up[-1] is not None and adx[-1] is not None:
-            if bb_down[-1] > close[-1] and adx[-1] > 25:
+        if bb_down[-2] is not None and bb_up[-2] is not None and adx[-2] is not None:
+            if bb_down[-2] > close[-2] and adx[-2] > 25:
                 return "BUY"
-            elif (close[-1] > bb_up[-1] and adx[-1] < 20):
+            elif (close[-2] > bb_up[-2] and adx[-2] < 20):
                 return "SELL"
             else:
                 return False
