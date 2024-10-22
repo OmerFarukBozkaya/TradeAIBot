@@ -7,407 +7,48 @@ class Tarama:
     def Tara(coinlist,periyot):
         binance = Binance()
         araclar = Araclar()
-        indikator_sablonu={"BB(close)":{'BUY':[],'SELL':[]},
-                 "TSO":{'BUY':[],'SELL':[]},
-                 "BB(RSI)":{'BUY':[],'SELL':[]},
-                 "FDI":{'BUY':[],'SELL':[]},
-                 "VMZI":{'BUY':[],'SELL':[]},
-                 "MACD":{'BUY':[],'SELL':[]},
-                 "VAMA":{'BUY':[],'SELL':[]},
-                 "MA_Cross": {'BUY': [], 'SELL': []},
-                 "DMO": {'BUY': [], 'SELL': []},
-                 "BB_ADX":{'BUY': [], 'SELL': []}
-        }
-        resault_15m = indikator_sablonu
-        resault_1h = indikator_sablonu
-        resault_4h = indikator_sablonu
-        resault_1d = indikator_sablonu
+        strategys = {"15m": [Stratejiler.BB_RSI, Stratejiler.BB_ADX, Stratejiler.BB_Close],
+                     "1h": [Stratejiler.BB_RSI, Stratejiler.TSO, Stratejiler.FDI, Stratejiler.BB_ADX,Stratejiler.BB_Close],
+                     "4h": [Stratejiler.DMO, Stratejiler.FDI, Stratejiler.VMZI],
+                     "1d": [Stratejiler.MACD, Stratejiler.DMO, Stratejiler.VAMA, Stratejiler.VMZI, Stratejiler.MA_Cross,Stratejiler.FDI]}
         print(f"Tarama {periyot} Calisiyor ...", time.ctime())
         while True:
             try:
+                result={}
+                for strategy in strategys[periyot]:
+                    result[strategy.__name__] = {}
+                    result[strategy.__name__]["BUY"] = []
+                    result[strategy.__name__]["SELL"] = []
+
                 araclar.mum_olusmasini_bekle(periyot)
                 for coin in coinlist:
                     #   Veri ithali
                     close = binance.data(coin, 1000, periyot, 4)
                     low = binance.data(coin, 1000, periyot, 3)
                     high = binance.data(coin, 1000, periyot, 2)
-                    #   Hesaplamalar
-                    if periyot == "15m":
-                        #   BB(close),BB(RSI),BB_ADX
 
-                        #   BB(close) Stratejisi
-                        bb_close = Stratejiler.BB_Close(high,low,close)
-                        if bb_close == None or bb_close == False:
+                    for strategy in strategys[periyot]:
+                        calculate = strategy(high,low,close)
+                        if  calculate == None or calculate == False:
                             continue
-                        elif bb_close == "BUY":
-                            resault_15m["BB(close)"]["BUY"].append(coin)
-                        elif bb_close == "SELL":
-                            resault_15m["BB(close)"]["SELL"].append(coin)
-
-                        #   BB(RSI) Stratejisi
-                        bb_rsi = Stratejiler.BB_RSI(high, low, close)
-                        if bb_rsi == None or bb_rsi == False:
-                            continue
-                        elif bb_rsi == "BUY":
-                            resault_15m["BB(RSI)"]["BUY"].append(coin)
-                        elif bb_rsi == "SELL":
-                            resault_15m["BB(RSI)"]["SELL"].append(coin)
-
-                        #   BB_ADX Stratejisi
-                        bb_adx = Stratejiler.BB_ADX(high, low, close)
-                        if bb_adx == None or bb_adx == False:
-                            continue
-                        elif bb_adx == "BUY":
-                            resault_15m["BB_ADX"]["BUY"].append(coin)
-                        elif bb_adx == "SELL":
-                            resault_15m["BB_ADX"]["SELL"].append(coin)
-                    elif periyot == "1h":
-                        #   BB_ADX,TSO,BB(RSI),FDI,MACD,MA Cross
-
-                        #   BB_ADX Stratejisi
-                        bb_adx = Stratejiler.BB_ADX(high, low, close)
-                        if bb_adx == None or bb_adx == False:
-                            continue
-                        elif bb_adx == "BUY":
-                            resault_1h["BB_ADX"]["BUY"].append(coin)
-                        elif bb_adx == "SELL":
-                            resault_1h["BB_ADX"]["SELL"].append(coin)
-
-                        #   TSO Stratejisi
-                        tso = Stratejiler.TSO(high, low, close)
-                        if tso == None or tso == False:
-                            continue
-                        elif tso == "BUY":
-                            resault_1h["TSO"]["BUY"].append(coin)
-                        elif tso == "SELL":
-                            resault_1h["TSO"]["SELL"].append(coin)
-
-                        #   BB(RSI) Stratejisi
-                        bb_rsi = Stratejiler.BB_RSI(high,low,close)
-                        if bb_rsi == None or bb_rsi == False:
-                            continue
-                        elif bb_rsi == "BUY":
-                            resault_1h["BB(RSI)"]["BUY"].append(coin)
-                        elif bb_rsi == "SELL":
-                            resault_1h["BB(RSI)"]["SELL"].append(coin)
-
-                        #   FDI Stratejisi
-                        fdi = Stratejiler.FDI(high,low,close)
-                        if fdi == None or fdi == False:
-                            continue
-                        elif fdi == "BUY":
-                            resault_1h["FDI"]["BUY"].append(coin)
-                        elif fdi == "SELL":
-                            resault_1h["FDI"]["SELL"].append(coin)
-
-                        #   MACD Stratejisi
-                        macd = Stratejiler.MACD(high,low,close)
-                        if macd == None or macd == False:
-                            continue
-                        elif macd == "BUY":
-                            resault_1h["MACD"]["BUY"].append(coin)
-                        elif macd == "SELL":
-                            resault_1h["MACD"]["SELL"].append(coin)
-
-                        #   MA_Cross Stratejisi
-                        ma_cross = Stratejiler.MA_Cross(high, low, close)
-                        if ma_cross == None or ma_cross == False:
-                            continue
-                        elif ma_cross == "BUY":
-                            resault_1h["MA_Cross"]["BUY"].append(coin)
-                        elif ma_cross == "SELL":
-                            resault_1h["MA_Cross"]["SELL"].append(coin)
-                    elif periyot == "4h":
-                        #   DMO,VMZI,VAMA,Ma Cross
-
-                        #   DMO Stratejisi
-                        dmo = Stratejiler.DMO(high, low, close)
-                        if dmo == None or dmo == False:
-                            continue
-                        elif dmo == "BUY":
-                            resault_4h["DMO"]["BUY"].append(coin)
-                        elif dmo == "SELL":
-                            resault_4h["DMO"]["SELL"].append(coin)
-
-                        #   VMZI Stratejisi
-                        vmzi = Stratejiler.VMZI(high, low, close)
-                        if vmzi == None or vmzi == False:
-                            continue
-                        elif vmzi == "BUY":
-                            resault_4h["VMZI"]["BUY"].append(coin)
-                        elif vmzi == "SELL":
-                            resault_4h["VMZI"]["SELL"].append(coin)
-
-                        #   VAMA Stratejisi
-                        vama = Stratejiler.VAMA(high,low,close)
-                        if vama == None or vama == False:
-                            continue
-                        elif vama == "BUY":
-                            resault_4h["VAMA"]["BUY"].append(coin)
-                        elif vama == "SELL":
-                            resault_4h["VAMA"]["SELL"].append(coin)
-
-                        #   MA Cross Stratejisi
-                        ma_cross = Stratejiler.MA_Cross(high, low, close)
-                        if ma_cross == None or ma_cross == False:
-                            continue
-                        elif ma_cross == "BUY":
-                            resault_4h["MA_Cross"]["BUY"].append(coin)
-                        elif ma_cross == "SELL":
-                            resault_4h["MA_Cross"]["SELL"].append(coin)
-                    elif periyot == "1d":
-                        #   MACD,DMO,VMZI,VAMA,Ma Cross,FDI
-
-                        #   MACD Stratejisi
-                        macd = Stratejiler.MACD(high,low,close)
-                        if macd == None or macd == False:
-                            continue
-                        elif macd == "BUY":
-                            resault_1d["MACD"]["BUY"].append(coin)
-                        elif macd == "SELL":
-                            resault_1d["MACD"]["SELL"].append(coin)
-
-                        #   DMO Stratejisi
-                        dmo = Stratejiler.DMO(high, low, close)
-                        if dmo == None or dmo == False:
-                            continue
-                        elif dmo == "BUY":
-                            resault_1d["DMO"]["BUY"].append(coin)
-                        elif dmo == "SELL":
-                            resault_1d["DMO"]["SELL"].append(coin)
-
-                        #   VMZI Stratejisi
-                        vmzi = Stratejiler.VMZI(high, low, close)
-                        if vmzi == None or vmzi == False:
-                            continue
-                        elif vmzi == "BUY":
-                            resault_1d["VMZI"]["BUY"].append(coin)
-                        elif vmzi == "SELL":
-                            resault_1d["VMZI"]["SELL"].append(coin)
-
-                        #   VAMA Stratejisi
-                        vama = Stratejiler.VAMA(high,low,close)
-                        if vama == None or vama == False:
-                            continue
-                        elif vama == "BUY":
-                            resault_1d["VAMA"]["BUY"].append(coin)
-                        elif vama == "SELL":
-                            resault_1d["VAMA"]["SELL"].append(coin)
-
-                        #   MA Cross Stratejisi
-                        ma_cross = Stratejiler.MA_Cross(high, low, close)
-                        if ma_cross == None or ma_cross == False:
-                            continue
-                        elif ma_cross == "BUY":
-                            resault_1d["MA_Cross"]["BUY"].append(coin)
-                        elif ma_cross == "SELL":
-                            resault_1d["MA_Cross"]["SELL"].append(coin)
-
-                        #   FDI Stratejisi
-                        fdi = Stratejiler.FDI(high,low,close)
-                        if fdi == None or fdi == False:
-                            continue
-                        elif fdi == "BUY":
-                            resault_1d["FDI"]["BUY"].append(coin)
-                        elif fdi == "SELL":
-                            resault_1d["FDI"]["SELL"].append(coin)
-
-                #   Mail gönderme
-                if periyot == "15m":
-                    #   BB_ADX,BB(close),BB(RSI)
-                    mesaj = ""
-                    gonder = False
-                    if len(resault_15m['BB_ADX']['BUY']) > 0 or len(resault_15m['BB_ADX']['SELL']) > 0:
+                        elif calculate == "BUY":
+                            result[strategy.__name__]["BUY"].append(coin)
+                        elif calculate == "SELL":
+                            result[strategy.__name__]["SELL"].append(coin)
+                mesaj = ""
+                gonder = False
+                for strategy in result.keys():
+                    if len(result[strategy]["BUY"]) > 0 or len(result[strategy]["SELL"]) > 0:
                         gonder = True
                         mesaj = (mesaj +
-                                 (f"BB_ADX\n"
-                                  f"BUY:\n"
-                                  f"{resault_15m['BB_ADX']['BUY']}\n"
-                                  f"SELL:\n"
-                                  f"{resault_15m['BB_ADX']['SELL']}\n\n"
-                                  ))
-                    if len(resault_15m['BB(close)']['BUY']) > 0 or len(resault_15m['BB(close)']['SELL']) > 0:
-                        gonder = True
-                        mesaj = (mesaj +
-                                 (f"BB(Close)\n"
-                                  f"BUY:\n"
-                                  f"{resault_15m['BB(close)']['BUY']}\n"
-                                  f"SELL:\n"
-                                  f"{resault_15m['BB(close)']['SELL']}\n\n"
-                                  ))
-                    if len(resault_15m['BB(RSI)']['BUY']) > 0 or len(resault_15m['BB(RSI)']['SELL']) > 0:
-                        gonder = True
-                        mesaj = (mesaj +
-                                 (f"BB(RSI)\n"
-                                  f"BUY:\n"
-                                  f"{resault_15m['BB(RSI)']['BUY']}\n"
-                                  f"SELL:\n"
-                                  f"{resault_15m['BB(RSI)']['SELL']}\n\n"
-                                  ))
-                    if gonder:
-                        araclar.mail_gonder(f"Tarama |{periyot}", mesaj)
-                elif periyot == "1h":
-                    #   BB_ADX,TSO,BB(RSI),FDI,MACD,MA Cross
-                    mesaj = ""
-                    gonder = False
-                    if len(resault_1h['BB_ADX']['BUY']) > 0 or len(resault_1h['BB_ADX']['SELL']) > 0:
-                        gonder = True
-                        mesaj = (mesaj +
-                                 (f"BB_ADX\n"
-                                  f"BUY:\n"
-                                  f"{resault_1h['BB_ADX']['BUY']}\n"
-                                  f"SELL:\n"
-                                  f"{resault_1h['BB_ADX']['SELL']}\n\n"
-                                  ))
-                    if len(resault_1h['TSO']['BUY']) > 0 or len(resault_1h['TSO']['SELL']) > 0:
-                        gonder = True
-                        mesaj = (mesaj +
-                                 (f"TSO\n"
-                                  f"BUY:\n"
-                                  f"{resault_1h['TSO']['BUY']}\n"
-                                  f"SELL:\n"
-                                  f"{resault_1h['TSO']['SELL']}\n\n"
-                                  ))
-                    if len(resault_1h['BB(RSI)']['BUY']) > 0 or len(resault_1h['BB(RSI)']['SELL']) > 0:
-                        gonder = True
-                        mesaj = (mesaj +
-                                 (f"BB(RSI)\n"
-                                  f"BUY:\n"
-                                  f"{resault_1h['BB(RSI)']['BUY']}\n"
-                                  f"SELL:\n"
-                                  f"{resault_1h['BB(RSI)']['SELL']}\n\n"
-                                  ))
-                    if len(resault_1h['FDI']['BUY']) > 0 or len(resault_1h['FDI']['SELL']) > 0:
-                        gonder = True
-                        mesaj = (mesaj +
-                                 (f"FDI\n"
-                                  f"BUY:\n"
-                                  f"{resault_1h['FDI']['BUY']}\n"
-                                  f"SELL:\n"
-                                  f"{resault_1h['FDI']['SELL']}\n\n"
-                                  ))
-                    if len(resault_1h['MACD']['BUY']) > 0 or len(resault_1h['MACD']['SELL']) > 0:
-                        gonder = True
-                        mesaj = (mesaj +
-                                 (f"MACD\n"
-                                  f"BUY:\n"
-                                  f"{resault_1h['MACD']['BUY']}\n"
-                                  f"SELL:\n"
-                                  f"{resault_1h['MACD']['SELL']}\n\n"
-                                  ))
-                    if len(resault_1h['MA_Cross']['BUY']) > 0 or len(resault_1h['MA_Cross']['SELL']) > 0:
-                        gonder = True
-                        mesaj = (mesaj +
-                                 (f"TSO\n"
-                                  f"BUY:\n"
-                                  f"{resault_1h['MA_Cross']['BUY']}\n"
-                                  f"SELL:\n"
-                                  f"{resault_1h['MA_Cross']['SELL']}\n\n"
-                                  ))
-                    if gonder:
-                        araclar.mail_gonder(f"Tarama |{periyot}", mesaj)
-                elif periyot == "4h":
-                    #   DMO,VMZI,VAMA,Ma Cross
-                    mesaj = ""
-                    gonder = False
-                    if len(resault_4h['DMO']['BUY']) > 0 or len(resault_4h['DMO']['SELL']) > 0:
-                        gonder = True
-                        mesaj = (mesaj +
-                                 (f"DMO\n"
-                                  f"BUY:\n"
-                                  f"{resault_4h['DMO']['BUY']}\n"
-                                  f"SELL:\n"
-                                  f"{resault_4h['DMO']['SELL']}\n\n"
-                                  ))
-                    if len(resault_4h['VMZI']['BUY']) > 0 or len(resault_4h['VMZI']['SELL']) > 0:
-                        gonder = True
-                        mesaj = (mesaj +
-                                 (f"VMZI\n"
-                                  f"BUY:\n"
-                                  f"{resault_4h['VMZI']['BUY']}\n"
-                                  f"SELL:\n"
-                                  f"{resault_4h['VMZI']['SELL']}\n\n"
-                                  ))
-                    if len(resault_4h['VAMA']['BUY']) > 0 or len(resault_4h['VAMA']['SELL']) > 0:
-                        gonder = True
-                        mesaj = (mesaj +
-                                 (f"VAMA\n"
-                                  f"BUY:\n"
-                                  f"{resault_4h['VAMA']['BUY']}\n"
-                                  f"SELL:\n"
-                                  f"{resault_4h['VAMA']['SELL']}\n\n"
-                                  ))
-                    if len(resault_4h['MA_Cross']['BUY']) > 0 or len(resault_4h['MA_Cross']['SELL']) > 0:
-                        gonder = True
-                        mesaj = (mesaj +
-                                 (f"MA Cross\n"
-                                  f"BUY:\n"
-                                  f"{resault_4h['MA_Cross']['BUY']}\n"
-                                  f"SELL:\n"
-                                  f"{resault_4h['MA_Cross']['SELL']}\n\n"
-                                  ))
-                    if gonder:
-                        araclar.mail_gonder(f"Tarama |{periyot}", mesaj)
-                elif periyot == "1d":
-                    #   MACD,DMO,VMZI,VAMA,Ma Cross,FDI
-                    mesaj = ""
-                    gonder = False
-                    if len(resault_1d['MACD']['BUY']) > 0 or len(resault_1d['MACD']['SELL']) > 0:
-                        gonder = True
-                        mesaj = (mesaj +
-                                 (f"MACD\n"
-                                  f"BUY:\n"
-                                  f"{resault_1d['MACD']['BUY']}\n"
-                                  f"SELL:\n"
-                                  f"{resault_1d['MACD']['SELL']}\n\n"
-                                  ))
-                    if len(resault_1d['DMO']['BUY']) > 0 or len(resault_1d['DMO']['SELL']) > 0:
-                        gonder = True
-                        mesaj = (mesaj +
-                                 (f"DMO\n"
-                                  f"BUY:\n"
-                                  f"{resault_1d['DMO']['BUY']}\n"
-                                  f"SELL:\n"
-                                  f"{resault_1d['DMO']['SELL']}\n\n"
-                                  ))
-                    if len(resault_1d['VMZI']['BUY']) > 0 or len(resault_1d['VMZI']['SELL']) > 0:
-                        gonder = True
-                        mesaj = (mesaj +
-                                 (f"VMZI\n"
-                                  f"BUY:\n"
-                                  f"{resault_1d['VMZI']['BUY']}\n"
-                                  f"SELL:\n"
-                                  f"{resault_1d['VMZI']['SELL']}\n\n"
-                                  ))
-                    if len(resault_1d['VAMA']['BUY']) > 0 or len(resault_1d['VAMA']['SELL']) > 0:
-                        gonder = True
-                        mesaj = (mesaj +
-                                 (f"VAMA\n"
-                                  f"BUY:\n"
-                                  f"{resault_1d['VAMA']['BUY']}\n"
-                                  f"SELL:\n"
-                                  f"{resault_1d['VAMA']['SELL']}\n\n"
-                                  ))
-                    if len(resault_1d['MA_Cross']['BUY']) > 0 or len(resault_1d['MA_Cross']['SELL']) > 0:
-                        gonder = True
-                        mesaj = (mesaj +
-                                 (f"MA Cross\n"
-                                  f"BUY:\n"
-                                  f"{resault_1d['MA_Cross']['BUY']}\n"
-                                  f"SELL:\n"
-                                  f"{resault_1d['MA_Cross']['SELL']}\n\n"
-                                  ))
-                    if len(resault_1d['FDI']['BUY']) > 0 or len(resault_1d['FDI']['SELL']) > 0:
-                        gonder = True
-                        mesaj = (mesaj +
-                                 (f"FDI\n"
-                                  f"BUY:\n"
-                                  f"{resault_1d['FDI']['BUY']}\n"
-                                  f"SELL:\n"
-                                  f"{resault_1d['FDI']['SELL']}\n\n"
-                                  ))
-                    if gonder:
-                        araclar.mail_gonder(f"Tarama |{periyot}", mesaj)
+                                 f"{strategy}\n"
+                                 f"BUY:\n"
+                                 f"{result[strategy]['BUY']}\n"
+                                 f"SELL:\n"
+                                 f"{result[strategy]['SELL']}\n\n")
+                if gonder:
+                    araclar.mail_gonder(f"Tarama | {periyot}",mesaj)
+
                 time.sleep(10)
             except Exception as e:
                 print(f"Bir hata olustu: {e}, {time.ctime()}")

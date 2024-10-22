@@ -5,11 +5,6 @@ from Araclar import Araclar
 from Stratejiler import Stratejiler
 import logging
 
-zaman_dilimleri = {
-    "1m": 60, "3m": 180, "5m": 300, "15m": 900, "30m": 1800,
-    "1h": 3600, "2h": 7200, "4h": 14400, "6h": 21600, "8h": 28800,
-    "12h": 43200, "1d": 86400, "3d": 259200, "1w": 604800, "1M": 2419200
-}
 # Log ayarları
 logging.basicConfig(filename='trading_log.log', level=logging.INFO,
                     format='%(asctime)s - %(levelname)s - %(message)s')
@@ -179,6 +174,7 @@ class Trade:
             float(self.binance.client.get_symbol_info(coin)["filters"][1]["minQty"])))
         logging.info(f"AL | {coin} alındı, Adet: {adet}, Fiyat: {close[-1]}")
         islemgecmisi.info(f"{strateji_adi} {periyot} AL | {coin} alındı, Adet: {adet}, Fiyat: {close[-1]}")
+        print(f"{strateji_adi} {periyot} AL | {coin} alındı, Adet: {adet}, Fiyat: {close[-1]}")
 
         if gercek:  # Gerçek işlem mi kontrol et
             print("Gercekten alindi")
@@ -191,6 +187,7 @@ class Trade:
         adim = self.binance.minimum_hareket(float(self.binance.client.get_symbol_info(coin)["filters"][1]["minQty"]))
         logging.info(f"SAT | {coin} satıldı, Adet: {adet}, Fiyat: {close[-1]}")
         islemgecmisi.info(f"{strateji_adi} {periyot} SAT | {coin} satıldı, Adet: {adet}, Fiyat: {close[-1]} Kar/Zarar:{((close[-1]/buy_price)-1)*100}%")
+        print(f"{strateji_adi} {periyot} SAT | {coin} satıldı, Adet: {adet}, Fiyat: {close[-1]} Kar/Zarar:{((close[-1]/buy_price)-1)*100}%")
         if gercek:
             print("Gercekten satildi")
             mevcut_adedim = self.binance.sahip_olduklarim()[coin]
