@@ -36,25 +36,37 @@ class Indikator:
         lower_band = rolling_mean - 2 * rolling_std
 
         return lower_band, rolling_mean, upper_band
+
     @staticmethod
     def RSI(src, length=14):
-        deltas = np.diff(src)
-        seed = deltas[:length]
-        up = np.where(seed >= 0, seed, 0).sum() / length
-        down = -np.where(seed < 0, seed, 0).sum() / length
-        rs = up / down
-        rsi = np.zeros_like(src)
-        rsi[:length] = 100.0 - (100.0 / (1.0 + rs))
+        deltas = np.diff(src)  # Fiyat değişimlerini hesapla
+        seed = deltas[:length]  # İlk length kadar veriyi kullanarak başlangıç değerleri al
+        up = np.where(seed >= 0, seed, 0).sum() / length  # Pozitif değişimlerin ortalaması
+        down = -np.where(seed < 0, seed, 0).sum() / length  # Negatif değişimlerin ortalaması
+
+        rs = up / down if down != 0 else float('inf')  # İlk RS (relative strength) değeri
+        rsi = np.zeros_like(src)  # RSI sonuç dizisi
+        rsi[:length] = 100.0 - (100.0 / (1.0 + rs))  # İlk RSI değerini hesapla
 
         for i in range(length, len(src)):
             delta = deltas[i - 1]
-            upval = max(delta, 0)
-            downval = -min(delta, 0)
+            upval = max(delta, 0)  # Eğer değişim pozitifse
+            downval = -min(delta, 0)  # Eğer değişim negatifse
 
+            # Hareketli ortalamaları güncelle
             up = (up * (length - 1) + upval) / length
             down = (down * (length - 1) + downval) / length
-            rs = up / down
-            rsi[i] = 100.0 - (100.0 / (1.0 + rs))
+
+            # RS değeri sıfıra bölünmekten kaçınarak güncellenir
+            if down == 0:
+                rs = float('inf')  # Fiyat yalnızca artmışsa, RS sonsuz olur
+                rsi[i] = 100.0  # RSI değeri 100 olarak atanır
+            elif up == 0:
+                rs = 0  # Fiyat yalnızca düşmüşse, RS sıfır olur
+                rsi[i] = 0.0  # RSI değeri 0 olarak atanır
+            else:
+                rs = up / down
+                rsi[i] = 100.0 - (100.0 / (1.0 + rs))
 
         return rsi
     @staticmethod
