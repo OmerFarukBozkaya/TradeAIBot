@@ -2,6 +2,7 @@ import os
 import psutil
 import shutil
 import RPi.GPIO as GPIO
+import socket
 
 # 1. CPU Sıcaklığı
 def get_cpu_temperature():
@@ -46,7 +47,7 @@ def get_network_interfaces():
     interfaces = {}
     for interface_name, address_list in addrs.items():
         for addr in address_list:
-            if addr.family == psutil.AF_INET:
+            if addr.family == socket.AF_INET:  # IPv4 adresleri için socket.AF_INET kullanılır
                 interfaces[interface_name] = addr.address
     return interfaces
 
