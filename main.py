@@ -18,6 +18,8 @@ print("""
 3)Backtest testi yap
 4)Tarama
 5)Trade
+6)Coin Indikator degerleri
+7)Coin Strateji degerleri
 """)
 com = input("Ne yapılacak :")
 if com=="0":
@@ -50,3 +52,16 @@ elif com == "5":
     else:
         coinlist=binance.secili_list()
     trade.TradeEt(coinlist,periyot,sonislem,gercek,nakit)
+elif com == "6":
+    coin=input("Coin:")
+    periyot = input("Periyot (15m,1h,4h,1d):")
+    araclar.coin_indikator_degerleri(coin,periyot)
+elif com == "7":
+    coin = input("Coin:")
+    periyot = input("Periyot (15m,1h,4h,1d):")
+    if periyot not in ["15m","1h","4h","1d"]:
+        for i in ["15m","1h","4h","1d"]:
+            print(i)
+            araclar.coin_strateji_degerleri(coin,i)
+    else:
+        araclar.coin_strateji_degerleri(coin, periyot)
