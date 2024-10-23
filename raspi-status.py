@@ -92,13 +92,17 @@ def get_fan_speed():
 def list_running_processes():
     processes = []
     for proc in psutil.process_iter(['pid', 'name', 'cpu_percent', 'memory_percent']):
-        processes.append(proc.info)
+        info = proc.info
+        processes.append(
+            f"PID: {info['pid']}, İsim: {info['name']}, CPU Kullanımı: {info['cpu_percent']}%, RAM Kullanımı: {info['memory_percent']:.2f}%")
+
     return processes
 
 # 16. Güncellemeler
 def check_for_updates():
     updates = os.popen("apt list --upgradable").readlines()
-    return updates if len(updates) > 1 else "Güncelleme yok"
+    package_count = len(updates) - 1  # İlk satır bilgi satırıdır, bu yüzden 1 çıkar
+    return package_count
 
 # Tüm bilgileri yazdırma
 def list_system_info():
@@ -138,8 +142,16 @@ def list_system_info():
     print(f"17. Model: {model}")
     print(f"18. Seri Numarası: {serial}")
     print(f"19. Fan Hızı: {fan_speed}")
-    print(f"20. Çalışan İşlemler: {running_processes}")
-    print(f"21. Güncelleme Durumu: {updates}")
+    running_processes = list_running_processes()
+    print("Çalışan İşlemler:")
+    for process in running_processes:
+        print(process)
+    package_count = check_for_updates()
+    if package_count > 0:
+        print(f"21. Güncelleme Durumu: Güncellenebilir paket sayısı: {package_count}")
+        print("Güncelleme için çalıştırılması gereken kod: sudo apt update && sudo apt upgrade")
+    else:
+        print("21. Güncelleme Durumu: Güncellenebilir paket yok.")
 
 # Betiği çalıştırma
 if __name__ == "__main__":
