@@ -12,6 +12,7 @@ indikator_test=IndikatorTest()
 araclar = Araclar()
 
 print("""
+0)Veri seti olustur
 1)Backtest sonuçlarını kayıt et
 2)IndikatörTest sınıfını Test et
 3)Backtest testi yap
@@ -19,6 +20,8 @@ print("""
 5)Trade
 """)
 com = input("Ne yapılacak :")
+if com=="0":
+    araclar.veri_seti_olustur("BTCUSDT","15m")
 if com == "1":
     a = time.time()
     for i in binance.secili_list():

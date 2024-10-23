@@ -93,14 +93,14 @@ class Araclar:
             return False
 
     @staticmethod
-    def veri_seti_olustur():
+    def veri_seti_olustur(coin,period):
         bn = Binance()
         indikator = Indikator()
-        close = bn.data("BTCUSDT", 1000, "4h", 4)
-        low = bn.data("BTCUSDT", 1000, "4h", 3)
-        high = bn.data("BTCUSDT", 1000, "4h", 2)
-        acilis = bn.data("BTCUSDT", 1000, "4h", 1)
-        opendate = bn.data("BTCUSDT", 1000, "4h", 0)
+        close = bn.data(coin, 1000, period, 4)
+        low = bn.data(coin, 1000, period, 3)
+        high = bn.data(coin, 1000, period, 2)
+        acilis = bn.data(coin, 1000, period, 1)
+        opendate = bn.data(coin, 1000, period, 0)
         rsi = indikator.RSI(close)
         ema21 = indikator.EMA(close, 21)
         ema7 = indikator.EMA(close, 7)
