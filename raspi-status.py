@@ -1,7 +1,6 @@
 import os
 import psutil
 import shutil
-import RPi.GPIO as GPIO
 import socket
 
 # 1. CPU Sıcaklığı
@@ -71,11 +70,6 @@ def get_bluetooth_status():
     status = os.popen("hciconfig").readlines()
     return "UP" if any("UP RUNNING" in line for line in status) else "DOWN"
 
-# 12. GPIO Pin Durumu
-def get_gpio_pin_status(pin):
-    GPIO.setmode(GPIO.BCM)
-    GPIO.setup(pin, GPIO.IN)
-    return GPIO.input(pin)
 
 # 13. Raspberry Pi Model ve Seri Numarası
 def get_raspberry_pi_info():
