@@ -1,94 +1,144 @@
 import os
 import psutil
 import shutil
+import RPi.GPIO as GPIO
 
-# 1. CPU Sıcaklığını alma
+# 1. CPU Sıcaklığı
 def get_cpu_temperature():
     temp = os.popen("vcgencmd measure_temp").readline()
     return temp.replace("temp=", "").strip()
 
-# 2. CPU kullanımını alma (çekirdek başına)
+# 2. CPU Frekansı
+def get_cpu_frequency():
+    freq = os.popen("vcgencmd measure_clock arm").readline()
+    return int(freq.split("=")[1].strip()) / 1_000_000  # MHz cinsinden
+
+# 3. CPU Gerilimi
+def get_cpu_voltage():
+    voltage = os.popen("vcgencmd measure_volts").readline()
+    return voltage.replace("volt=", "").strip()
+
+# 4. CPU Kullanımı (çekirdek başına)
 def get_cpu_usage():
     return psutil.cpu_percent(interval=1)
 
-def get_cpu_per_core_usage():
-    return psutil.cpu_percent(interval=1, percpu=True)
-
-# 3. RAM kullanımını alma
+# 5. RAM Kullanımı
 def get_ram_usage():
     ram_info = psutil.virtual_memory()
     total = ram_info.total / (1024 ** 2)
     used = ram_info.used / (1024 ** 2)
     return total, used
 
-# 4. Disk kullanımını alma
+# 6. Disk Kullanımı
 def get_disk_usage():
     total, used, free = shutil.disk_usage("/")
     return total / (1024 ** 3), used / (1024 ** 3), free / (1024 ** 3)
 
-# 5. Swap Belleği kullanımını alma
-def get_swap_usage():
-    swap = psutil.swap_memory()
-    return swap.total / (1024 ** 2), swap.used / (1024 ** 2)
-
-# 6. Ağ durumu ve trafiği
+# 7. Ağ Trafiği ve IP Adresleri
 def get_network_info():
     net_io = psutil.net_io_counters()
-    return net_io.bytes_sent / (1024 ** 2), net_io.bytes_recv / (1024 ** 2)
+    interfaces = get_network_interfaces()
+    return interfaces, net_io.bytes_sent / (1024 ** 2), net_io.bytes_recv / (1024 ** 2)
 
-# 7. Uptime (cihazın çalışma süresi)
+# Ağ Bağlantıları ve IP Adresleri
+def get_network_interfaces():
+    addrs = psutil.net_if_addrs()
+    interfaces = {}
+    for interface_name, address_list in addrs.items():
+        for addr in address_list:
+            if addr.family == psutil.AF_INET:
+                interfaces[interface_name] = addr.address
+    return interfaces
+
+# 8. Uptime
 def get_uptime():
     uptime_seconds = os.popen('awk \'{print $1}\' /proc/uptime').readline().strip()
     uptime_hours = float(uptime_seconds) / 3600
     return uptime_hours
 
-# 8. Yük ortalaması
+# 9. Yük Ortalaması
 def get_load_average():
     return os.getloadavg()
 
-# 9. GPU Belleği
+# 10. GPU Belleği
 def get_gpu_memory():
     gpu_mem = os.popen("vcgencmd get_mem gpu").readline()
     return gpu_mem.replace("gpu=", "").strip()
 
-# 10. USB cihazları listele
-def list_usb_devices():
-    devices = os.popen("lsusb").readlines()
-    return [device.strip() for device in devices]
+# 11. Bluetooth Durumu
+def get_bluetooth_status():
+    status = os.popen("hciconfig").readlines()
+    return "UP" if any("UP RUNNING" in line for line in status) else "DOWN"
+
+# 12. GPIO Pin Durumu
+def get_gpio_pin_status(pin):
+    GPIO.setmode(GPIO.BCM)
+    GPIO.setup(pin, GPIO.IN)
+    return GPIO.input(pin)
+
+# 13. Raspberry Pi Model ve Seri Numarası
+def get_raspberry_pi_info():
+    model = os.popen("cat /proc/device-tree/model").readline().strip()
+    serial = os.popen("cat /proc/cpuinfo | grep Serial").readline().strip().split(": ")[1]
+    return model, serial
+
+# 14. Fan Hızı
+def get_fan_speed():
+    fan_speed = os.popen("vcgencmd get_fan_speed").readline()
+    return fan_speed.strip() if fan_speed else "Fan bilgisi alınamadı"
+
+# 15. Çalışan İşlemler
+def list_running_processes():
+    processes = []
+    for proc in psutil.process_iter(['pid', 'name', 'cpu_percent', 'memory_percent']):
+        processes.append(proc.info)
+    return processes
+
+# 16. Güncellemeler
+def check_for_updates():
+    updates = os.popen("apt list --upgradable").readlines()
+    return updates if len(updates) > 1 else "Güncelleme yok"
 
 # Tüm bilgileri yazdırma
 def list_system_info():
     cpu_temp = get_cpu_temperature()
+    cpu_freq = get_cpu_frequency()
+    cpu_voltage = get_cpu_voltage()
     cpu_usage = get_cpu_usage()
-    cpu_per_core = get_cpu_per_core_usage()
     ram_total, ram_used = get_ram_usage()
     disk_total, disk_used, disk_free = get_disk_usage()
-    swap_total, swap_used = get_swap_usage()
-    net_sent, net_recv = get_network_info()
+    interfaces, net_sent, net_recv = get_network_info()
     uptime_hours = get_uptime()
     load_avg = get_load_average()
     gpu_mem = get_gpu_memory()
-    usb_devices = list_usb_devices()
+    bluetooth_status = get_bluetooth_status()
+    model, serial = get_raspberry_pi_info()
+    fan_speed = get_fan_speed()
+    running_processes = list_running_processes()
+    updates = check_for_updates()
 
     print("Raspberry Pi Sistem Bilgileri:")
     print(f"1. CPU Sıcaklığı: {cpu_temp}")
-    print(f"2. CPU Kullanımı: {cpu_usage}%")
-    print(f"3. CPU Çekirdek Kullanımları: {cpu_per_core}")
-    print(f"4. RAM Toplam: {ram_total:.2f} MB")
-    print(f"5. RAM Kullanılan: {ram_used:.2f} MB {(ram_used/ram_total)*100:.2f}%")
-    print(f"6. Disk Toplam: {disk_total:.2f} GB")
-    print(f"7. Disk Kullanılan: {disk_used:.2f} GB {(disk_used/disk_total)*100:.2f}%")
-    print(f"8. Disk Boş: {disk_free:.2f} GB {(disk_free/disk_total)*100:.2f}%")
-    print(f"9. Swap Toplam: {swap_total:.2f} MB")
-    print(f"10. Swap Kullanılan: {swap_used:.2f} MB {(swap_used/swap_total)*100}%")
+    print(f"2. CPU Frekansı: {cpu_freq} MHz")
+    print(f"3. CPU Gerilimi: {cpu_voltage}")
+    print(f"4. CPU Kullanımı: {cpu_usage}%")
+    print(f"5. RAM Toplam: {ram_total:.2f} MB")
+    print(f"6. RAM Kullanılan: {ram_used:.2f} MB {(ram_used/ram_total)*100:.2f}%")
+    print(f"7. Disk Toplam: {disk_total:.2f} GB")
+    print(f"8. Disk Kullanılan: {disk_used:.2f} GB {(disk_used/disk_total)*100:.2f}%")
+    print(f"9. Disk Boş: {disk_free:.2f} GB {(disk_free/disk_total)*100:.2f}%")
+    print(f"10. Ağ Bağlantıları ve IP'leri: {interfaces}")
     print(f"11. Ağ - Gönderilen: {net_sent:.2f} MB")
     print(f"12. Ağ - Alınan: {net_recv:.2f} MB")
     print(f"13. Uptime: {uptime_hours:.2f} saat")
     print(f"14. Yük Ortalaması (1, 5, 15 dakika): {load_avg}")
     print(f"15. GPU Belleği: {gpu_mem}")
-    print("16. USB Cihazları:")
-    for device in usb_devices:
-        print(f"   {device}")
+    print(f"16. Bluetooth Durumu: {bluetooth_status}")
+    print(f"17. Model: {model}")
+    print(f"18. Seri Numarası: {serial}")
+    print(f"19. Fan Hızı: {fan_speed}")
+    print(f"20. Çalışan İşlemler: {running_processes}")
+    print(f"21. Güncelleme Durumu: {updates}")
 
 # Betiği çalıştırma
 if __name__ == "__main__":
