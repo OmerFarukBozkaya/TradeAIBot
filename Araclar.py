@@ -6,6 +6,7 @@ import time
 from datetime import datetime
 from Binance import Binance
 from Indikator import Indikator
+from Stratejiler import Stratejiler
 import pandas as pd
 
 class Araclar:
@@ -192,3 +193,66 @@ class Araclar:
             except:
                 continue
         return list
+
+    @staticmethod
+    def coin_indikator_degerleri(coin,periyot,adet=10):
+        binance = Binance()
+        high = binance.data(coin,1000,periyot,2)
+        low = binance.data(coin, 1000, periyot, 3)
+        close = binance.data(coin, 1000, periyot, 4)
+
+        ema_9 = Indikator.EMA(close,9)[adet*-1:]
+        ema_50 = Indikator.EMA(close,50)[adet*-1:]
+        ema_200 = Indikator.EMA(close,200)[adet*-1:]
+        bb=Indikator.BB(close)
+        bb_low=bb[0][adet*-1:]
+        bb_mid=bb[1][adet*-1:]
+        bb_up=bb[2][adet*-1:]
+        rsi=Indikator.RSI(close)[adet*-1:]
+        fib=Indikator.FIB(close)[-1]
+        macd=Indikator.MACD(close)
+        macd_value=macd[0][adet*-1:]
+        macd_signal=macd[1][adet*-1:]
+        atr=Indikator.ATR(high, low, close)[adet*-1:]
+        adx=Indikator.ADX(high, low, close)[adet*-1:]
+        cmi=Indikator.CMI(close, high, low)[adet*-1:]
+        dmo=Indikator.DMO(close)[adet*-1:]
+        vmzi=Indikator.VMZI(close)[adet*-1:]
+        fdi=Indikator.FDI(close)[adet*-1:]
+        vama=Indikator.VAMA(close)[adet*-1:]
+        cci=Indikator.CCI(high, low, close)[adet*-1:]
+        tso=Indikator.TSO(high, low, close)[adet*-1:]
+
+        print(f"Close: {close[adet*-1:]}")
+        print(f"EMA 9: {ema_9}")
+        print(f"EMA 50: {ema_50}")
+        print(f"EMA 200: {ema_200}")
+        print(f"BB(low): {bb_low}")
+        print(f"BB(mid): {bb_mid}")
+        print(f"BB(up): {bb_up}")
+        print(f"RSI: {rsi}")
+        print(f"FIB: {fib}")
+        print(f"MACD Values: {macd_value}")
+        print(f"MACD Signal: {macd_signal}")
+        print(f"ATR: {atr}")
+        print(f"ADX: {adx}")
+        print(f"CMI: {cmi}")
+        print(f"DMO: {dmo}")
+        print(f"VMZI: {vmzi}")
+        print(f"FDI: {fdi}")
+        print(f"VAMA: {vama}")
+        print(f"CCI: {cci}")
+        print(f"TSO: {tso}")
+
+    @staticmethod
+    def coin_strateji_degerleri(coin,periyot):
+        binance = Binance()
+        high = binance.data(coin, 1000, periyot, 2)
+        low = binance.data(coin, 1000, periyot, 3)
+        close = binance.data(coin, 1000, periyot, 4)
+
+        strategys=[Stratejiler.MACD,Stratejiler.VMZI,Stratejiler.VAMA,Stratejiler.TSO,
+                   Stratejiler.BB_RSI,Stratejiler.FDI,Stratejiler.BB_Close,Stratejiler.MA_Cross,
+                   Stratejiler.DMO,Stratejiler.BB_ADX]
+        for strategy in strategys:
+            print(f"{strategy.__name__} : {strategy(high, low, close)}")
