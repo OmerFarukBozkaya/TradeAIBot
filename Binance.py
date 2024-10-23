@@ -97,7 +97,7 @@ class Binance:
                 'AVAXUSDT','SHIBUSDT','LINKUSDT','BCHUSDT','DOTUSDT','NEARUSDT','LTCUSDT','UNIUSDT',
                 'ICPUSDT','FETUSDT','ETCUSDT','XLMUSDT','STXUSDT','IMXUSDT','AAVEUSDT','FILUSDT',
                 'HBARUSDT','INJUSDT','VETUSDT','ATOMUSDT','FTMUSDT','RUNEUSDT','GRTUSDT','MINAUSDT',
-                'MANAUSDT','IOTAUSDT','QTUMUSDT','CVCUSDT','UNFIUSDT',]
+                'MANAUSDT','IOTAUSDT','QTUMUSDT','CVCUSDT']
     def data(self,ad, adet, zaman, mod):
         """
         :param ad: Coin Adi (str)
