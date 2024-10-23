@@ -82,15 +82,6 @@ def get_fan_speed():
     fan_speed = os.popen("vcgencmd get_fan_speed").readline()
     return fan_speed.strip() if fan_speed else "Fan bilgisi alınamadı"
 
-# 15. Çalışan İşlemler
-def list_running_processes():
-    processes = []
-    for proc in psutil.process_iter(['pid', 'name', 'cpu_percent', 'memory_percent']):
-        info = proc.info
-        processes.append(
-            f"PID: {info['pid']}, İsim: {info['name']}, CPU Kullanımı: {info['cpu_percent']}%, RAM Kullanımı: {info['memory_percent']:.2f}%")
-
-    return processes
 
 # 16. Güncellemeler
 def check_for_updates():
@@ -113,8 +104,6 @@ def list_system_info():
     bluetooth_status = get_bluetooth_status()
     model, serial = get_raspberry_pi_info()
     fan_speed = get_fan_speed()
-    running_processes = list_running_processes()
-    updates = check_for_updates()
 
     print("Raspberry Pi Sistem Bilgileri:")
     print(f"1. CPU Sıcaklığı: {cpu_temp}")
@@ -136,10 +125,6 @@ def list_system_info():
     print(f"17. Model: {model}")
     print(f"18. Seri Numarası: {serial}")
     print(f"19. Fan Hızı: {fan_speed}")
-    running_processes = list_running_processes()
-    print("Çalışan İşlemler:")
-    for process in running_processes:
-        print(process)
     package_count = check_for_updates()
     if package_count > 0:
         print(f"21. Güncelleme Durumu: Güncellenebilir paket sayısı: {package_count}")
