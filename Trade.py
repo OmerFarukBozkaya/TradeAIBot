@@ -130,6 +130,7 @@ class Trade:
         cik=False
         buy_price=None
         adet=None
+        mum_bekle=True
         strategys={"15m":[Stratejiler.BB_RSI,Stratejiler.BB_ADX,Stratejiler.BB_Close],
                    "1h":[Stratejiler.BB_RSI,Stratejiler.TSO,Stratejiler.FDI,Stratejiler.BB_ADX,Stratejiler.BB_Close],
                    "4h":[Stratejiler.DMO,Stratejiler.FDI,Stratejiler.VMZI],
@@ -139,7 +140,8 @@ class Trade:
         print(f"Trade {periyot} Calisiyor ... {gercek}", time.ctime())
         while True:
             try:
-                Araclar.mum_olusmasini_bekle(periyot)
+                if mum_bekle:
+                    Araclar.mum_olusmasini_bekle(periyot)
                 for coin in coinlist:
                     close = self.binance.data(coin, 1000, periyot, 4)
                     low = self.binance.data(coin, 1000, periyot, 3)
@@ -160,8 +162,10 @@ class Trade:
                         if sell_strategy(high, low, close) == "SELL":
                             sonislem = self.sell(coin, adet, periyot, close, str(sell_strategy.__name__), gercek,buy_price)
                             coinlist = temp
+                mum_bekle=True
                 time.sleep(10)
             except Exception:
+                mum_bekle=False
                 hata = traceback.format_exc()
                 logging.error(f"Bir hata olustu: {hata}")
                 self.araclar.mail_gonder(f"HATA | Trade {periyot}",f"{strategy.__name__} {coin} {periyot} \n {hata}")

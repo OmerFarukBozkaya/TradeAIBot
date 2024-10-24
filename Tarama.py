@@ -8,6 +8,7 @@ class Tarama:
     def Tara(coinlist,periyot):
         binance = Binance()
         araclar = Araclar()
+        mum_bekle=True
         strategys = {"15m": [Stratejiler.BB_RSI, Stratejiler.BB_ADX, Stratejiler.BB_Close],
                      "1h": [Stratejiler.BB_RSI, Stratejiler.TSO, Stratejiler.FDI, Stratejiler.BB_ADX,Stratejiler.BB_Close],
                      "4h": [Stratejiler.DMO, Stratejiler.FDI, Stratejiler.VMZI],
@@ -20,8 +21,8 @@ class Tarama:
                     result[strategy.__name__] = {}
                     result[strategy.__name__]["BUY"] = []
                     result[strategy.__name__]["SELL"] = []
-
-                araclar.mum_olusmasini_bekle(periyot)
+                if mum_bekle:
+                    araclar.mum_olusmasini_bekle(periyot)
                 for coin in coinlist:
                     #   Veri ithali
                     close = binance.data(coin, 1000, periyot, 4)
@@ -49,9 +50,10 @@ class Tarama:
                                  f"{result[strategy]['SELL']}\n\n")
                 if gonder:
                     araclar.mail_gonder(f"Tarama | {periyot}",mesaj)
-
+                mum_bekle=True
                 time.sleep(10)
             except Exception:
+                mum_bekle=False
                 hata = traceback.format_exc()
                 print(f"Bir hata olustu: {hata}, {time.ctime()}")
                 time.sleep(5)  # Küçük bir gecikme sonrası tekrar dene
