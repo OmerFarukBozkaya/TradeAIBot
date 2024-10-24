@@ -5,6 +5,7 @@ from Tarama import Tarama
 from Araclar import Araclar
 from Trade import Trade
 import time
+from raspi_status import raspi_status
 binance = Binance()
 backtest = Backtest()
 trade=Trade()
@@ -20,6 +21,7 @@ print("""
 5)Trade
 6)Coin Indikator degerleri
 7)Coin Strateji degerleri
+8)Cihaz bilgilerini görüntüle
 """)
 com = input("Ne yapılacak :")
 if com=="0":
@@ -65,3 +67,5 @@ elif com == "7":
             araclar.coin_strateji_degerleri(coin,i)
     else:
         araclar.coin_strateji_degerleri(coin, periyot)
+elif com == "8":
+    raspi_status.list_system_info()
