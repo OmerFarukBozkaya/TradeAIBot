@@ -14,7 +14,6 @@ class raspi_status:
     @staticmethod
     def get_cpu_frequency():
         freq = os.popen("sudo vcgencmd measure_clock arm").readline()
-        print(freq)
         return int(freq.split("=")[1].strip()) / 1_000_000  # MHz cinsinden
 
     # 3. CPU Gerilimi
