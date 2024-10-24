@@ -7,19 +7,20 @@ class raspi_status:
     # 1. CPU Sıcaklığı
     @staticmethod
     def get_cpu_temperature():
-        temp = os.popen("vcgencmd measure_temp").readline()
+        temp = os.popen("sudo vcgencmd measure_temp").readline()
         return temp.replace("temp=", "").strip()
 
     # 2. CPU Frekansı
     @staticmethod
     def get_cpu_frequency():
-        freq = os.popen("vcgencmd measure_clock arm").readline()
+        freq = os.popen("sudo vcgencmd measure_clock arm").readline()
+        print(freq)
         return int(freq.split("=")[1].strip()) / 1_000_000  # MHz cinsinden
 
     # 3. CPU Gerilimi
     @staticmethod
     def get_cpu_voltage():
-        voltage = os.popen("vcgencmd measure_volts").readline()
+        voltage = os.popen("sudo vcgencmd measure_volts").readline()
         return voltage.replace("volt=", "").strip()
 
     # 4. CPU Kullanımı (çekirdek başına)
@@ -74,7 +75,7 @@ class raspi_status:
     # 10. GPU Belleği
     @staticmethod
     def get_gpu_memory():
-        gpu_mem = os.popen("vcgencmd get_mem gpu").readline()
+        gpu_mem = os.popen("sudo vcgencmd get_mem gpu").readline()
         return gpu_mem.replace("gpu=", "").strip()
 
     # 11. Bluetooth Durumu
@@ -93,7 +94,7 @@ class raspi_status:
     # 14. Fan Hızı
     @staticmethod
     def get_fan_speed():
-        fan_speed = os.popen("vcgencmd get_fan_speed").readline()
+        fan_speed = os.popen("sudo vcgencmd get_fan_speed").readline()
         return fan_speed.strip() if fan_speed else "Fan bilgisi alınamadı"
 
     # 16. Güncellemeler
