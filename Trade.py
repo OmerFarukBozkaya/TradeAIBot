@@ -142,6 +142,8 @@ class Trade:
             try:
                 if mum_bekle:
                     Araclar.mum_olusmasini_bekle(periyot)
+                if sonislem == "SAT":
+                    coinlist=self.araclar.listeden_sahip_olduklarimi_cikar(coinlist)
                 for coin in coinlist:
                     close = self.binance.data(coin, 1000, periyot, 4)
                     low = self.binance.data(coin, 1000, periyot, 3)
