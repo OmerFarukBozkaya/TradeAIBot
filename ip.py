@@ -2,6 +2,7 @@ import requests
 import time
 import traceback
 from Araclar import Araclar
+import os
 
 araclar = Araclar()
 
@@ -35,17 +36,27 @@ def kontrol_ve_mail_gonder():
         current_ip = get_ip()
 
         # Eğer internet bağlantısı varsa ve IP değişmişse
-        if current_ip and internet_var_mi():
-            with open("ip.txt", "a+") as dosya_oku:
+        if current_ip:
+            # Dosya mevcut değilse oluştur
+            if not os.path.exists("ip.txt"):
+                with open("ip.txt", "w") as dosya_yaz:
+                    dosya_yaz.write(current_ip)
+                return  # İlk seferde mail göndermeye gerek yok
+
+            # Dosya varsa IP adresini oku ve karşılaştır
+            with open("ip.txt", "r") as dosya_oku:
                 eski_ip = dosya_oku.readline().strip()
 
-                if eski_ip != current_ip:
-                    # Mail gönder
-                    araclar.mail_gonder("IP Değişti", f"Yeni IP: {current_ip}")
+            # Yeni ve eski IP aynı ise mail gönderme
+            if eski_ip == current_ip:
+                return
 
-                    # Dosyayı güncelle
-                    with open("ip.txt", "w") as dosya_yaz:
-                        dosya_yaz.write(current_ip)
+            # IP değişmişse mail gönder
+            araclar.mail_gonder("IP Değişti", f"Yeni IP: {current_ip}")
+
+            # Dosyayı güncelle
+            with open("ip.txt", "w") as dosya_yaz:
+                dosya_yaz.write(current_ip)
     except Exception as e:
         hata_mesaji = traceback.format_exc()
         araclar.mail_gonder("HATA | IP", hata_mesaji, 300)
