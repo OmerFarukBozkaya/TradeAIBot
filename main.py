@@ -22,6 +22,7 @@ print("""
 6)Coin Indikator degerleri
 7)Coin Strateji degerleri
 8)Cihaz bilgilerini görüntüle
+9)Piyasa durumu
 """)
 com = input("Ne yapılacak :")
 if com=="0":
@@ -38,7 +39,12 @@ if com == "1":
 elif com == "2":
     indikator_test.IndikatorResultTest(True)
 elif com == "3":
-    backtest.Test(canli_veriler=True,periyot="1h",coin="SHIBUSDT", selected_strategy_name="BB(RSI)")
+    periyot = input("Periyot (15m,1h,4h,1d):")
+    coin = input("Coin:")
+    select_strategy=input("Gösterilecek strategy:")
+    if select_strategy=="":
+        select_strategy=None
+    backtest.Test(canli_veriler=True,periyot=periyot,coin=coin, selected_strategy_name=select_strategy)
 elif com == "4":
     periyot=input("Periyot (15m,1h,4h,1d):")
     Tarama.Tara(binance.secili_list(), periyot)
@@ -69,3 +75,5 @@ elif com == "7":
         araclar.coin_strateji_degerleri(coin, periyot)
 elif com == "8":
     raspi_status.list_system_info()
+elif com == "9":
+    print(araclar.piyasa_durumu())
