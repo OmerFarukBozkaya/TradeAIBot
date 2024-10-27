@@ -76,4 +76,4 @@ elif com == "7":
 elif com == "8":
     raspi_status.list_system_info()
 elif com == "9":
-    print(araclar.piyasa_durumu())
+    print(Tarama.Piyasa_Durumu())
