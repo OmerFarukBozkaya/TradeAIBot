@@ -8,6 +8,7 @@ from Binance import Binance
 from Indikator import Indikator
 from Stratejiler import Stratejiler
 import pandas as pd
+import os
 
 class Araclar:
     def __init__(self, from_email=None, to_email=None, email_password=None):
@@ -33,6 +34,31 @@ class Araclar:
                 setting.append(line[1].strip())
 
         return setting[2], setting[3], setting[4]
+
+    @staticmethod
+    def data_test_olustur(coin,periyot):
+        binance = Binance()
+        high = binance.data(coin,1000,periyot,2)
+        low = binance.data(coin, 1000, periyot, 3)
+        close = binance.data(coin, 1000, periyot, 4)
+        path_close = "Data/close-test.txt"
+        path_low = "Data/low-test.txt"
+        path_high = "Data/high-test.txt"
+        os.makedirs(os.path.dirname(path_close), exist_ok=True)
+        os.makedirs(os.path.dirname(path_low), exist_ok=True)
+        os.makedirs(os.path.dirname(path_high), exist_ok=True)
+        # Dosyayı yaz
+        with open(path_close, "w") as file:
+            for i in close:
+                file.write(f"{i},")
+        # Dosyayı yaz
+        with open(path_high, "w") as file:
+            for i in high:
+                file.write(f"{i},")
+        # Dosyayı yaz
+        with open(path_low, "w") as file:
+            for i in low:
+                file.write(f"{i},")
 
     def mail_gonder(self, baslik, mesaj, bekle=300, smtp_server="smtp.gmail.com", smtp_port=587):
         try:
@@ -128,8 +154,9 @@ class Araclar:
         # Eksik olan değerleri None (veya NaN) ile doldurma
         df = df.apply(lambda col: col.tolist() + [None] * (df['opendate'].size - col.size) if col.size < df[
             'opendate'].size else col)
-
-        df.to_excel('veriler.xlsx', index=False)
+        path='Data/veriler.xlsx'
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        df.to_excel(path, index=False)
 
     @staticmethod
     def mum_olusmasini_bekle(periyot):
@@ -142,7 +169,7 @@ class Araclar:
             time.sleep(zaman_dilimleri[periyot] - (time.time() % zaman_dilimleri[periyot]))
 
     @staticmethod
-    def strategy_result_analyze(input="strategy_results.xlsx", output_file='strategy_results_analyze.xlsx'):
+    def strategy_result_analyze(input="Data/strategy_results.xlsx", output_file='Data/strategy_results_analyze.xlsx'):
         # Excel dosyasını oku
         df = pd.read_excel(input)
 

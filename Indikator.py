@@ -23,19 +23,20 @@ class Indikator:
                 sma_list.append(np.mean(src[i + 1 - length:i + 1]))
 
         return sma_list
+
     @staticmethod
-    def BB(src, length=20):  # OK
-        # Hareketli ortalama hesaplaması
+    def BB(src, length=20):
         rolling_mean = np.convolve(src, np.ones(length) / length, mode='valid')
-
-        # Hareketli ortalama etrafındaki standart sapmayı hesapla
-        rolling_std = np.std([src[i:i + length] for i in range(len(src) - length + 1)], axis=1)
-
-        # Üst ve alt bantları hesapla
+        rolling_std = np.array([np.std(src[i:i + length]) for i in range(len(src) - length + 1)])
         upper_band = rolling_mean + 2 * rolling_std
         lower_band = rolling_mean - 2 * rolling_std
 
-        return lower_band, rolling_mean, upper_band
+        # None ile başlangıcı doldurma
+        lower_band = np.concatenate([np.full(length - 1, None), lower_band])
+        rolling_mean = np.concatenate([np.full(length - 1, None), rolling_mean])
+        upper_band = np.concatenate([np.full(length - 1, None), upper_band])
+
+        return lower_band.tolist(), rolling_mean.tolist(), upper_band.tolist()
 
     @staticmethod
     def RSI(src, length=14):
@@ -68,7 +69,7 @@ class Indikator:
                 rs = up / down
                 rsi[i] = 100.0 - (100.0 / (1.0 + rs))
 
-        return rsi
+        return rsi.tolist()
     @staticmethod
     def PIVOT(high, low, close):
         pivot_point = (high + low + close) / 3
@@ -119,7 +120,7 @@ class Indikator:
         momentum = np.zeros(len(src))
         for i in range(length, len(src)):
             momentum[i] = src[i] - src[i - length]
-        return momentum
+        return momentum.tolist()
     @staticmethod
     def ATR(high, low, close, length=14):
         high = np.array(high)
@@ -137,7 +138,7 @@ class Indikator:
         for i in range(length, len(close)):
             atr[i] = (atr[i - 1] * (length - 1) + tr[i]) / length
 
-        return atr
+        return atr.tolist()
     @staticmethod
     def ADX(high, low, close, adxlen=14, dilen=14):
         high = np.array(high)
@@ -171,7 +172,7 @@ class Indikator:
         adx[adxlen - 1] = np.nanmean(dx[:adxlen])
         for i in range(adxlen, len(dx)):
             adx[i] = (adx[i - 1] * (adxlen - 1) + dx[i]) / adxlen
-        return adx
+        return adx.tolist()
     @staticmethod
     def Ichimoku_Bulutu(high, low):
         """

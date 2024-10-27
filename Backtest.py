@@ -15,9 +15,9 @@ class Backtest:
         high = []
         #Veri ithali
         if canli_veriler == False and hisse == False:   # Kayıtlı coin verileri
-            close = open("close-test.txt", "r").read().split(",")
-            low = open("low-test.txt", "r").read().split(",")
-            high = open("high-test.txt", "r").read().split(",")
+            close = open("Data/close-test.txt", "r").read().split(",")
+            low = open("Data/low-test.txt", "r").read().split(",")
+            high = open("Data/high-test.txt", "r").read().split(",")
             for i in range(len(close)):
                 close[i] = float(close[i])
                 low[i] = float(low[i])
@@ -385,8 +385,8 @@ class Backtest:
 
         if kayit_et:
             # Excel dosyasına yazma işlemi
-            output_file = "strategy_results.xlsx"
-
+            output_file = "Data/strategy_results.xlsx"
+            os.makedirs(os.path.dirname(output_file), exist_ok=True)
             # Eğer dosya varsa, mevcut verileri oku
             if os.path.exists(output_file):
                 existing_df = pd.read_excel(output_file, engine='openpyxl')

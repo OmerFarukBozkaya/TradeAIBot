@@ -63,7 +63,6 @@ class Tarama:
                 araclar.mail_gonder("HATA | Tarama",f"{strategy.__name__} {coin} {periyot} \n{hata}")
                 print(f"Tarama {periyot} Calisiyor ...", time.ctime())
                 continue  # Döngüye tekrar gir
-
     @staticmethod
     def Piyasa_Durumu():
         binance = Binance()

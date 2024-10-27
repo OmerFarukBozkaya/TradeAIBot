@@ -6,14 +6,6 @@ class IndikatorTest:
     def IndikatorResultTest(canli_veriler):
         test_indikator = IndikatorTest()
         indikator = Indikator()
-        close = open("close-test.txt", "r").read().split(",")
-        low = open("low-test.txt", "r").read().split(",")
-        high = open("high-test.txt", "r").read().split(",")
-
-        for i in range(len(close)):
-            close[i] = float(close[i])
-            low[i] = float(low[i])
-            high[i] = float(high[i])
 
         if canli_veriler:
             from Binance import Binance
@@ -24,20 +16,29 @@ class IndikatorTest:
             close = binance.data(coin, adet, periyot, 4)
             low = binance.data(coin, adet, periyot, 3)
             high = binance.data(coin, adet, periyot, 2)
+        else:
+            close = open("Data/close-test.txt", "r").read().split(",")
+            low = open("Data/low-test.txt", "r").read().split(",")
+            high = open("Data/high-test.txt", "r").read().split(",")
 
-        print(f"EMA: {indikator.EMA(close, 17)[-1] == test_indikator.EMA(close, 17)[-1]}")
-        print(f"SMA: {indikator.SMA(close, 17)[-1] == test_indikator.SMA(close, 17)[-1]}")
-        print(f"BB (low): {indikator.BB(close)[0][-1] == test_indikator.BB(close)[0][-1]}")
-        print(f"BB (mid): {indikator.BB(close)[1][-1] == test_indikator.BB(close)[1][-1]}")
-        print(f"BB (up): {indikator.BB(close)[2][-1] == test_indikator.BB(close)[2][-1]}")
-        print(f"RSI: {indikator.RSI(close)[-1] == test_indikator.RSI(close)[-1]}")
-        print(f"FIB: {indikator.FIB(close)[-1] == test_indikator.FIB(close)[-1]}")
-        print(f"MACD: {indikator.MACD(close)[-1] == test_indikator.MACD(close)[-1]}")
-        print(f"Momentum: {indikator.Momentum(close)[-1] == test_indikator.Momentum(close)[-1]}")
-        print(f"ATR: {indikator.ATR(high, low, close)[-1] == test_indikator.ATR(high, low, close)[-1]}")
-        print(f"ADX: {indikator.ADX(high, low, close)[-1] == test_indikator.ADX(high, low, close)[-1]}")
-        print(f"Ichimoku: {indikator.Ichimoku_Bulutu(high, low)[0][-1] == test_indikator.Ichimoku_Bulutu(high, low)[0][-1]}")
-        print(f"Donchain: {indikator.Donchian_Kanali(high, low)[0][-1] == test_indikator.Donchian_Kanali(high, low)[0][-1]}")
+            for i in range(len(close)):
+                close[i] = float(close[i])
+                low[i] = float(low[i])
+                high[i] = float(high[i])
+
+        print(f"EMA: {indikator.EMA(close, 17) == test_indikator.EMA(close, 17)}")
+        print(f"SMA: {indikator.SMA(close, 17) == test_indikator.SMA(close, 17)}")
+        print(f"BB (low): {indikator.BB(close)[0] == test_indikator.BB(close)[0]}")
+        print(f"BB (mid): {indikator.BB(close)[1] == test_indikator.BB(close)[1]}")
+        print(f"BB (up): {indikator.BB(close)[2] == test_indikator.BB(close)[2]}")
+        print(f"RSI: {indikator.RSI(close) == test_indikator.RSI(close)}")
+        print(f"FIB: {indikator.FIB(close) == test_indikator.FIB(close)}")
+        print(f"MACD: {indikator.MACD(close) == test_indikator.MACD(close)}")
+        print(f"Momentum: {indikator.Momentum(close) == test_indikator.Momentum(close)}")
+        print(f"ATR: {indikator.ATR(high, low, close) == test_indikator.ATR(high, low, close)}")
+        print(f"ADX: {indikator.ADX(high, low, close) == test_indikator.ADX(high, low, close)}")
+        print(f"Ichimoku: {indikator.Ichimoku_Bulutu(high, low)[0] == test_indikator.Ichimoku_Bulutu(high, low)[0]}")
+        print(f"Donchain: {indikator.Donchian_Kanali(high, low)[0] == test_indikator.Donchian_Kanali(high, low)[0]}")
 
     @staticmethod
     def EMA(src, length):
@@ -46,14 +47,21 @@ class IndikatorTest:
         for i in range(1, len(src)):
             ema.append(alpha * src[i] + (1 - alpha) * ema[-1])
         return ema
+
     @staticmethod
     def SMA(src, length):
+        if len(src) < length:
+            return None
+
         sma_list = []
         for i in range(len(src)):
             if i + 1 < length:
-                sma_list.append(None)  # Yeterli pencere yoksa None ekleniyor
+                # Eğer pencere boyutuna ulaşmadıysa None ekleyelim
+                sma_list.append(None)
             else:
+                # Pencereye uygun olan kısım için ortalama alalım
                 sma_list.append(np.mean(src[i + 1 - length:i + 1]))
+
         return sma_list
     @staticmethod
     def BB(src, length=20):
@@ -67,7 +75,7 @@ class IndikatorTest:
         rolling_mean = np.concatenate([np.full(length - 1, None), rolling_mean])
         upper_band = np.concatenate([np.full(length - 1, None), upper_band])
 
-        return lower_band, rolling_mean, upper_band
+        return lower_band.tolist(), rolling_mean.tolist(), upper_band.tolist()
     @staticmethod
     def RSI(src, length=14):
         deltas = np.diff(src)  # Fiyat değişimlerini hesapla
@@ -99,7 +107,7 @@ class IndikatorTest:
                 rs = up / down
                 rsi[i] = 100.0 - (100.0 / (1.0 + rs))
 
-        return rsi
+        return rsi.tolist()
 
     @staticmethod
     def FIB(src):
@@ -143,7 +151,7 @@ class IndikatorTest:
         momentum = np.zeros(len(src))
         for i in range(length, len(src)):
             momentum[i] = src[i] - src[i - length]
-        return momentum
+        return momentum.tolist()
     @staticmethod
     def ATR(high, low, close, length=14):
         high = np.array(high)
@@ -161,7 +169,7 @@ class IndikatorTest:
         for i in range(length, len(close)):
             atr[i] = (atr[i - 1] * (length - 1) + tr[i]) / length
 
-        return atr
+        return atr.tolist()
     @staticmethod
     def ADX(high, low, close, adxlen=14, dilen=14):
         high = np.array(high)
@@ -201,7 +209,7 @@ class IndikatorTest:
         for i in range(adxlen, len(dx)):
             adx[i] = (adx[i - 1] * (adxlen - 1) + dx[i]) / adxlen
 
-        return adx
+        return adx.tolist()
     @staticmethod
     def Ichimoku_Bulutu(high, low):
         """

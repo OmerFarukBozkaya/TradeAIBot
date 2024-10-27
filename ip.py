@@ -38,13 +38,16 @@ def kontrol_ve_mail_gonder():
         # Eğer internet bağlantısı varsa ve IP değişmişse
         if current_ip:
             # Dosya mevcut değilse oluştur
-            if not os.path.exists("ip.txt"):
-                with open("ip.txt", "w") as dosya_yaz:
+            path = "Data/ip.txt"
+            os.makedirs(os.path.dirname(path), exist_ok=True)
+            if not os.path.exists(path):
+                with open(path, "w") as dosya_yaz:
                     dosya_yaz.write(current_ip)
                 return  # İlk seferde mail göndermeye gerek yok
 
             # Dosya varsa IP adresini oku ve karşılaştır
-            with open("ip.txt", "r") as dosya_oku:
+
+            with open(path, "r") as dosya_oku:
                 eski_ip = dosya_oku.readline().strip()
 
             # Yeni ve eski IP aynı ise mail gönderme
@@ -55,7 +58,7 @@ def kontrol_ve_mail_gonder():
             araclar.mail_gonder("IP Değişti", f"Yeni IP: {current_ip}")
 
             # Dosyayı güncelle
-            with open("ip.txt", "w") as dosya_yaz:
+            with open(path, "w") as dosya_yaz:
                 dosya_yaz.write(current_ip)
     except Exception as e:
         hata_mesaji = traceback.format_exc()
