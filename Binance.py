@@ -53,30 +53,39 @@ class Binance:
                 toplam_deger = toplam_deger + (self.data(i,1,"1m",4)[-1] * float(cuzdan[i]))
         return toplam_deger
     def coin_list(self):
-        exchange_info = self.client.get_exchange_info()
-        list_coin = []
-        for s in exchange_info['symbols']:
-            if (s['symbol'][-4:] == "USDT" and s['symbol'][-6:] != "UPUSDT" and s['symbol'][-8:] != "DOWNUSDT" and s[
-                                                                                                                       'symbol'][
-                                                                                                                   -8:] != "BULLUSDT" and
-                    s['symbol'][-8:] != "BEARUSDT" and s['symbol'] != "USDCUSDT" and s['symbol'] != "USDSUSDT" and s[
-                        'symbol'] != "BCCUSDT" and s['symbol'] != "TUSDUSDT" and s['symbol'] != "PAXUSDT" and s[
-                        'symbol'] != "BCHABCUSDT" and s['symbol'] != "BCHSVUSDT" and s['symbol'] != "ONGUSDT" and s[
-                        'symbol'] != "TFUELUSDT" and s['symbol'] != "USDSBUSDT" and s['symbol'] != "ERDUSDT" and s[
-                        'symbol'] != "NPXSUSDT" and s['symbol'] != "STORMUSDT" and s['symbol'] != "BUSDUSDT" and s[
-                        'symbol'] != "EURUSDT" and s['symbol'] != "DREPUSDT" and s['symbol'] != "STRATUSDT" and s[
-                        'symbol'] != "XZCUSDT" and s['symbol'] != "GXSUSDT" and s['symbol'] != "LENDUSDT" and s[
-                        'symbol'] != "BKRWUSDT" and s['symbol'] != "GBPUSDT" and s['symbol'] != "DAIUSDT" and s[
-                        'symbol'] != "AUDUSDT" and s['symbol'] != "YFIUSDT" and s['symbol'] != "PAXGUSDT" and s[
-                        'symbol'] != "WINXUSDT" and s['symbol'] != "YFIIUSDT" and s['symbol'] != "SUSDUSDT" and s[
-                        'symbol'] != "JUVUSDT" and s['symbol'] != "PSGUSDT" and s['symbol'] != "OGUSDT" and s[
-                        'symbol'] != "ATMUSDT" and s['symbol'] != "ASRUSDT" and s['symbol'] != "ACMUSDT" and s[
-                        'symbol'] != "BTGUSDT" and s['symbol'] != "BARUSDT" and s['symbol'] != "KLAYUSDT" and s[
-                        'symbol'] != "HCUSDT" and s['symbol'] != "MKRUSDT" and s['symbol'] != "MCOUSDT" and s[
-                        'symbol'] != "USDPUSDT" and s['symbol'] != "BZRXUSDT" and s['symbol'] != "VENUSDT" and s[
-                        'symbol'] != "GTOUSDT" and s['symbol'] != "SRMUSDT"):
-                list_coin.append(s['symbol'])
-        return list_coin
+        result = ['BTCUSDT', 'ETHUSDT', 'BNBUSDT', 'NEOUSDT', 'LTCUSDT', 'QTUMUSDT', 'ADAUSDT', 'XRPUSDT',
+                  'EOSUSDT', 'IOTAUSDT', 'XLMUSDT', 'ONTUSDT', 'TRXUSDT', 'ETCUSDT', 'ICXUSDT', 'NULSUSDT',
+                  'VETUSDT', 'LINKUSDT', 'WAVESUSDT', 'BTTUSDT', 'ONGUSDT', 'HOTUSDT', 'ZILUSDT', 'ZRXUSDT',
+                  'FETUSDT', 'BATUSDT', 'ZECUSDT', 'IOSTUSDT', 'CELRUSDT', 'DASHUSDT', 'NANOUSDT',
+                  'OMGUSDT', 'THETAUSDT', 'ENJUSDT', 'MITHUSDT', 'MATICUSDT', 'ATOMUSDT', 'ONEUSDT', 'FTMUSDT',
+                  'ALGOUSDT', 'GTOUSDT', 'DOGEUSDT', 'DUSKUSDT', 'ANKRUSDT', 'WINUSDT', 'COSUSDT', 'TOMOUSDT',
+                  'PERLUSDT', 'DENTUSDT', 'MFTUSDT', 'KEYUSDT', 'DOCKUSDT', 'WANUSDT', 'FUNUSDT', 'CVCUSDT',
+                  'CHZUSDT', 'BANDUSDT', 'BEAMUSDT', 'XTZUSDT', 'RENUSDT', 'RVNUSDT', 'HBARUSDT', 'NKNUSDT',
+                  'STXUSDT', 'KAVAUSDT', 'ARPAUSDT', 'IOTXUSDT', 'RLCUSDT', 'CTXCUSDT', 'TROYUSDT', 'VITEUSDT',
+                  'FTTUSDT', 'OGNUSDT', 'DREPUSDT', 'TCTUSDT', 'WRXUSDT', 'BTSUSDT', 'LSKUSDT', 'BNTUSDT', 'LTOUSDT',
+                  'AIONUSDT', 'MBLUSDT', 'COTIUSDT', 'STPTUSDT', 'WTCUSDT', 'DATAUSDT', 'SOLUSDT', 'CTSIUSDT', 'HIVEUSDT',
+                  'CHRUSDT', 'ARDRUSDT', 'MDTUSDT', 'STMXUSDT', 'KNCUSDT', 'LRCUSDT', 'PNTUSDT', 'COMPUSDT', 'SCUSDT',
+                  'ZENUSDT', 'SNXUSDT', 'VTHOUSDT', 'DGBUSDT', 'GBPUSDT', 'SXPUSDT', 'MKRUSDT', 'DCRUSDT', 'STORJUSDT',
+                  'MANAUSDT', 'AUDUSDT', 'YFIUSDT', 'BALUSDT', 'BLZUSDT', 'IRISUSDT', 'KMDUSDT', 'JSTUSDT', 'ANTUSDT',
+                  'CRVUSDT', 'SANDUSDT', 'OCEANUSDT', 'NMRUSDT', 'DOTUSDT', 'LUNAUSDT', 'RSRUSDT', 'PAXGUSDT', 'WNXMUSDT',
+                  'TRBUSDT', 'SUSHIUSDT', 'YFIIUSDT', 'KSMUSDT', 'EGLDUSDT', 'DIAUSDT', 'RUNEUSDT', 'FIOUSDT', 'UMAUSDT',
+                  'BELUSDT', 'WINGUSDT', 'UNIUSDT', 'OXTUSDT', 'SUNUSDT', 'AVAXUSDT', 'FLMUSDT', 'ORNUSDT', 'UTKUSDT',
+                  'XVSUSDT', 'ALPHAUSDT', 'AAVEUSDT', 'NEARUSDT', 'FILUSDT', 'INJUSDT', 'AUDIOUSDT', 'CTKUSDT', 'AKROUSDT',
+                  'AXSUSDT', 'HARDUSDT', 'STRAXUSDT', 'ROSEUSDT', 'AVAUSDT', 'XEMUSDT', 'SKLUSDT', 'GRTUSDT', 'JUVUSDT',
+                  'PSGUSDT', '1INCHUSDT', 'REEFUSDT', 'OGUSDT', 'ATMUSDT', 'ASRUSDT', 'CELOUSDT', 'RIFUSDT', 'TRUUSDT',
+                  'CKBUSDT', 'FIROUSDT', 'LITUSDT', 'SFPUSDT', 'DODOUSDT', 'CAKEUSDT', 'ACMUSDT', 'BADGERUSDT', 'FISUSDT',
+                  'OMUSDT', 'PONDUSDT', 'DEGOUSDT', 'ALICEUSDT', 'LINAUSDT', 'PERPUSDT', 'SUPERUSDT', 'CFXUSDT', 'TKOUSDT',
+                  'PUNDIXUSDT', 'TLMUSDT', 'BARUSDT', 'FORTHUSDT', 'BAKEUSDT', 'BURGERUSDT', 'SLPUSDT', 'SHIBUSDT', 'ICPUSDT',
+                  'ARUSDT', 'POLSUSDT', 'MDXUSDT', 'MASKUSDT', 'LPTUSDT', 'XVGUSDT', 'ATAUSDT', 'GTCUSDT', 'ERNUSDT', 'KLAYUSDT',
+                  'PHAUSDT', 'BONDUSDT', 'MLNUSDT', 'DEXEUSDT', 'C98USDT', 'CLVUSDT', 'QNTUSDT', 'FLOWUSDT', 'MINAUSDT', 'RAYUSDT',
+                  'FARMUSDT', 'ALPACAUSDT', 'QUICKUSDT', 'MBOXUSDT', 'FORUSDT', 'REQUSDT', 'GHSTUSDT', 'WAXPUSDT', 'GNOUSDT',
+                  'XECUSDT', 'ELFUSDT', 'DYDXUSDT', 'IDEXUSDT', 'VIDTUSDT', 'GALAUSDT', 'ILVUSDT', 'YGGUSDT', 'SYSUSDT', 'DFUSDT',
+                  'FIDAUSDT', 'FRONTUSDT', 'CVPUSDT', 'AGLDUSDT', 'RADUSDT', 'BETAUSDT', 'RAREUSDT', 'LAZIOUSDT', 'CHESSUSDT',
+                  'ADXUSDT', 'AUCTIONUSDT', 'DARUSDT', 'MOVRUSDT', 'CITYUSDT', 'ENSUSDT', 'KP3RUSDT', 'QIUSDT', 'PORTOUSDT',
+                  'POWRUSDT', 'VGXUSDT', 'JASMYUSDT', 'AMPUSDT', 'PYRUSDT', 'ALCXUSDT', 'SANTOSUSDT', 'BICOUSDT', 'FLUXUSDT',
+                  'FXSUSDT', 'VOXELUSDT', 'HIGHUSDT', 'CVXUSDT', 'PEOPLEUSDT', 'OOKIUSDT', 'SPELLUSDT', 'JOEUSDT', 'ACHUSDT',
+                  'IMXUSDT', 'GLMRUSDT', 'LOKAUSDT', 'SCRTUSDT', 'API3USDT', 'BTTCUSDT', 'ACAUSDT', 'XNOUSDT']
+        return result
     def minimum_hareket(self,basamak):
         if (basamak == 1):
             return 0
