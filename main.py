@@ -26,7 +26,10 @@ print("""
 """)
 com = input("Ne yapılacak :")
 if com=="0":
+    a=time.time()
     araclar.veri_seti_olustur("BTCUSDT","15m")
+    b=time.time()
+    print(araclar.saniye_to_hms(b - a))
 if com == "1":
     a = time.time()
     for i in binance.secili_list():
@@ -37,43 +40,62 @@ if com == "1":
     b=time.time()
     print(araclar.saniye_to_hms(b-a))
 elif com == "2":
+    a=time.time()
     indikator_test.IndikatorResultTest(True)
+    b=time.time()
+    print(araclar.saniye_to_hms(b - a))
 elif com == "3":
     periyot = input("Periyot (15m,1h,4h,1d):")
     coin = input("Coin:")
     select_strategy=input("Gösterilecek strategy:")
+    a=time.time()
     if select_strategy=="":
         select_strategy=None
     backtest.Test(canli_veriler=True,periyot=periyot,coin=coin, selected_strategy_name=select_strategy)
+    b=time.time()
+    print(araclar.saniye_to_hms(b-a))
 elif com == "4":
+    coinlist = binance.coin_list()
     periyot=input("Periyot (15m,1h,4h,1d):")
-    Tarama.Tara(binance.secili_list(), periyot)
+    a=time.time()
+    Tarama.Tara(coinlist, periyot)
+    b=time.time()
+    print(araclar.saniye_to_hms(b-a))
 elif com == "5":
-    coinlist=[]
+    coinlist=binance.coin_list()
     periyot = input("Periyot (15m,1h,4h,1d):")
     gercek = input("Gercek:") == "True"
     nakit= float(input("Nakit:").replace(",","."))
-    sonislem=input("Son islem:")
-    if sonislem=="AL":
-        coin=input("Coin:")
-        coinlist.append(coin)
-    else:
-        coinlist=binance.secili_list()
-    trade.TradeEt(coinlist,periyot,sonislem,gercek,nakit)
+    a=time.time()
+    trade.TradeEt(coinlist,periyot,gercek,nakit)
+    b=time.time()
+    print(araclar.saniye_to_hms(b-a))
 elif com == "6":
+    a=time.time()
     coin=input("Coin:")
     periyot = input("Periyot (15m,1h,4h,1d):")
     araclar.coin_indikator_degerleri(coin,periyot)
+    b=time.time()
+    print(araclar.saniye_to_hms(b - a))
 elif com == "7":
     coin = input("Coin:")
     periyot = input("Periyot (15m,1h,4h,1d):")
+    a=time.time()
     if periyot not in ["15m","1h","4h","1d"]:
         for i in ["15m","1h","4h","1d"]:
             print(i)
             araclar.coin_strateji_degerleri(coin,i)
     else:
         araclar.coin_strateji_degerleri(coin, periyot)
+    b=time.time()
+    print(araclar.saniye_to_hms(b-a))
 elif com == "8":
+    a=time.time()
     raspi_status.list_system_info()
+    b=time.time()
+    print(araclar.saniye_to_hms(b - a))
 elif com == "9":
-    print(Tarama.Piyasa_Durumu())
+    a=time.time()
+    print(Tarama.Piyasa_Durumu(binance.coin_list()))
+    b=time.time()
+    print(araclar.saniye_to_hms(b-a))
