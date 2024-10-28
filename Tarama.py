@@ -7,7 +7,6 @@ import pandas as pd
 import numpy as np
 from concurrent.futures import ThreadPoolExecutor
 import concurrent.futures
-from concurrent.futures import ProcessPoolExecutor
 class Tarama:
     @staticmethod
     def Tara(coinlist, periyot, mum_bekle=True):
@@ -64,7 +63,6 @@ class Tarama:
                     araclar.mail_gonder(f"Tarama | {periyot}", mesaj)
 
                 mum_bekle = True
-                return
                 time.sleep(10)
             except Exception:
                 mum_bekle = False
@@ -93,7 +91,7 @@ class Tarama:
             return {}
 
     @staticmethod
-    def Piyasa_Durumu(coins):
+    def Piyasa_Durumu(coinlist):
         binance = Binance()
         strategys = {
             "15m": [Stratejiler.BB_RSI, Stratejiler.BB_ADX, Stratejiler.BB_Close],
@@ -105,7 +103,7 @@ class Tarama:
 
         strategies_columns = {period: [strat.__name__ for strat in period_strategies] for period, period_strategies in
                               strategys.items()}
-        result_table = pd.DataFrame(index=coins, columns=strategies_columns.keys())
+        result_table = pd.DataFrame(index=coinlist, columns=strategies_columns.keys())
 
         def calculate_strategy(coin, period, strategy, high, low, close):
             result = strategy(high, low, close)
@@ -130,7 +128,7 @@ class Tarama:
 
         # Sonuçları toplamak için bir sözlük
         with ThreadPoolExecutor() as executor:
-            for coin in coins:
+            for coin in coinlist:
                 futures = {executor.submit(process_coin_for_period, coin, period): period for period in
                            strategys.keys()}
                 coin_results = {}
