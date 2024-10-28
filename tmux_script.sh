@@ -1,21 +1,18 @@
 #!/bin/bash
 
-# tmux oturumu adı
+# Tmux oturumu adı
 SESSION_NAME="trading_session"
-
 # Python script'in tam yolu
 SCRIPT_PATH="./main.py"  # Kendi script dosyanızın yolunu yazın
 
-# Periyot listeleri
-TARAMA_PERIODS=("15m" "1h" "4h" "1d")
-TRADE_PERIODS=("15m" "1h" "4h" "1d")
+# Tarama ve Trade işlemleri için periyot listeleri
+PERIODS=("15m" "1h" "4h" "1d")
 
 # Yeni bir tmux oturumu başlatın
 tmux new-session -d -s $SESSION_NAME
 
 # Tarama işlemleri için tmux pencereleri aç
-for i in "${!TARAMA_PERIODS[@]}"; do
-    period=${TARAMA_PERIODS[$i]}
+for period in "${PERIODS[@]}"; do
     tmux new-window -t $SESSION_NAME -n "Tarama_$period" "python3 $SCRIPT_PATH << EOF
 4
 $period
@@ -24,14 +21,12 @@ EOF
 done
 
 # Trade işlemleri için tmux pencereleri aç
-for i in "${!TRADE_PERIODS[@]}"; do
-    period=${TRADE_PERIODS[$i]}
+for period in "${PERIODS[@]}"; do
     tmux new-window -t $SESSION_NAME -n "Trade_$period" "python3 $SCRIPT_PATH << EOF
 5
 $period
-False
-1000
-SAT
+False  # 'gercek' parametresi için True değeri
+100  # 'nakit' miktarı için örnek değer
 EOF
     bash"
 done
