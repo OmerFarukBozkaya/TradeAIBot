@@ -4,71 +4,15 @@ from Stratejiler import Stratejiler
 import time
 import traceback
 import pandas as pd
-from concurrent.futures import ThreadPoolExecutor
 import numpy as np
+from concurrent.futures import ThreadPoolExecutor
+import concurrent.futures
+from concurrent.futures import ProcessPoolExecutor
 class Tarama:
     @staticmethod
-    def Tara(coinlist,periyot):
+    def Tara(coinlist, periyot, mum_bekle=True):
         binance = Binance()
         araclar = Araclar()
-        mum_bekle=True
-        strategys = {"15m": [Stratejiler.BB_RSI, Stratejiler.BB_ADX, Stratejiler.BB_Close],
-                     "1h": [Stratejiler.BB_RSI, Stratejiler.TSO, Stratejiler.FDI, Stratejiler.BB_ADX,Stratejiler.BB_Close],
-                     "4h": [Stratejiler.DMO, Stratejiler.FDI, Stratejiler.VMZI],
-                     "1d": [Stratejiler.MACD, Stratejiler.DMO, Stratejiler.VAMA, Stratejiler.VMZI, Stratejiler.MA_Cross,Stratejiler.FDI]}
-        print(f"Tarama {periyot} Calisiyor ...", time.ctime())
-        while True:
-            try:
-                result={}
-                for strategy in strategys[periyot]:
-                    result[strategy.__name__] = {}
-                    result[strategy.__name__]["BUY"] = []
-                    result[strategy.__name__]["SELL"] = []
-                if mum_bekle:
-                    araclar.mum_olusmasini_bekle(periyot)
-                for coin in coinlist:
-                    #   Veri ithali
-                    close = binance.data(coin, 1000, periyot, 4)
-                    low = binance.data(coin, 1000, periyot, 3)
-                    high = binance.data(coin, 1000, periyot, 2)
-
-                    for strategy in strategys[periyot]:
-                        calculate = strategy(high,low,close)
-                        if  calculate == None or calculate == False:
-                            continue
-                        elif calculate == "BUY":
-                            result[strategy.__name__]["BUY"].append(coin)
-                        elif calculate == "SELL":
-                            result[strategy.__name__]["SELL"].append(coin)
-                mesaj = ""
-                gonder = False
-                for strategy in result.keys():
-                    if len(result[strategy]["BUY"]) > 0 or len(result[strategy]["SELL"]) > 0:
-                        gonder = True
-                        mesaj = (mesaj +
-                                 f"{strategy}\n"
-                                 f"BUY:\n"
-                                 f"{result[strategy]['BUY']}\n"
-                                 f"SELL:\n"
-                                 f"{result[strategy]['SELL']}\n\n")
-                if gonder:
-                    araclar.mail_gonder(f"Tarama | {periyot}",mesaj)
-                mum_bekle=True
-                time.sleep(10)
-            except Exception:
-                mum_bekle=False
-                hata = traceback.format_exc()
-                print(f"Bir hata olustu: {hata}, {time.ctime()}")
-                time.sleep(5)  # Küçük bir gecikme sonrası tekrar dene
-                araclar.mail_gonder("HATA | Tarama",f"{strategy.__name__} {coin} {periyot} \n{hata}")
-                print(f"Tarama {periyot} Calisiyor ...", time.ctime())
-                continue  # Döngüye tekrar gir
-    @staticmethod
-    def Piyasa_Durumu():
-        binance = Binance()
-        coins = binance.secili_list()
-
-        # Periyoda göre stratejiler
         strategys = {
             "15m": [Stratejiler.BB_RSI, Stratejiler.BB_ADX, Stratejiler.BB_Close],
             "1h": [Stratejiler.BB_RSI, Stratejiler.TSO, Stratejiler.FDI, Stratejiler.BB_ADX, Stratejiler.BB_Close],
@@ -77,59 +21,129 @@ class Tarama:
                    Stratejiler.FDI]
         }
 
-        # Sütun isimlerini oluştur
+        print(f"Tarama {periyot} Calisiyor ...", time.ctime())
+
+        while True:
+            try:
+                result = {strategy.__name__: {"BUY": [], "SELL": []} for strategy in strategys[periyot]}
+
+                if mum_bekle:
+                    araclar.mum_olusmasini_bekle(periyot)
+
+                # Coin verilerini paralel olarak çekme ve işleme
+                with concurrent.futures.ThreadPoolExecutor() as executor:
+                    future_to_coin = {
+                        executor.submit(Tarama.process_coin_data, binance, coin, periyot, strategys[periyot]): coin
+                        for coin in coinlist
+                    }
+
+                    # Sonuçları toplama
+                    for future in concurrent.futures.as_completed(future_to_coin):
+                        coin = future_to_coin[future]
+                        try:
+                            coin_results = future.result()
+                            for strategy_name, signal in coin_results.items():
+                                if signal == "BUY":
+                                    result[strategy_name]["BUY"].append(coin)
+                                elif signal == "SELL":
+                                    result[strategy_name]["SELL"].append(coin)
+                        except Exception as e:
+                            print(f"{coin} için işlem hatası: {e}")
+                            continue
+
+                # E-posta gönderme
+                mesaj, gonder = "", False
+                for strategy in result.keys():
+                    if result[strategy]["BUY"] or result[strategy]["SELL"]:
+                        gonder = True
+                        mesaj += (f"{strategy}\n"
+                                  f"BUY:\n{result[strategy]['BUY']}\n"
+                                  f"SELL:\n{result[strategy]['SELL']}\n\n")
+
+                if gonder:
+                    araclar.mail_gonder(f"Tarama | {periyot}", mesaj)
+
+                mum_bekle = True
+                return
+                time.sleep(10)
+            except Exception:
+                mum_bekle = False
+                hata = traceback.format_exc()
+                print(f"Bir hata olustu: {hata}, {time.ctime()}")
+                time.sleep(5)
+                araclar.mail_gonder("HATA | Tarama", f"{periyot} \n{hata}")
+                continue
+
+    @staticmethod
+    def process_coin_data(binance, coin, periyot, strategies):
+        """ Tekil bir coin için veriyi çekip stratejileri çalıştırır """
+        try:
+            close = np.array(binance.data(coin, 1000, periyot, 4))
+            low = np.array(binance.data(coin, 1000, periyot, 3))
+            high = np.array(binance.data(coin, 1000, periyot, 2))
+
+            coin_results = {}
+            for strategy in strategies:
+                calculate = strategy(high, low, close)
+                if calculate == "BUY" or calculate == "SELL":
+                    coin_results[strategy.__name__] = calculate
+            return coin_results
+        except Exception as e:
+            print(f"Veri işleme hatası ({coin}): {e}")
+            return {}
+
+    @staticmethod
+    def Piyasa_Durumu(coins):
+        binance = Binance()
+        strategys = {
+            "15m": [Stratejiler.BB_RSI, Stratejiler.BB_ADX, Stratejiler.BB_Close],
+            "1h": [Stratejiler.BB_RSI, Stratejiler.TSO, Stratejiler.FDI, Stratejiler.BB_ADX, Stratejiler.BB_Close],
+            "4h": [Stratejiler.DMO, Stratejiler.FDI, Stratejiler.VMZI],
+            "1d": [Stratejiler.MACD, Stratejiler.DMO, Stratejiler.VAMA, Stratejiler.VMZI, Stratejiler.MA_Cross,
+                   Stratejiler.FDI]
+        }
+
         strategies_columns = {period: [strat.__name__ for strat in period_strategies] for period, period_strategies in
                               strategys.items()}
-
-        # Sonuç tablosunu oluştur
         result_table = pd.DataFrame(index=coins, columns=strategies_columns.keys())
-
-        # Tüm sütunları görmek için ayarları yapılandırın
-        pd.set_option('display.max_columns', None)
-        pd.set_option('display.expand_frame_repr', False)
 
         def calculate_strategy(coin, period, strategy, high, low, close):
             result = strategy(high, low, close)
             return 1 if result == "BUY" else -1 if result == "SELL" else 0
 
+        # Her period ve coin için stratejileri hesapla ve ortalama sonuçları döndür
+        def process_coin_for_period(coin, period):
+            close = np.array(binance.data(coin, 1000, period, 4))
+            low = np.array(binance.data(coin, 1000, period, 3))
+            high = np.array(binance.data(coin, 1000, period, 2))
+            if high is None or low is None or close is None:
+                print(f"Veri çekiminde hata: Coin: {coin}, Periyot: {period}")
+                return period, np.nan  # Hata durumunda NaN dön
+
+            results = []
+            for strategy in strategys[period]:
+                result = calculate_strategy(coin, period, strategy, high, low, close)
+                results.append(result)
+
+            # Ortalama sonucu hesapla ve döndür
+            return period, round(np.nanmean(results), 2)
+
         # Sonuçları toplamak için bir sözlük
-        results_count = {coin: {period: [] for period in strategys.keys()} for coin in coins}
+        with ThreadPoolExecutor() as executor:
+            for coin in coins:
+                futures = {executor.submit(process_coin_for_period, coin, period): period for period in
+                           strategys.keys()}
+                coin_results = {}
 
-        for period, period_strategies in strategys.items():
-            with ThreadPoolExecutor() as executor:
-                futures = []
-                for coin in coins:
-                    high = binance.data(coin, 1000, period, 2)
-                    low = binance.data(coin, 1000, period, 3)
-                    close = binance.data(coin, 1000, period, 4)
+                for future in futures:
+                    period, result = future.result()
+                    coin_results[period] = result
 
-                    # Verileri kontrol et
-                    if high is None or low is None or close is None:
-                        print(f"Veri çekiminde hata: Coin: {coin}, Periyot: {period}")
-                        continue  # Veri yoksa sonraki coin'e geç
+                # Sonuçları DataFrame'e kaydet
+                for period, avg_result in coin_results.items():
+                    result_table.loc[coin, period] = avg_result
 
-                    for strategy in period_strategies:
-                        future = executor.submit(calculate_strategy, coin, period, strategy, high, low, close)
-                        futures.append((coin, period, future))
-
-                for coin, period, future in futures:
-                    try:
-                        result = future.result()
-                        results_count[coin][period].append(result)  # Sonucu listeye ekle
-                    except Exception as e:
-                        print(f"Hata oluştu: {e}")
-                        results_count[coin][period].append(np.nan)  # Hata durumunda NaN olarak ekle
-
-        # Ortalamaları hesapla ve tabloya yaz
-        for coin in coins:
-            for period in results_count[coin]:
-                results = results_count[coin][period]
-                if results:  # Eğer sonuçlar varsa
-                    average = np.nanmean(results)  # NaN'leri atlayarak ortalama al
-                    result_table.loc[coin, period] = round(average, 2)  # Ortalamayı iki ondalık basamakla yaz
-
-        # Toplam ortalamayı hesaplamak için bir sütun ekleyin
-        result_table['Toplam Ortalama'] = result_table.fillna(0).mean(axis=1).round(
-            2)  # NaN'leri sıfırla doldur ve iki ondalık basamakla yuvarla
-
+        # Toplam ortalamayı hesapla ve tabloya ekle
+        result_table['Toplam Ortalama'] = result_table.fillna(0).mean(axis=1).round(2)
+        result_table.to_excel("Data/piyasa_durumu.xlsx")
         return result_table
