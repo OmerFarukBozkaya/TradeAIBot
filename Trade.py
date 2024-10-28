@@ -22,109 +22,6 @@ class Trade:
     def __init__(self):
         self.binance = Binance()
         self.araclar = Araclar()
-    def iskelet(self, coinlist, periyot, gercek, nakit,sonislem="SAT", stop_lose_var=True,stop_takip=False, mumbekle=True, alis_fiyati=0,strategy_name=None):
-        """
-        Değiştirilmesi gereken değerler:
-        0)Stratejinin adı
-        1)Alıncak fiyat verileri
-        2)Indikatörler ve indikatörün sağlıklı sonuç verebilmesi için merekli olan minimum veri miktarı
-        3)Alım şartı
-        4)Stop lose takip etmesi için gerekli şart
-        5)Stop lose değeri hesaplama
-        6)Stop lose varsayılan değeri hesaplama
-        7)Hedeflenen satış şartı
-        8)Hata oluştuğunda tekrardan çağırılacak fonksiyon
-        """
-        binance = Binance()
-        araclar = Araclar()
-        alis=alis_fiyati
-        strateji_adi = "iskelet"    # [0]
-        logging.info(f"{periyot} {strateji_adi} Calisiyor ... {gercek}")
-        print(f"{periyot} {strateji_adi} Calisiyor ... {gercek}", time.ctime())
-        while sonislem == "AL":
-            try:
-                if mumbekle:
-                    araclar.mum_olusmasini_bekle(periyot)
-
-                sahip_olduklarim = binance.sahip_olduklarim()
-
-                if sonislem == "SAT":
-                    coinlist=araclar.listeden_sahip_olduklarimi_cikar(coinlist)
-
-                for coin in coinlist:
-                    # Veri çek
-                    # [1]
-                    close = binance.data(coin, 1000, periyot, 4)
-
-                    # AL işlemi
-                    if sonislem == "SAT":
-                        if close is not None: # Alım şartı [3]
-                            sonislem = "AL"
-                            adet = round((nakit / close[-1]), binance.minimum_hareket(
-                                float(binance.client.get_symbol_info(coin)["filters"][1]["minQty"])))
-
-                            logging.info(f"AL | {coin} alındı, Adet: {adet}, Fiyat: {close[-1]}")
-                            islemgecmisi.info(f"{strateji_adi} AL | {coin} alındı, Adet: {adet}, Fiyat: {close[-1]}")
-                            alis=close[-1]
-                            if gercek:  # Gerçek işlem mi kontrol et
-                                print("Gercekten alindi")
-                                binance.al(coin, adet)
-
-                            araclar.mail_gonder(f"AL | {strateji_adi} {periyot}", f"{coin} alindi, Maliyet: {close[-1]} USDT")
-                            coinlist = [coin]
-                            break
-
-                    # Satış işlemleri
-                    else:
-                        if stop_lose_var:
-                            # Stop-Lose hesapla
-                            if (close or stop_takip): # Takip etmesi için gereken şart  # [4]
-                                stop_lose = close  # Yeni stop lose     # [5]
-                                stop_takip = True
-                            else:
-                                stop_lose = close # Varsayılan stop lose    # [6]
-
-                            # Stop-Lose
-                            if close[-1] < stop_lose: # Stop lose kontrolü
-                                sonislem = "SAT"
-                                adet = 0
-                                adim = binance.minimum_hareket(
-                                    float(binance.client.get_symbol_info(coin)["filters"][1]["minQty"]))
-                                logging.info(f"SAT [Stop Lose]| {coin} satıldı, Adet: {adet}, Fiyat: {close[-1]}")
-                                islemgecmisi.info(
-                                    f"{strateji_adi} SAT [Stop Lose] | {coin} satıldı, Adet: {adet}, Fiyat: {close[-1]}, Kar/Zarar: {round((((close[-1]/alis)-1) * 100),2)} %")
-                                if gercek:
-                                    print("Gercekten satildi")
-                                    mevcut_adedim = sahip_olduklarim[coin]
-                                    adet = round(mevcut_adedim - (mevcut_adedim % float(adim)), adim)
-                                    binance.sat(coin, adet)
-
-                                araclar.mail_gonder(f"SAT [Stop Lose] | {strateji_adi} {periyot}", f"{coin} satildi")
-                                return
-                        # SAT işlemi
-                        if close:   # Hedeflenen satış şartı    # [7]
-                            sonislem = "SAT"
-                            adet = 0
-                            adim = binance.minimum_hareket(
-                                float(binance.client.get_symbol_info(coin)["filters"][1]["minQty"]))
-                            logging.info(f"SAT | {coin} satıldı, Adet: {adet}, Fiyat: {close[-1]}")
-                            islemgecmisi.info(f"{strateji_adi} SAT | {coin} satıldı, Adet: {adet}, Fiyat: {close[-1]}")
-                            if gercek:
-                                print("Gercekten satildi")
-                                mevcut_adedim = sahip_olduklarim[coin]
-                                adet = round(mevcut_adedim - (mevcut_adedim % float(adim)), adim)
-                                binance.sat(coin, adet)
-
-                            araclar.mail_gonder(f"SAT | {strateji_adi} {periyot}", f"{coin} satildi")
-                            return
-
-            except Exception:
-                # Hata durumunda tekrar çalıştırma
-                hata = traceback.format_exc()
-                logging.error(f"Hata oluştu: {hata}")
-                araclar.mail_gonder(f"HATA | {strateji_adi} {periyot}", hata)
-                self.iskelet(coinlist, periyot, gercek, sonislem, nakit,stop_lose_var,stop_takip,mumbekle,alis)     # [8]
-
     def TradeEt(self,coinlist,periyot,sonislem,gercek,nakit,sell_strategy=None):
         temp=coinlist
         cik=False
@@ -161,6 +58,7 @@ class Trade:
                         cik = False
                         break
                     elif sonislem == "AL":
+                        logging.info(f"DURUM : {periyot} {sell_strategy.__name__} Kar/Zarar: {((close[-1]/buy_price)-1)*100:.2f}%")
                         if sell_strategy(high, low, close) == "SELL":
                             sonislem = self.sell(coin, adet, periyot, close, str(sell_strategy.__name__), gercek,buy_price)
                             coinlist = temp
