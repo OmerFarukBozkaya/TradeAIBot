@@ -92,6 +92,7 @@ class Trade:
     def satis_sinyali_bekle(self, periyot):
         try:
             while self.islem_acik:
+                self.araclar.mum_olusmasini_bekle(periyot)
                 close = self.binance.data(self.alinan_coin, 1000, periyot, 4)
                 low = self.binance.data(self.alinan_coin, 1000, periyot, 3)
                 high = self.binance.data(self.alinan_coin, 1000, periyot, 2)
