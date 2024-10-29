@@ -97,7 +97,7 @@ class Trade:
                 low = self.binance.data(self.alinan_coin, 1000, periyot, 3)
                 high = self.binance.data(self.alinan_coin, 1000, periyot, 2)
                 logging.info(
-                    f"DURUM : {periyot} {self.sell_strategy.__name__} Kar/Zarar: {((close[-1] / self.alim_fiyati) - 1) * 100:.2f}%")
+                    f"DURUM : {periyot} {self.sell_strategy.__name__} {self.alinan_coin}Kar/Zarar: {((close[-1] / self.alim_fiyati) - 1) * 100:.2f}%")
 
                 if self.sell_strategy(high, low, close) == "SELL":
                     self.sell(self.alinan_coin, periyot, close, str(self.sell_strategy.__name__), self.alim_fiyati)
