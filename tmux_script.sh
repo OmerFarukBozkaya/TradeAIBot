@@ -6,7 +6,7 @@ SESSION_NAME="trading_session"
 SCRIPT_PATH="./main.py"  # Kendi script dosyanızın yolunu yazın
 
 # Tarama ve Trade işlemleri için periyot listeleri
-PERIODS=("15m" "1h" "4h" "1d")
+PERIODS=("15m" "1h" "1d")
 
 # Yeni bir tmux oturumu başlatın
 tmux new-session -d -s $SESSION_NAME
