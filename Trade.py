@@ -31,9 +31,9 @@ class Trade:
         self.adet = None  # Adet bilgisi
         self.gercek = False  # Gerçek işlem mi?
         self.global_lock = threading.Lock()  # Paralel işlemleri kontrol için global kilit
-        self.nakit=None
+        self.nakit = None
 
-    def TradeEt(self, coinlist, periyot, gercek, yuzde,nakit):
+    def TradeEt(self, coinlist, periyot, gercek,nakit):
         self.gercek = gercek  # Gerçek işlem bilgisi kaydedildi
         self.nakit=nakit
         strategys = {
@@ -70,7 +70,7 @@ class Trade:
                             self.araclar.mail_gonder(f"HATA | Trade {periyot}", f"{hata}")
                             time.sleep(5)
 
-    def alim_sinyali_kontrol(self, coin, periyot, strategys, yuzde):
+    def alim_sinyali_kontrol(self, coin, periyot, strategys,nakit):
         try:
             data = self.binance.get_coin_data(coin, periyot, 1000)
             high = data['high']
@@ -80,7 +80,7 @@ class Trade:
             for strategy in strategys[periyot]:
                 with self.global_lock:  # Global kilit kullanarak sadece bir strateji kontrol et
                     if not self.islem_acik and strategy(high, low, close) == "BUY":
-                        sonislem, self.adet = self.buy(coin, periyot, str(strategy.__name__), yuzde, close)
+                        sonislem, self.adet = self.buy(coin, periyot, str(strategy.__name__), close,nakit)
                         self.alinan_coin = coin  # Alınan coin'i kaydet
                         self.alim_fiyati = close[-1]  # Alım fiyatını kaydet
                         self.islem_acik = True  # İşlem açıldı
@@ -114,7 +114,7 @@ class Trade:
             logging.error(f"Satış sinyali bekleme sırasında hata: {hata}")
             self.araclar.mail_gonder(f"HATA | Trade {periyot}", f"{hata}")
 
-    def buy(self, coin, periyot, strateji_adi, yuzde, close,nakit):
+    def buy(self, coin, periyot, strateji_adi, close,nakit):
         # Adet hesapla
         adet = round((nakit / close[-1]), self.binance.minimum_hareket(
             float(self.binance.client.get_symbol_info(coin)["filters"][1]["minQty"])))
@@ -122,7 +122,7 @@ class Trade:
             if nakit > 10:
                 print("Gerçekten alındı")
                 self.binance.al(coin, adet)
-                self.nakit=0
+                self.nakit = 0
             else:
                 print("Yeterli miktarda nakit yok !")
 
