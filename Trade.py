@@ -31,9 +31,11 @@ class Trade:
         self.adet = None  # Adet bilgisi
         self.gercek = False  # Gerçek işlem mi?
         self.global_lock = threading.Lock()  # Paralel işlemleri kontrol için global kilit
+        self.nakit=None
 
-    def TradeEt(self, coinlist, periyot, gercek, yuzde):
+    def TradeEt(self, coinlist, periyot, gercek, yuzde,nakit):
         self.gercek = gercek  # Gerçek işlem bilgisi kaydedildi
+        self.nakit=nakit
         strategys = {
             "15m": [Stratejiler.BB_RSI, Stratejiler.BB_ADX, Stratejiler.BB_Close],
             "1h": [Stratejiler.BB_RSI, Stratejiler.TSO, Stratejiler.FDI, Stratejiler.BB_ADX, Stratejiler.BB_Close],
@@ -55,7 +57,7 @@ class Trade:
                 else:
                     # Sahip olunan coinleri hariç tutarak işlem yapılacak coin listesini güncelle
                     coinlist = self.araclar.listeden_sahip_olduklarimi_cikar(coinlist)
-                    future_to_coin = {executor.submit(self.alim_sinyali_kontrol, coin, periyot, strategys, yuzde): coin
+                    future_to_coin = {executor.submit(self.alim_sinyali_kontrol, coin, periyot, strategys,self.nakit): coin
                                       for coin in coinlist}
                     for future in as_completed(future_to_coin):
                         try:
@@ -112,17 +114,15 @@ class Trade:
             logging.error(f"Satış sinyali bekleme sırasında hata: {hata}")
             self.araclar.mail_gonder(f"HATA | Trade {periyot}", f"{hata}")
 
-    def buy(self, coin, periyot, strateji_adi, yuzde, close):
-        # Harcanabilir parayı hesapla
-        nakit=self.binance.mevcut_adedim("USDTUSDT")
-        harcama=nakit*(yuzde/100)
+    def buy(self, coin, periyot, strateji_adi, yuzde, close,nakit):
         # Adet hesapla
-        adet = round((harcama / close[-1]), self.binance.minimum_hareket(
+        adet = round((nakit / close[-1]), self.binance.minimum_hareket(
             float(self.binance.client.get_symbol_info(coin)["filters"][1]["minQty"])))
         if self.gercek:
-            if harcama > 10:
+            if nakit > 10:
                 print("Gerçekten alındı")
                 self.binance.al(coin, adet)
+                self.nakit=0
             else:
                 print("Yeterli miktarda nakit yok !")
 
@@ -144,6 +144,7 @@ class Trade:
             print("Gerçekten satıldı")
             mevcut_adedim = self.binance.sahip_olduklarim()[coin]
             adet = round(mevcut_adedim - (mevcut_adedim % float(self.binance.minimum_hareket(float(self.binance.client.get_symbol_info(coin)["filters"][1]["minQty"])))))
+            self.nakit = (close[-1] * adet)*0.999
             self.binance.sat(coin, adet)
         self.araclar.mail_gonder(f"SAT | {strateji_adi} {periyot}",
                                      f"{coin} satıldı, Adet: {self.adet}, Fiyat: {close[-1]} Kar/Zarar:{((close[-1] / buy_price) - 1) * 100:.2f}%")
