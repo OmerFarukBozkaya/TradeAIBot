@@ -36,9 +36,10 @@ class Backtest:
 
         elif canli_veriler == True and hisse == False:  # Canlı coin verileri
             binance = Binance()
-            close = binance.data(coin, adet, periyot, 4)
-            low = binance.data(coin, adet, periyot, 3)
-            high = binance.data(coin, adet, periyot, 2)
+            data = binance.get_coin_data(coin, periyot, 1000)
+            high = data['high']
+            low = data['low']
+            close = data['close']
 
         # İndikatör hesaplamaları
         pmai_values = IndikatorTest.PMAI(close)

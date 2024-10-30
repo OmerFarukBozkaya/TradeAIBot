@@ -1,5 +1,6 @@
 from binance.client import Client       #   pip install python-binance
 import requests
+from requests.adapters import HTTPAdapter
 class Binance:
     def __init__(self, api_key=None, api_secret=None):
         """
@@ -13,6 +14,10 @@ class Binance:
             self.key, self.secret = self.load_settings()
 
         self.client = Client(self.key, self.secret)
+        self.base_url = "https://api.binance.com"
+        self.session = requests.Session()
+        adapter = requests.adapters.HTTPAdapter(pool_connections=20, pool_maxsize=50)
+        self.session.mount('https://', adapter)
     def load_settings(self):
         """
         API anahtarlarını 'settings.txt' dosyasından okur.
@@ -30,7 +35,7 @@ class Binance:
         for i in self.client.get_account()["balances"]:
             if ((float(i["free"]) == 0 and float(i["locked"]) == 0) or i["asset"]=="NFT" or i["asset"] == "BUSD" or (
                     i["asset"] == "BNB" and (
-                    ((float(i["free"]) + float(i["locked"])) * self.data("BNBUSDT", 1, "4h", 4)[-1]) <= 10))):
+                    ((float(i["free"]) + float(i["locked"])) * self.get_coin_data("BNBUSDT","4h",1)['close'][-1]) <= 10))):
                 continue
             else:
                 sahip_olduklarim[i["asset"] + "USDT"] = i["free"]
@@ -50,32 +55,32 @@ class Binance:
             if(i == "USDTUSDT"):
                 toplam_deger=toplam_deger+float(cuzdan[i])
             else:
-                toplam_deger = toplam_deger + (self.data(i,1,"1m",4)[-1] * float(cuzdan[i]))
+                toplam_deger = toplam_deger + (self.get_coin_data(i,"1m",1)['close'][-1] * float(cuzdan[i]))
         return toplam_deger
     def coin_list(self):
         result = ['BTCUSDT', 'ETHUSDT', 'BNBUSDT', 'NEOUSDT', 'LTCUSDT', 'QTUMUSDT', 'ADAUSDT', 'XRPUSDT', 'EOSUSDT', 'IOTAUSDT',
                   'XLMUSDT', 'ONTUSDT', 'TRXUSDT', 'ETCUSDT', 'ICXUSDT', 'NULSUSDT', 'VETUSDT', 'LINKUSDT', 'ONGUSDT', 'HOTUSDT',
-                  'ZILUSDT', 'ZRXUSDT', 'FETUSDT', 'BATUSDT', 'ZECUSDT', 'IOSTUSDT', 'CELRUSDT', 'DASHUSDT', 'THETAUSDT', 'ENJUSDT',
+                  'ZILUSDT', 'ZRXUSDT', 'FETUSDT', 'BATUSDT', 'IOSTUSDT', 'CELRUSDT', 'DASHUSDT', 'THETAUSDT', 'ENJUSDT',
                   'ATOMUSDT', 'ONEUSDT', 'FTMUSDT', 'ALGOUSDT', 'DOGEUSDT', 'DUSKUSDT', 'ANKRUSDT', 'WINUSDT', 'COSUSDT', 'DENTUSDT',
-                  'KEYUSDT', 'WANUSDT', 'FUNUSDT', 'CVCUSDT', 'CHZUSDT', 'BANDUSDT', 'XTZUSDT', 'RENUSDT', 'RVNUSDT', 'HBARUSDT',
-                  'NKNUSDT', 'STXUSDT', 'KAVAUSDT', 'ARPAUSDT', 'IOTXUSDT', 'RLCUSDT', 'CTXCUSDT', 'TROYUSDT', 'VITEUSDT', 'FTTUSDT',
-                  'OGNUSDT', 'WRXUSDT', 'LSKUSDT', 'BNTUSDT', 'LTOUSDT', 'MBLUSDT', 'COTIUSDT', 'STPTUSDT', 'DATAUSDT', 'SOLUSDT',
+                  'WANUSDT', 'FUNUSDT', 'CVCUSDT', 'CHZUSDT', 'BANDUSDT', 'XTZUSDT', 'RVNUSDT', 'HBARUSDT',
+                  'NKNUSDT', 'STXUSDT', 'KAVAUSDT', 'ARPAUSDT', 'IOTXUSDT', 'RLCUSDT', 'TROYUSDT',
+                  'OGNUSDT', 'LSKUSDT', 'BNTUSDT', 'LTOUSDT', 'COTIUSDT', 'STPTUSDT', 'DATAUSDT', 'SOLUSDT',
                   'CTSIUSDT', 'HIVEUSDT', 'CHRUSDT', 'ARDRUSDT', 'MDTUSDT', 'STMXUSDT', 'KNCUSDT', 'LRCUSDT', 'COMPUSDT', 'SCUSDT',
                   'ZENUSDT', 'SNXUSDT', 'VTHOUSDT', 'DGBUSDT', 'SXPUSDT', 'MKRUSDT', 'DCRUSDT', 'STORJUSDT', 'MANAUSDT', 'YFIUSDT',
-                  'BALUSDT', 'BLZUSDT', 'IRISUSDT', 'KMDUSDT', 'JSTUSDT', 'CRVUSDT', 'SANDUSDT', 'NMRUSDT', 'DOTUSDT', 'LUNAUSDT',
+                  'KMDUSDT', 'JSTUSDT', 'CRVUSDT', 'SANDUSDT', 'NMRUSDT', 'DOTUSDT', 'LUNAUSDT',
                   'RSRUSDT', 'PAXGUSDT', 'TRBUSDT', 'SUSHIUSDT', 'KSMUSDT', 'EGLDUSDT', 'DIAUSDT', 'RUNEUSDT', 'FIOUSDT', 'UMAUSDT',
-                  'BELUSDT', 'WINGUSDT', 'UNIUSDT', 'OXTUSDT', 'SUNUSDT', 'AVAXUSDT', 'FLMUSDT', 'UTKUSDT', 'XVSUSDT', 'ALPHAUSDT',
-                  'AAVEUSDT', 'NEARUSDT', 'FILUSDT', 'INJUSDT', 'AUDIOUSDT', 'CTKUSDT', 'AKROUSDT', 'AXSUSDT', 'HARDUSDT', 'STRAXUSDT',
-                  'ROSEUSDT', 'AVAUSDT', 'SKLUSDT', 'GRTUSDT', '1INCHUSDT', 'CELOUSDT', 'RIFUSDT', 'TRUUSDT', 'CKBUSDT', 'FIROUSDT',
+                  'BELUSDT', 'WINGUSDT', 'UNIUSDT', 'OXTUSDT', 'AVAXUSDT', 'FLMUSDT', 'UTKUSDT', 'XVSUSDT', 'ALPHAUSDT',
+                  'AAVEUSDT', 'NEARUSDT', 'FILUSDT', 'INJUSDT', 'AUDIOUSDT', 'CTKUSDT', 'AXSUSDT', 'STRAXUSDT',
+                  'ROSEUSDT', 'AVAUSDT', 'SKLUSDT', 'GRTUSDT', '1INCHUSDT', 'CELOUSDT', 'RIFUSDT', 'TRUUSDT', 'CKBUSDT',
                   'LITUSDT', 'SFPUSDT', 'DODOUSDT', 'CAKEUSDT', 'BADGERUSDT', 'FISUSDT', 'OMUSDT', 'PONDUSDT', 'DEGOUSDT', 'ALICEUSDT',
-                  'LINAUSDT', 'PERPUSDT', 'SUPERUSDT', 'CFXUSDT', 'TKOUSDT', 'PUNDIXUSDT', 'TLMUSDT', 'FORTHUSDT', 'BAKEUSDT',
+                  'PERPUSDT', 'SUPERUSDT', 'CFXUSDT', 'TKOUSDT', 'PUNDIXUSDT', 'TLMUSDT', 'FORTHUSDT', 'BAKEUSDT',
                   'BURGERUSDT', 'SLPUSDT', 'SHIBUSDT', 'ICPUSDT', 'ARUSDT', 'MASKUSDT', 'LPTUSDT', 'XVGUSDT', 'ATAUSDT', 'GTCUSDT',
-                  'ERNUSDT', 'PHAUSDT', 'MLNUSDT', 'DEXEUSDT', 'C98USDT', 'CLVUSDT', 'QNTUSDT', 'FLOWUSDT', 'MINAUSDT', 'RAYUSDT',
-                  'FARMUSDT', 'ALPACAUSDT', 'QUICKUSDT', 'MBOXUSDT', 'REQUSDT', 'GHSTUSDT', 'WAXPUSDT', 'GNOUSDT', 'XECUSDT', 'ELFUSDT',
+                  'ERNUSDT', 'PHAUSDT', 'MLNUSDT', 'DEXEUSDT', 'C98USDT', 'QNTUSDT', 'FLOWUSDT', 'MINAUSDT', 'RAYUSDT',
+                  'FARMUSDT', 'ALPACAUSDT', 'QUICKUSDT', 'MBOXUSDT', 'REQUSDT', 'GHSTUSDT', 'WAXPUSDT', 'GNOUSDT', 'XECUSDT',
                   'DYDXUSDT', 'IDEXUSDT', 'VIDTUSDT', 'GALAUSDT', 'ILVUSDT', 'YGGUSDT', 'SYSUSDT', 'DFUSDT', 'FIDAUSDT', 'AGLDUSDT',
-                  'RADUSDT', 'BETAUSDT', 'RAREUSDT', 'CHESSUSDT', 'ADXUSDT', 'AUCTIONUSDT', 'DARUSDT', 'MOVRUSDT', 'ENSUSDT',
-                  'QIUSDT', 'PORTOUSDT', 'POWRUSDT', 'JASMYUSDT', 'AMPUSDT', 'PYRUSDT', 'ALCXUSDT', 'BICOUSDT', 'FLUXUSDT',
-                  'FXSUSDT', 'VOXELUSDT', 'HIGHUSDT', 'CVXUSDT', 'PEOPLEUSDT', 'SPELLUSDT', 'JOEUSDT', 'ACHUSDT',
+                  'RADUSDT', 'RAREUSDT', 'CHESSUSDT', 'ADXUSDT', 'AUCTIONUSDT', 'DARUSDT', 'MOVRUSDT', 'ENSUSDT',
+                  'QIUSDT', 'PORTOUSDT', 'POWRUSDT', 'AMPUSDT', 'PYRUSDT', 'ALCXUSDT', 'BICOUSDT', 'FLUXUSDT',
+                  'FXSUSDT', 'VOXELUSDT', 'HIGHUSDT', 'PEOPLEUSDT', 'SPELLUSDT', 'JOEUSDT', 'ACHUSDT',
                   'IMXUSDT', 'GLMRUSDT', 'LOKAUSDT', 'SCRTUSDT', 'API3USDT', 'BTTCUSDT', 'ACAUSDT', 'XNOUSDT']
         return result
     def minimum_hareket(self,basamak):
@@ -180,4 +185,42 @@ class Binance:
             else:
                 olanlar.append(i)
         print(f"Doğru olanların sayısı : {len(olanlar)} Kaldırılanların sayısı : {len(olmayanlar)} Trade edilebilir : {len(result)}")
+        return result
+
+    def get_coin_data(self,coin,periyot,adet):
+        data_url = f"/api/v3/klines?symbol={coin}&interval={periyot}&limit={adet}"
+        result={
+            'opendate':[],
+            'open':[],
+            'high':[],
+            'low':[],
+            'close':[],
+            'volume_coin':[],
+            'closedate':[],
+            'volume_usdt':[],
+            'trade_number':[],
+            'buy_coin_volume':[],
+            'buy_usdt_volume':[],
+            'ignore':[]
+        }
+        try:
+            response = requests.get(self.base_url + data_url,timeout=10)
+            response.raise_for_status()
+            data = response.json()  # JSON yanıtı al
+            for i in data:
+                result['opendate'].append(float(i[0]))
+                result['open'].append(float(i[1]))
+                result['high'].append(float(i[2]))
+                result['low'].append(float(i[3]))
+                result['close'].append(float(i[4]))
+                result['volume_coin'].append(float(i[5]))
+                result['closedate'].append(float(i[6]))
+                result['volume_usdt'].append(float(i[7]))
+                result['trade_number'].append(float(i[8]))
+                result['buy_coin_volume'].append(float(i[9]))
+                result['buy_usdt_volume'].append(float(i[10]))
+                result['ignore'].append(float(i[11]))
+        except requests.exceptions.RequestException as e:
+            print(f"İstek başarısız oldu: {e}")
+
         return result

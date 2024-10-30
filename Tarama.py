@@ -76,9 +76,10 @@ class Tarama:
     def process_coin_data(binance, coin, periyot, strategies):
         """ Tekil bir coin için veriyi çekip stratejileri çalıştırır """
         try:
-            close = np.array(binance.data(coin, 1000, periyot, 4))
-            low = np.array(binance.data(coin, 1000, periyot, 3))
-            high = np.array(binance.data(coin, 1000, periyot, 2))
+            data = binance.get_coin_data(coin, periyot, 1000)
+            high = np.array(data['high'])
+            low = np.array(data['low'])
+            close = np.array(data['close'])
 
             coin_results = {}
             for strategy in strategies:
@@ -111,9 +112,10 @@ class Tarama:
 
         # Her period ve coin için stratejileri hesapla ve ortalama sonuçları döndür
         def process_coin_for_period(coin, period):
-            close = np.array(binance.data(coin, 1000, period, 4))
-            low = np.array(binance.data(coin, 1000, period, 3))
-            high = np.array(binance.data(coin, 1000, period, 2))
+            data = binance.get_coin_data(coin, period, 1000)
+            high = np.array(data['high'])
+            low = np.array(data['low'])
+            close = np.array(data['close'])
             if high is None or low is None or close is None:
                 print(f"Veri çekiminde hata: Coin: {coin}, Periyot: {period}")
                 return period, np.nan  # Hata durumunda NaN dön

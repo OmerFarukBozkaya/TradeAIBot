@@ -38,9 +38,10 @@ class Araclar:
     @staticmethod
     def data_test_olustur(coin,periyot):
         binance = Binance()
-        high = binance.data(coin,1000,periyot,2)
-        low = binance.data(coin, 1000, periyot, 3)
-        close = binance.data(coin, 1000, periyot, 4)
+        data = binance.get_coin_data(coin, periyot, 1000)
+        high = data['high']
+        low = data['low']
+        close = data['close']
         path_close = "Data/close-test.txt"
         path_low = "Data/low-test.txt"
         path_high = "Data/high-test.txt"
@@ -121,13 +122,14 @@ class Araclar:
 
     @staticmethod
     def veri_seti_olustur(coin,period):
-        bn = Binance()
+        binance = Binance()
         indikator = Indikator()
-        close = bn.data(coin, 1000, period, 4)
-        low = bn.data(coin, 1000, period, 3)
-        high = bn.data(coin, 1000, period, 2)
-        acilis = bn.data(coin, 1000, period, 1)
-        opendate = bn.data(coin, 1000, period, 0)
+        data = binance.get_coin_data(coin, period, 1000)
+        high = data['high']
+        low = data['low']
+        close = data['close']
+        acilis = data['open']
+        opendate = data['opendate']
         rsi = indikator.RSI(close)
         ema21 = indikator.EMA(close, 21)
         ema7 = indikator.EMA(close, 7)
@@ -224,9 +226,10 @@ class Araclar:
     @staticmethod
     def coin_indikator_degerleri(coin,periyot,adet=10):
         binance = Binance()
-        high = binance.data(coin,1000,periyot,2)
-        low = binance.data(coin, 1000, periyot, 3)
-        close = binance.data(coin, 1000, periyot, 4)
+        data=binance.get_coin_data(coin,periyot,1000)
+        high = data['high']
+        low = data['low']
+        close = data['close']
 
         ema_9 = Indikator.EMA(close,9)[adet*-1:]
         ema_50 = Indikator.EMA(close,50)[adet*-1:]
@@ -274,9 +277,10 @@ class Araclar:
     @staticmethod
     def coin_strateji_degerleri(coin,periyot):
         binance = Binance()
-        high = binance.data(coin, 1000, periyot, 2)
-        low = binance.data(coin, 1000, periyot, 3)
-        close = binance.data(coin, 1000, periyot, 4)
+        data = binance.get_coin_data(coin, periyot, 1000)
+        high = data['high']
+        low = data['low']
+        close = data['close']
 
         strategys=[Stratejiler.MACD,Stratejiler.VMZI,Stratejiler.VAMA,Stratejiler.TSO,
                    Stratejiler.BB_RSI,Stratejiler.FDI,Stratejiler.BB_Close,Stratejiler.MA_Cross,

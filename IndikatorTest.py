@@ -13,9 +13,10 @@ class IndikatorTest:
             coin = "BNBUSDT"
             adet = 1000
             periyot = "15m"
-            close = binance.data(coin, adet, periyot, 4)
-            low = binance.data(coin, adet, periyot, 3)
-            high = binance.data(coin, adet, periyot, 2)
+            data = binance.get_coin_data(coin, periyot, adet)
+            high = data['high']
+            low = data['low']
+            close = data['close']
         else:
             close = open("Data/close-test.txt", "r").read().split(",")
             low = open("Data/low-test.txt", "r").read().split(",")
