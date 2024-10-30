@@ -16,7 +16,7 @@ class Binance:
         self.client = Client(self.key, self.secret)
         self.base_url = "https://api.binance.com"
         self.session = requests.Session()
-        adapter = requests.adapters.HTTPAdapter(pool_connections=20, pool_maxsize=50)
+        adapter = requests.adapters.HTTPAdapter(pool_connections=100, pool_maxsize=300)
         self.session.mount('https://', adapter)
     def load_settings(self):
         """
