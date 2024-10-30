@@ -32,7 +32,7 @@ class Trade:
         self.gercek = False  # Gerçek işlem mi?
         self.global_lock = threading.Lock()  # Paralel işlemleri kontrol için global kilit
 
-    def TradeEt(self, coinlist, periyot, gercek, nakit):
+    def TradeEt(self, coinlist, periyot, gercek, yuzde):
         self.gercek = gercek  # Gerçek işlem bilgisi kaydedildi
         strategys = {
             "15m": [Stratejiler.BB_RSI, Stratejiler.BB_ADX, Stratejiler.BB_Close],
@@ -55,7 +55,7 @@ class Trade:
                 else:
                     # Sahip olunan coinleri hariç tutarak işlem yapılacak coin listesini güncelle
                     coinlist = self.araclar.listeden_sahip_olduklarimi_cikar(coinlist)
-                    future_to_coin = {executor.submit(self.alim_sinyali_kontrol, coin, periyot, strategys, nakit): coin
+                    future_to_coin = {executor.submit(self.alim_sinyali_kontrol, coin, periyot, strategys, yuzde): coin
                                       for coin in coinlist}
                     for future in as_completed(future_to_coin):
                         try:
@@ -68,7 +68,7 @@ class Trade:
                             self.araclar.mail_gonder(f"HATA | Trade {periyot}", f"{hata}")
                             time.sleep(5)
 
-    def alim_sinyali_kontrol(self, coin, periyot, strategys, nakit):
+    def alim_sinyali_kontrol(self, coin, periyot, strategys, yuzde):
         try:
             data = self.binance.get_coin_data(coin, periyot, 1000)
             high = data['high']
@@ -78,7 +78,7 @@ class Trade:
             for strategy in strategys[periyot]:
                 with self.global_lock:  # Global kilit kullanarak sadece bir strateji kontrol et
                     if not self.islem_acik and strategy(high, low, close) == "BUY":
-                        sonislem, self.adet = self.buy(coin, periyot, str(strategy.__name__), nakit, close)
+                        sonislem, self.adet = self.buy(coin, periyot, str(strategy.__name__), yuzde, close)
                         self.alinan_coin = coin  # Alınan coin'i kaydet
                         self.alim_fiyati = close[-1]  # Alım fiyatını kaydet
                         self.islem_acik = True  # İşlem açıldı
@@ -112,16 +112,23 @@ class Trade:
             logging.error(f"Satış sinyali bekleme sırasında hata: {hata}")
             self.araclar.mail_gonder(f"HATA | Trade {periyot}", f"{hata}")
 
-    def buy(self, coin, periyot, strateji_adi, nakit, close):
-        adet = round((nakit / close[-1]), self.binance.minimum_hareket(
+    def buy(self, coin, periyot, strateji_adi, yuzde, close):
+        # Harcanabilir parayı hesapla
+        nakit=self.binance.mevcut_adedim("USDTUSDT")
+        harcama=nakit*(yuzde/100)
+        # Adet hesapla
+        adet = round((harcama / close[-1]), self.binance.minimum_hareket(
             float(self.binance.client.get_symbol_info(coin)["filters"][1]["minQty"])))
+        if self.gercek:
+            if harcama > 10:
+                print("Gerçekten alındı")
+                self.binance.al(coin, adet)
+            else:
+                print("Yeterli miktarda nakit yok !")
+
         logging.info(f"AL | {coin} alındı, Adet: {adet}, Fiyat: {close[-1]}")
         islemgecmisi.info(f"{strateji_adi} {periyot} AL | {coin} alındı, Adet: {adet}, Fiyat: {close[-1]}")
         print(f"{strateji_adi} {periyot} AL | {coin} alındı, Adet: {adet}, Fiyat: {close[-1]}")
-
-        if self.gercek:
-            print("Gerçekten alındı")
-            self.binance.al(coin, adet)
 
         self.araclar.mail_gonder(f"AL | {strateji_adi} {periyot}",
                                  f"{coin} alındı, Adet: {adet}, Maliyet: {close[-1]} USDT")

@@ -204,7 +204,7 @@ class Binance:
             'ignore':[]
         }
         try:
-            response = requests.get(self.base_url + data_url,timeout=10)
+            response = requests.get(self.base_url + data_url,timeout=20)
             response.raise_for_status()
             data = response.json()  # JSON yanıtı al
             for i in data:
