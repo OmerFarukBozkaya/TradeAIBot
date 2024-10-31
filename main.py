@@ -74,7 +74,8 @@ elif com == "6":
     a=time.time()
     coin=input("Coin:")
     periyot = input("Periyot (15m,1h,4h,1d):")
-    araclar.coin_indikator_degerleri(coin,periyot)
+    adet= int(input("Adet : "))
+    araclar.coin_indikator_degerleri(coin,periyot,adet)
     b=time.time()
     print(araclar.saniye_to_hms(b - a))
 elif com == "7":

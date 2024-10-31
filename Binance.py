@@ -38,7 +38,7 @@ class Binance:
                     ((float(i["free"]) + float(i["locked"])) * self.get_coin_data("BNBUSDT","4h",1)['close'][-1]) <= 10))):
                 continue
             else:
-                sahip_olduklarim[i["asset"] + "USDT"] = i["free"]
+                sahip_olduklarim[i["asset"] + "USDT"] = float(i["free"])
         return sahip_olduklarim
     def al(self, coin, adet):
         order = self.client.order_market_buy(symbol=coin, quantity=adet)
