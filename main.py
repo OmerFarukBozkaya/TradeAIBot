@@ -63,13 +63,22 @@ elif com == "4":
     print(araclar.saniye_to_hms(b-a))
 elif com == "5":
     coinlist=binance.coin_list()
+    islem_acik=input("Islem acik:") == "True"
     periyot = input("Periyot (15m,1h,4h,1d):")
     gercek = input("Gercek:") == "True"
     nakit= float(input("Nakit:").replace(",","."))
-    a=time.time()
-    trade.TradeEt(coinlist,periyot,gercek,nakit)
-    b=time.time()
-    print(araclar.saniye_to_hms(b-a))
+    if islem_acik:
+        alinan_coin = input("Coin:")
+        adet = float(input("Adet:"))
+        alim_fiyati = float(input("Alim fiyati:"))
+        sell_strategy=input("Sell Strategy:")
+        sell_trade = Trade(islem_acik=islem_acik,alinan_coin=alinan_coin,alim_fiyati=alim_fiyati,adet=adet,sell_strategy=sell_strategy)
+        sell_trade.TradeEt(coinlist,periyot,gercek,nakit)
+    else:
+        a=time.time()
+        trade.TradeEt(coinlist,periyot,gercek,nakit)
+        b=time.time()
+        print(araclar.saniye_to_hms(b-a))
 elif com == "6":
     a=time.time()
     coin=input("Coin:")
