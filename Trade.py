@@ -107,7 +107,7 @@ class Trade:
                 logging.info(
                     f"DURUM : {periyot} {self.sell_strategy.__name__} {self.alinan_coin} Kar/Zarar: {((close[-1] / self.alim_fiyati) - 1) * 100:.2f}%")
 
-                if self.sell_strategy(high, low, close) == "SELL":
+                if self.sell_strategy(high, low, close) == "SELL" or (self.gercek and self.binance.mevcut_adedim(self.alinan_coin) == 0):
                     self.sell(self.alinan_coin, periyot, close, str(self.sell_strategy.__name__), self.alim_fiyati)
                     self.islem_acik = False
                     self.alinan_coin = None
