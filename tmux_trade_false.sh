@@ -15,7 +15,6 @@ tmux new-session -d -s $SESSION_NAME
 for period in "${PERIODS[@]}"; do
     tmux new-window -t $SESSION_NAME -n "Trade_$period" "python3 $SCRIPT_PATH << EOF
 5
-False
 $period
 False
 100
