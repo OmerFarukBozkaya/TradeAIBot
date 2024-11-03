@@ -6,6 +6,8 @@ from Araclar import Araclar
 from Stratejiler import Stratejiler
 import logging
 import threading
+import json
+import os
 
 # Log ayarları
 logging.basicConfig(filename='trading_log.log', level=logging.INFO,
@@ -22,21 +24,48 @@ islemgecmisi.propagate = False
 
 
 class Trade:
-    def __init__(self,islem_acik=False,alinan_coin=None,alim_fiyati=None,adet=None,sell_strategy=None):
+    def __init__(self):
         self.binance = Binance()
         self.araclar = Araclar()
-        self.islem_acik = islem_acik  # İşlem durumu
-        self.alinan_coin = alinan_coin  # Alınan coin
-        self.alim_fiyati = alim_fiyati  # Alım fiyatı
-        self.adet = adet  # Adet bilgisi
+        self.islem_acik = False  # İşlem durumu
+        self.alinan_coin = None  # Alınan coin
+        self.alim_fiyati = None  # Alım fiyatı
+        self.adet = None  # Adet bilgisi
         self.gercek = False  # Gerçek işlem mi?
         self.global_lock = threading.Lock()  # Paralel işlemleri kontrol için global kilit
         self.nakit = None
-        self.sell_strategy=sell_strategy
+        self.sell_strategy=None
 
+    def kaydet(self):
+        durum = {
+            'islem_acik': self.islem_acik,
+            'alinan_coin': self.alinan_coin,
+            'alim_fiyati': self.alim_fiyati,
+            'adet': self.adet,
+            'nakit': self.nakit,
+            'sell_strategy': self.sell_strategy.__name__ if self.sell_strategy else None,
+            'periyot': self.periyot
+        }
+        with open(f'trade_durumu_{self.periyot}.json', 'w') as f:
+            json.dump(durum, f)
+
+    # Durumu yükleyen fonksiyon
+    def yukle(self):
+        if os.path.exists(f'trade_durumu_{self.periyot}.json'):
+            with open(f'trade_durumu_{self.periyot}.json', 'r') as f:
+                durum = json.load(f)
+                self.islem_acik = durum['islem_acik']
+                self.alinan_coin = durum['alinan_coin']
+                self.alim_fiyati = durum['alim_fiyati']
+                self.adet = durum['adet']
+                self.nakit = durum['nakit']
+                self.sell_strategy = getattr(Stratejiler, durum['sell_strategy']) if durum['sell_strategy'] else None
+                self.periyot = durum['periyot']
     def TradeEt(self, coinlist, periyot, gercek,nakit):
         self.gercek = gercek  # Gerçek işlem bilgisi kaydedildi
         self.nakit=nakit
+        self.periyot=periyot
+        self.yukle()
         strategys = {
             "15m": [Stratejiler.BB_RSI, Stratejiler.BB_ADX, Stratejiler.BB_Close],
             "1h": [Stratejiler.BB_RSI, Stratejiler.TSO, Stratejiler.FDI, Stratejiler.BB_ADX, Stratejiler.BB_Close],
@@ -44,17 +73,13 @@ class Trade:
             "1d": [Stratejiler.MACD, Stratejiler.DMO, Stratejiler.VAMA, Stratejiler.VMZI, Stratejiler.MA_Cross,
                    Stratejiler.FDI]
         }
-        if self.sell_strategy is not None:
-            for strategy in strategys[periyot]:
-                if strategy.__name__ == self.sell_strategy:
-                    self.sell_strategy=strategy
-
         logging.info(f"Trade {periyot} Calisiyor ... {gercek}")
         print(f"Trade {periyot} Calisiyor ... {gercek}", time.ctime())
 
         with ThreadPoolExecutor(max_workers=len(coinlist)) as executor:
             while True:
                 # Mum oluşmasını bekler
+                self.kaydet()
                 self.araclar.mum_olusmasini_bekle(periyot)
                 # Eğer bir işlem zaten açılmışsa, satış sinyali bekle
                 if self.islem_acik:

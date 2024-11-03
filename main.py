@@ -8,8 +8,8 @@ import time
 from raspi_status import raspi_status
 binance = Binance()
 backtest = Backtest()
-trade=Trade()
-indikator_test=IndikatorTest()
+trade = Trade()
+indikator_test = IndikatorTest()
 araclar = Araclar()
 
 print("""
@@ -25,12 +25,12 @@ print("""
 9)Piyasa durumu
 """)
 com = input("Ne yapılacak :")
-if com=="0":
+if com == "0":
     a=time.time()
     araclar.veri_seti_olustur("BTCUSDT","15m")
     b=time.time()
     print(araclar.saniye_to_hms(b - a))
-if com == "1":
+elif com == "1":
     a = time.time()
     for i in binance.secili_list():
         for j in ["15m", "1h", "4h", "1d"]:
@@ -63,22 +63,13 @@ elif com == "4":
     print(araclar.saniye_to_hms(b-a))
 elif com == "5":
     coinlist=binance.coin_list()
-    islem_acik=input("Islem acik:") == "True"
     periyot = input("Periyot (15m,1h,4h,1d):")
     gercek = input("Gercek:") == "True"
     nakit= float(input("Nakit:").replace(",","."))
-    if islem_acik:
-        alinan_coin = input("Coin:")
-        adet = float(input("Adet:"))
-        alim_fiyati = float(input("Alim fiyati:"))
-        sell_strategy=input("Sell Strategy:")
-        sell_trade = Trade(islem_acik=islem_acik,alinan_coin=alinan_coin,alim_fiyati=alim_fiyati,adet=adet,sell_strategy=sell_strategy)
-        sell_trade.TradeEt(coinlist,periyot,gercek,nakit)
-    else:
-        a=time.time()
-        trade.TradeEt(coinlist,periyot,gercek,nakit)
-        b=time.time()
-        print(araclar.saniye_to_hms(b-a))
+    a=time.time()
+    trade.TradeEt(coinlist,periyot,gercek,nakit)
+    b=time.time()
+    print(araclar.saniye_to_hms(b-a))
 elif com == "6":
     a=time.time()
     coin=input("Coin:")
