@@ -16,8 +16,13 @@ for i in "${!PERIODS[@]}"; do
     period="${PERIODS[$i]}"
     window_name="Tarama_$period"
 
-    # Yeni bir pencere aç, ve pencereye komutu gönder
-    tmux new-window -t $SESSION_NAME:$((i+1)) -n "$window_name" "python3 $SCRIPT_PATH <<< '4\n$period'; bash"
+    # Geçici dosya oluştur
+    input_file=$(mktemp)
+    echo "4" > "$input_file"           # İlk girdi: 4
+    echo "$period" >> "$input_file"     # İkinci girdi: period değeri
+
+    # Yeni bir pencere aç ve Python script'ini çalıştır, girdileri dosyadan oku
+    tmux new-window -t $SESSION_NAME:$((i+1)) -n "$window_name" "python3 $SCRIPT_PATH < $input_file; rm $input_file; bash"
 done
 
 # İlk açılan pencereyi kapat (otomatik açılan boş pencere)

@@ -16,8 +16,15 @@ for i in "${!PERIODS[@]}"; do
     period="${PERIODS[$i]}"
     window_name="Trade_$period"
 
-    # Yeni bir pencere aç ve Python script'ini çalıştır
-    tmux new-window -t $SESSION_NAME:$((i+1)) -n "$window_name" "python3 $SCRIPT_PATH <<< '5\n$period\nTrue\n100'; bash"
+    # Geçici dosya oluştur
+    input_file=$(mktemp)
+    echo "5" > "$input_file"           # İlk girdi: 5
+    echo "$period" >> "$input_file"     # İkinci girdi: period
+    echo "True" >> "$input_file"        # Üçüncü girdi: True
+    echo "100" >> "$input_file"         # Dördüncü girdi: 100
+
+    # Yeni bir pencere aç ve Python script'ini çalıştır, girdileri dosyadan oku
+    tmux new-window -t $SESSION_NAME:$((i+1)) -n "$window_name" "python3 $SCRIPT_PATH < $input_file; rm $input_file; bash"
 done
 
 # İlk açılan pencereyi kapat (otomatik açılan boş pencere)
