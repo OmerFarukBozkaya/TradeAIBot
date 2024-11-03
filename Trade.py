@@ -140,11 +140,15 @@ class Trade:
         return "AL", adet
 
     def sell(self, coin, periyot, close, strateji_adi, buy_price):
-        logging.info(f"SAT | {coin} satıldı, Adet: {self.adet}, Fiyat: {close[-1]}")
+        kar_zarar = ((close[-1] / buy_price) - 1) * 100
+        logging.info(f"SAT {strateji_adi} {periyot}| {coin} satıldı, Adet: {self.adet}, Fiyat: {close[-1]}")
         islemgecmisi.info(
-            f"{strateji_adi} {periyot} SAT | {coin} satıldı, Adet: {self.adet}, Fiyat: {close[-1]} Kar/Zarar:{((close[-1] / buy_price) - 1) * 100:.2f}%")
+            f"{strateji_adi} {periyot} SAT | {coin} satıldı, Adet: {self.adet}, Fiyat: {close[-1]:.2f} Kar/Zarar: {kar_zarar:.2f}%"
+        )
         print(
-            f"{strateji_adi} {periyot} SAT | {coin} satıldı, Adet: {self.adet}, Fiyat: {close[-1]} Kar/Zarar:{((close[-1] / buy_price) - 1) * 100:.2f}%")
+            f"{strateji_adi} {periyot} SAT | {coin} satıldı, Adet: {self.adet}, Fiyat: {close[-1]:.2f} Kar/Zarar: {kar_zarar:.2f}%"
+        )
+
         if self.gercek:
             print("Gerçekten satıldı")
             mevcut_adedim = self.binance.sahip_olduklarim()[coin]
