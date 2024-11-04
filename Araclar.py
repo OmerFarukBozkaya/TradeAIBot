@@ -137,6 +137,9 @@ class Araclar:
         adx = indikator.ADX(high, low, close)
         sma50 = indikator.SMA(close, 50)
         sma200 = indikator.SMA(close, 200)
+        macd = indikator.MACD(close)
+        bb=indikator.BB(close)
+        tso = indikator.TSO(high, low, close)
         # Listeleri bir dataframe'e dönüştürüyoruz ve eksik olan yerleri None (veya NaN) ile dolduruyoruz
         df = pd.DataFrame({
             'opendate': opendate,
@@ -150,7 +153,13 @@ class Araclar:
             'atr': atr,
             'adx': adx,
             'sma50': sma50,
-            'sma200': sma200
+            'sma200': sma200,
+            'macd_val': macd[0],
+            'macd_signal': macd[1],
+            'bb_down' : bb[0],
+            'bb_mid' : bb[1],
+            'bb_up' : bb[2],
+            'tso' : tso,
         })
 
         # Eksik olan değerleri None (veya NaN) ile doldurma
