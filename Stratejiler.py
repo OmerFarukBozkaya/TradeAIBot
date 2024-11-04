@@ -1,137 +1,178 @@
-import time
-import traceback
-from Binance import Binance
 from Indikator import Indikator
-from Araçlar import Araclar
-zaman_dilimleri={"1m":60,"3m":180,"5m":300,"15m":900,"30m":1800,"1h":3600,"2h":7200,"4h":14400,"6h":21600,"8h":28800,"12h":43200,"1d":86400,"3d":259200,"1w":604800,"1M":2419200}
+class Stratejiler:
+    stop_lose = 0.025
+    @staticmethod
+    def MACD(high, low, close,buy_price=None):
+        macd = Indikator.MACD(close)
+        macd_values = macd[0]
+        macd_signal = macd[1]
+        rsi = Indikator.RSI(close)
+        if macd_signal[-3] is not None and macd_values[-3] is not None and rsi[-3] is not None:
+            if  (macd_values[-3] < macd_signal[-3] or rsi[-3] < 50) and macd_values[-2] > macd_signal[-2] and rsi[-2] > 50:
+                return "BUY"
+            elif macd_values[-2] < macd_signal[-2]:
+                return "SELL"
+            elif buy_price is not None and close[-1] < (buy_price * (1 - Stratejiler.stop_lose)):
+                return "STOP-LOSE"
+            else:
+                return False
+        else:
+            return None
 
-class Al_Sat:
-    def BB_RSI(self,coinlist,periyot,gercek,sonislem):
-        while True:
-            print(gercek,periyot,"Calisiyor ...",time.ctime(time.time()))
-            try:
-                #Mumun olusmasini bekleme alani
-                if(time.time()%zaman_dilimleri[periyot]>300):
-                    time.sleep(zaman_dilimleri[periyot]-(time.time()%zaman_dilimleri[periyot]))
+    @staticmethod
+    def VMZI(high, low, close,buy_price=None):
+        vmzi = Indikator.VMZI(close)
+        adx = Indikator.ADX(high, low, close)
+        rsi = Indikator.RSI(close)
+        if vmzi[-3] is not None and adx[-3] is not None and rsi[-3] is not None:
+            if (vmzi[-3] < 1.5 or adx[-3] < 25 or rsi[-3] < 50) and vmzi[-2] > 1.5 and adx[-2] > 25 and rsi[-2] > 50:
+                return "BUY"
+            elif vmzi[-2] < 0 and rsi[-2] < 50:
+                return "SELL"
+            elif buy_price is not None and close[-1] < (buy_price * (1 - Stratejiler.stop_lose)):
+                return "STOP-LOSE"
+            else:
+                return False
+        else:
+            return None
 
-                #Sahip olduğum coinler
-                sahip_olduklarim = self.binance.sahip_olduklarim()
+    @staticmethod
+    def VAMA(high, low, close,buy_price=None):
+        vama = Indikator.VAMA(close)
+        if vama[-3] is not None:
+            if (vama[-3] * 1.02 > close[-3]) and vama[-2] * 1.02 < close[-2]:
+                return "BUY"
+            elif vama[-2] * 0.98 > close[-2]:
+                return "SELL"
+            elif buy_price is not None and close[-1] < (buy_price * (1 - Stratejiler.stop_lose)):
+                return "STOP-LOSE"
+            else:
+                return False
+        else:
+            return None
 
+    @staticmethod
+    def TSO(high, low, close,buy_price=None):
+        tso = Indikator.TSO(high, low, close)
+        if tso[-3] is not None:
+            if tso[-3] != 1 and tso[-2] == 1:
+                return "BUY"
+            elif tso[-2] == -1:
+                return "SELL"
+            elif buy_price is not None and close[-1] < (buy_price * (1 - Stratejiler.stop_lose)):
+                return "STOP-LOSE"
+            else:
+                return False
+        else:
+            return None
 
-                #Taranacaklardan sahip olduklarimi cikar
-                for sil in sahip_olduklarim.keys():
-                    try:
-                        coinlist.remove(sil[0])
-                    except:
-                        continue
+    @staticmethod
+    def BB_RSI(high, low, close,buy_price=None):
+        rsi = Indikator.RSI(close)
+        bb_rsi = Indikator.BB(rsi)
+        bb_rsi_down = bb_rsi[0]
+        bb_rsi_up = bb_rsi[2]
+        if rsi[-3] is not None and bb_rsi_down[-3] is not None and bb_rsi_up[-3] is not None:
+            if bb_rsi_down[-3] > rsi[-3] and bb_rsi_down[-2] < rsi[-2]:
+                return "BUY"
+            elif bb_rsi_up[-3] < rsi[-3] and bb_rsi_up[-2] > rsi[-2]:
+                return "SELL"
+            elif buy_price is not None and close[-1] < (buy_price * (1 - Stratejiler.stop_lose)):
+                return "STOP-LOSE"
+            else:
+                return False
+        else:
+            return None
 
-                #Tarama
-                for coin in coinlist:
-                    #Data
-                    close=data(coin,1000,periyot,4)
+    @staticmethod
+    def FDI(high, low, close,buy_price=None):
+        fdi = Indikator.FDI(close)
+        rsi = Indikator.RSI(close)
+        macd = Indikator.MACD(close)
+        macd_values = macd[0]
+        macd_signal = macd[1]
+        if fdi[-4] is not None and rsi[-3] is not None and macd_values[-3] is not None and macd_signal[-3] is not None:
+            if (fdi[-4] < 0 or fdi[-4] > fdi[-3] or rsi[-3] < 40 or macd_values[-3] < macd_signal[-3]) and fdi[-3] > 0 and fdi[-3] < fdi[-2] and rsi[-2] > 40 and macd_values[-2] > macd_signal[-2]:
+                return "BUY"
+            elif fdi[-3] < 0 and fdi[-3] > fdi[-2] and rsi[-2] < 60 and macd_values[-2] < macd_signal[-2]:
+                return "SELL"
+            elif buy_price is not None and close[-1] < (buy_price * (1 - Stratejiler.stop_lose)):
+                return "STOP-LOSE"
+            else:
+                return False
+        else:
+            return None
 
-                    #Indikator
-                    rsi=indikator.RSI(close)
-                    bb=indikator.BB(rsi)
+    @staticmethod
+    def BB_Close(high, low, close,buy_price=None):
+        bb = Indikator.BB(close)
+        bb_down = bb[0]
+        bb_mid = bb[1]
+        bb_up = bb[2]
+        if bb_down[-3] is not None and bb_mid[-3] is not None and bb_up[-3] is not None:
+            if bb_down[-3] > close[-3] and bb_down[-2] < close[-2]:
+                return "BUY"
+            elif ((bb_up[-3] < close[-3] and bb_up[-2] > close[-2]) or (bb_down[-2] * 0.99 > close[-2]) or
+                  (bb_mid[-3] < close[-3] and bb_mid[-2] > close[-2])):
+                return "SELL"
+            elif buy_price is not None and close[-1] < (buy_price * (1 - Stratejiler.stop_lose)):
+                return "STOP-LOSE"
+            else:
+                return False
+        else:
+            return None
 
-                    if(sonislem=="SAT"):
-                        if (bb[0][-1] > rsi[-1]):   #ALIM SARTI
-                            sonislem="AL"
+    @staticmethod
+    def MA_Cross(high, low, close,buy_price=None):
+        ma_9 = Indikator.SMA(close, 9)
+        ma_50 = Indikator.SMA(close, 50)
+        adx = Indikator.ADX(high, low, close)
+        if ma_9[-2] is not None and ma_50[-2] is not None and adx[-1] is not None:
+            if ma_9[-3] < ma_50[-3] and ma_9[-2] > ma_50[-2] and adx[-2] > 30:
+                return "BUY"
+            elif (ma_9[-3] > ma_50[-3] and ma_9[-2] < ma_50[-2]) or (ma_50[-2] * 0.99 > close[-2]):
+                return "SELL"
+            elif buy_price is not None and close[-1] < (buy_price * (1 - Stratejiler.stop_lose)):
+                return "STOP-LOSE"
+            else:
+                return False
+        else:
+            return None
 
-                            #Adet hesaplama
-                            adet = round((nakit / close[-1]), binance.minimum_hareket(float(client.get_symbol_info(coin)["filters"][2]["minQty"])))
+    @staticmethod
+    def DMO(high, low, close,buy_price=None):
+        dmo = Indikator.DMO(close)
+        adx = Indikator.ADX(high, low, close)
+        rsi = Indikator.RSI(close)
+        bb = Indikator.BB(close)
+        bb_down = bb[0]
+        bb_up = bb[2]
+        if dmo[-3] is not None and adx[-3] is not None and rsi[-3] is not None and bb_down[-2] is not None and bb_up[-3] is not None:
+            if (dmo[-3] < 1.0 or adx[-3] < 20 or rsi[-3] < 50 or close[-3] < bb_up[-3]) and dmo[-2] > 1.0 and adx[-2] > 20 and rsi[-2] > 50 and close[-2] >= bb_up[-2]:
+                return "BUY"
+            elif dmo[-2] < 0.8 or adx[-2] < 20 or (rsi[-2] < 50 and close[-2] <= bb_down[-2]):
+                return "SELL"
+            elif buy_price is not None and close[-1] < (buy_price * (1 - Stratejiler.stop_lose)):
+                return "STOP-LOSE"
+            else:
+                return False
+        else:
+            return None
 
-                            if (gercek):  # Eger islem gercek ise borsaya emir gönderecek
-                                binance.al(coin,adet)
-                            mail_gonder("AL | BB_RSI Al-sat "+periyot, coin + " " + str(adet) + " alindi \n" + "Maliyet : " + str(close[-1]) + " USDT")
-                            break
-                    else:
-                        if (bb[2][-2] < rsi[-2] and bb[2][-1] > rsi[-1]):  # SATIM SARTI
-                            sonislem = "SAT"
-
-                            #Adet hesaplama
-                            mevcut_adedim=sahip_olduklarim[coin]
-                            basamak = float(client.get_symbol_info(coin)["filters"][2]["minQty"])
-                            adim = binance.minimum_hareket(basamak)
-                            adet = round(mevcut_adedim - (mevcut_adedim % basamak), adim)
-
-                            if (gercek):  # Eger islem gercek ise borsaya emir gönderecek
-                                binance.sat(coin,adet)
-                            mail_gonder("SAT | BB_RSI Al-sat "+periyot,coin + " " + str(adet) + " satildi")
-                            break
-            except :
-                # Hata bildirimi
-                hata = traceback.format_exc()
-                mail_gonder("HATA | BB_RSI Al-sat "+periyot, hata)
-                #Tekrar calistir
-                alsat.BB_RSI(coinlist, periyot,gercek,sonislem)
-
-class Tarama:
-
-    def tarama_bildir_coin(self,coinlist, periyot, mumbekle):
-        bb_rsi = []
-        macd_ema = []
-        binance = Binance()
-        araclar = Araclar()
-        print(periyot, "Tarama Calisiyor [Coin]...", time.ctime(time.time()))
-        while True:
-            try:
-                # Mumun olusmasini bekleme alani
-                if mumbekle:
-                    if (time.time() % zaman_dilimleri[periyot] > 120):
-                        time.sleep(zaman_dilimleri[periyot] - (time.time() % zaman_dilimleri[periyot]))
-                for coin in coinlist:
-                    #   Veriler
-                    en_kucuk = 99999999
-                    en_buyuk = 0
-                    high = binance.data(coin, 1000, periyot, 2)
-                    low = binance.data(coin, 1000, periyot, 3)
-                    close = binance.data(coin, 1000, periyot, 4)
-                    close_day = binance.data(coin, 1000, "1d", 4)
-                    if (len(close) < 35):
-                        continue
-
-                    for fiyat in close[-144:]:
-                        if (fiyat < en_kucuk):
-                            en_kucuk = fiyat
-                        elif (fiyat > en_buyuk):
-                            en_buyuk = fiyat
-
-                    fiyatlar_seviyeler = {}
-                    seviyeler = [0.236, 0.382, 0.5, 0.618, 0.786]
-                    for j in seviyeler:
-                        fib_fiyat = en_kucuk - (en_kucuk - en_buyuk) * j
-                        fiyatlar_seviyeler[j] = fib_fiyat
-
-                    #   BB-RSI
-                    rsi = Indikator.RSI(close)
-                    bb = Indikator.BB(rsi)
-                    if (bb[0][-1] > rsi[-1] and ((close[-1] <= fiyatlar_seviyeler[0.236]) or (
-                            close[-1] <= fiyatlar_seviyeler[0.382] * 1.01 and close[-1] >= fiyatlar_seviyeler[
-                        0.382] * 0.99) or (close[-1] <= fiyatlar_seviyeler[0.5] * 1.01 and close[-1] >=
-                                           fiyatlar_seviyeler[0.5] * 0.99) or (
-                                                         close[-1] <= fiyatlar_seviyeler[0.618] * 1.01 and close[-1] >=
-                                                         fiyatlar_seviyeler[0.618] * 0.99))):
-                        if (len(bb_rsi) == 0):
-                            bb_rsi.append(coin + " " + str(close[-1]))
-                        elif (rsi[-1] < 30):
-                            bb_rsi.append(coin + " " + str(close[-1]))
-                    #   MACD-EMA
-                    Macd = Indikator.MACD(close)
-                    macd = Macd[0]
-                    sinyal = Macd[1]
-                    ema200 = Indikator.EMA(close, 200)
-                    if (close[-1] > ema200[-1] and macd[-1] > sinyal[-1] and macd[-2] < sinyal[-2] and macd[-1] > 0):
-                        macd_ema.append(coin + " " + str(close[-1]))
-
-                mesaj = "BB-RSI : " + str(bb_rsi) + "\n" + "MACD-EMA[200] : " + str(macd_ema)
-
-                araclar.mail_gonder("Robot | Tarama [Coin] " + periyot, mesaj)
-
-                #   Temizleme
-                bb_rsi = []
-                macd_ema = []
-            except:
-                hata = traceback.format_exc()
-                araclar.mail_gonder("HATA | Tarama [Coin] " + periyot, hata)
-                self.tarama_bildir_coin(coinlist, periyot, mumbekle)
+    @staticmethod
+    def BB_ADX(high, low, close,buy_price=None):
+        bb = Indikator.BB(close)
+        adx = Indikator.ADX(high, low, close)
+        bb_down = bb[0]
+        bb_up = bb[2]
+        if bb_down[-2] is not None and bb_up[-2] is not None and adx[-2] is not None:
+            if bb_down[-2] > close[-2] and adx[-2] > 25:
+                return "BUY"
+            elif (close[-2] > bb_up[-2] and adx[-2] < 20):
+                return "SELL"
+            elif buy_price is not None and close[-1] < (buy_price * (1 - Stratejiler.stop_lose)):
+                return "STOP-LOSE"
+            else:
+                return False
+        else:
+            return None

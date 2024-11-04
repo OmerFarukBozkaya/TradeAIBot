@@ -1,4 +1,6 @@
 from binance.client import Client       #   pip install python-binance
+import requests
+from requests.adapters import HTTPAdapter
 class Binance:
     def __init__(self, api_key=None, api_secret=None):
         """
@@ -12,6 +14,10 @@ class Binance:
             self.key, self.secret = self.load_settings()
 
         self.client = Client(self.key, self.secret)
+        self.base_url = "https://api.binance.com"
+        self.session = requests.Session()
+        adapter = requests.adapters.HTTPAdapter(pool_connections=100, pool_maxsize=300)
+        self.session.mount('https://', adapter)
     def load_settings(self):
         """
         API anahtarlarını 'settings.txt' dosyasından okur.
@@ -29,10 +35,10 @@ class Binance:
         for i in self.client.get_account()["balances"]:
             if ((float(i["free"]) == 0 and float(i["locked"]) == 0) or i["asset"]=="NFT" or i["asset"] == "BUSD" or (
                     i["asset"] == "BNB" and (
-                    ((float(i["free"]) + float(i["locked"])) * self.data("BNBUSDT", 1, "4h", 4)[-1]) <= 10))):
+                    ((float(i["free"]) + float(i["locked"])) * self.get_coin_data("BNBUSDT","4h",1)['close'][-1]) <= 10))):
                 continue
             else:
-                sahip_olduklarim[i["asset"] + "USDT"] = i["free"]
+                sahip_olduklarim[i["asset"] + "USDT"] = float(i["free"])
         return sahip_olduklarim
     def al(self, coin, adet):
         order = self.client.order_market_buy(symbol=coin, quantity=adet)
@@ -49,34 +55,35 @@ class Binance:
             if(i == "USDTUSDT"):
                 toplam_deger=toplam_deger+float(cuzdan[i])
             else:
-                toplam_deger = toplam_deger + (self.data(i,1,"1m",4)[-1] * float(cuzdan[i]))
+                toplam_deger = toplam_deger + (self.get_coin_data(i,"1m",1)['close'][-1] * float(cuzdan[i]))
         return toplam_deger
     def coin_list(self):
-        exchange_info = self.client.get_exchange_info()
-        list_coin = []
-        for s in exchange_info['symbols']:
-            if (s['symbol'][-4:] == "USDT" and s['symbol'][-6:] != "UPUSDT" and s['symbol'][-8:] != "DOWNUSDT" and s[
-                                                                                                                       'symbol'][
-                                                                                                                   -8:] != "BULLUSDT" and
-                    s['symbol'][-8:] != "BEARUSDT" and s['symbol'] != "USDCUSDT" and s['symbol'] != "USDSUSDT" and s[
-                        'symbol'] != "BCCUSDT" and s['symbol'] != "TUSDUSDT" and s['symbol'] != "PAXUSDT" and s[
-                        'symbol'] != "BCHABCUSDT" and s['symbol'] != "BCHSVUSDT" and s['symbol'] != "ONGUSDT" and s[
-                        'symbol'] != "TFUELUSDT" and s['symbol'] != "USDSBUSDT" and s['symbol'] != "ERDUSDT" and s[
-                        'symbol'] != "NPXSUSDT" and s['symbol'] != "STORMUSDT" and s['symbol'] != "BUSDUSDT" and s[
-                        'symbol'] != "EURUSDT" and s['symbol'] != "DREPUSDT" and s['symbol'] != "STRATUSDT" and s[
-                        'symbol'] != "XZCUSDT" and s['symbol'] != "GXSUSDT" and s['symbol'] != "LENDUSDT" and s[
-                        'symbol'] != "BKRWUSDT" and s['symbol'] != "GBPUSDT" and s['symbol'] != "DAIUSDT" and s[
-                        'symbol'] != "AUDUSDT" and s['symbol'] != "YFIUSDT" and s['symbol'] != "PAXGUSDT" and s[
-                        'symbol'] != "WINXUSDT" and s['symbol'] != "YFIIUSDT" and s['symbol'] != "SUSDUSDT" and s[
-                        'symbol'] != "JUVUSDT" and s['symbol'] != "PSGUSDT" and s['symbol'] != "OGUSDT" and s[
-                        'symbol'] != "ATMUSDT" and s['symbol'] != "ASRUSDT" and s['symbol'] != "ACMUSDT" and s[
-                        'symbol'] != "BTGUSDT" and s['symbol'] != "BARUSDT" and s['symbol'] != "KLAYUSDT" and s[
-                        'symbol'] != "HCUSDT" and s['symbol'] != "MKRUSDT" and s['symbol'] != "MCOUSDT" and s[
-                        'symbol'] != "USDPUSDT" and s['symbol'] != "BZRXUSDT" and s['symbol'] != "VENUSDT" and s[
-                        'symbol'] != "GTOUSDT" and s['symbol'] != "SRMUSDT"):
-                list_coin.append(s['symbol'])
-        return list_coin
-    def minimum_hareket(basamak):
+        result = ['BTCUSDT', 'ETHUSDT', 'BNBUSDT', 'NEOUSDT', 'LTCUSDT', 'QTUMUSDT', 'ADAUSDT', 'XRPUSDT', 'EOSUSDT', 'IOTAUSDT',
+                  'XLMUSDT', 'ONTUSDT', 'TRXUSDT', 'ETCUSDT', 'ICXUSDT', 'NULSUSDT', 'VETUSDT', 'LINKUSDT', 'ONGUSDT', 'HOTUSDT',
+                  'ZILUSDT', 'ZRXUSDT', 'FETUSDT', 'BATUSDT', 'IOSTUSDT', 'CELRUSDT', 'DASHUSDT', 'THETAUSDT', 'ENJUSDT',
+                  'ATOMUSDT', 'ONEUSDT', 'FTMUSDT', 'ALGOUSDT', 'DOGEUSDT', 'DUSKUSDT', 'ANKRUSDT', 'WINUSDT', 'COSUSDT', 'DENTUSDT',
+                  'WANUSDT', 'FUNUSDT', 'CVCUSDT', 'CHZUSDT', 'BANDUSDT', 'XTZUSDT', 'RVNUSDT', 'HBARUSDT',
+                  'NKNUSDT', 'STXUSDT', 'KAVAUSDT', 'ARPAUSDT', 'IOTXUSDT', 'RLCUSDT', 'TROYUSDT',
+                  'OGNUSDT', 'LSKUSDT', 'BNTUSDT', 'LTOUSDT', 'COTIUSDT', 'STPTUSDT', 'DATAUSDT', 'SOLUSDT',
+                  'CTSIUSDT', 'HIVEUSDT', 'CHRUSDT', 'ARDRUSDT', 'MDTUSDT', 'STMXUSDT', 'KNCUSDT', 'LRCUSDT', 'COMPUSDT', 'SCUSDT',
+                  'ZENUSDT', 'SNXUSDT', 'VTHOUSDT', 'DGBUSDT', 'SXPUSDT', 'MKRUSDT', 'DCRUSDT', 'STORJUSDT', 'MANAUSDT', 'YFIUSDT',
+                  'KMDUSDT', 'JSTUSDT', 'CRVUSDT', 'SANDUSDT', 'NMRUSDT', 'DOTUSDT', 'LUNAUSDT',
+                  'RSRUSDT', 'PAXGUSDT', 'TRBUSDT', 'SUSHIUSDT', 'KSMUSDT', 'EGLDUSDT', 'DIAUSDT', 'RUNEUSDT', 'FIOUSDT', 'UMAUSDT',
+                  'BELUSDT', 'WINGUSDT', 'UNIUSDT', 'OXTUSDT', 'AVAXUSDT', 'FLMUSDT', 'UTKUSDT', 'XVSUSDT', 'ALPHAUSDT',
+                  'AAVEUSDT', 'NEARUSDT', 'FILUSDT', 'INJUSDT', 'AUDIOUSDT', 'CTKUSDT', 'AXSUSDT', 'STRAXUSDT',
+                  'ROSEUSDT', 'AVAUSDT', 'SKLUSDT', 'GRTUSDT', '1INCHUSDT', 'CELOUSDT', 'RIFUSDT', 'TRUUSDT', 'CKBUSDT',
+                  'LITUSDT', 'SFPUSDT', 'DODOUSDT', 'CAKEUSDT', 'BADGERUSDT', 'FISUSDT', 'OMUSDT', 'PONDUSDT', 'DEGOUSDT', 'ALICEUSDT',
+                  'PERPUSDT', 'SUPERUSDT', 'CFXUSDT', 'TKOUSDT', 'PUNDIXUSDT', 'TLMUSDT', 'FORTHUSDT', 'BAKEUSDT',
+                  'BURGERUSDT', 'SLPUSDT', 'SHIBUSDT', 'ICPUSDT', 'ARUSDT', 'MASKUSDT', 'LPTUSDT', 'XVGUSDT', 'ATAUSDT', 'GTCUSDT',
+                  'ERNUSDT', 'PHAUSDT', 'MLNUSDT', 'DEXEUSDT', 'C98USDT', 'QNTUSDT', 'FLOWUSDT', 'MINAUSDT', 'RAYUSDT',
+                  'FARMUSDT', 'ALPACAUSDT', 'QUICKUSDT', 'MBOXUSDT', 'REQUSDT', 'GHSTUSDT', 'WAXPUSDT', 'GNOUSDT', 'XECUSDT',
+                  'DYDXUSDT', 'IDEXUSDT', 'VIDTUSDT', 'GALAUSDT', 'ILVUSDT', 'YGGUSDT', 'SYSUSDT', 'DFUSDT', 'FIDAUSDT', 'AGLDUSDT',
+                  'RADUSDT', 'RAREUSDT', 'CHESSUSDT', 'ADXUSDT', 'AUCTIONUSDT', 'DARUSDT', 'MOVRUSDT', 'ENSUSDT',
+                  'QIUSDT', 'PORTOUSDT', 'POWRUSDT', 'AMPUSDT', 'PYRUSDT', 'ALCXUSDT', 'BICOUSDT', 'FLUXUSDT',
+                  'FXSUSDT', 'VOXELUSDT', 'HIGHUSDT', 'PEOPLEUSDT', 'SPELLUSDT', 'JOEUSDT', 'ACHUSDT',
+                  'IMXUSDT', 'GLMRUSDT', 'LOKAUSDT', 'SCRTUSDT', 'API3USDT', 'BTTCUSDT', 'ACAUSDT', 'XNOUSDT']
+        return result
+    def minimum_hareket(self,basamak):
         if (basamak == 1):
             return 0
         if (basamak == 0.1):
@@ -92,37 +99,11 @@ class Binance:
         if (basamak == 0.000001):
             return 6
     def secili_list(self):
-        return ['BTCUSDT', 'ETHUSDT', 'BNBUSDT', 'NEOUSDT', 'LTCUSDT', 'QTUMUSDT', 'ADAUSDT', 'XRPUSDT', 'EOSUSDT',
-                'IOTAUSDT',
-                'XLMUSDT', 'ONTUSDT', 'TRXUSDT', 'ETCUSDT', 'ICXUSDT', 'NULSUSDT', 'VETUSDT', 'LINKUSDT', 'WAVESUSDT',
-                'BTTUSDT', 'HOTUSDT', 'ZILUSDT', 'ZRXUSDT', 'FETUSDT', 'BATUSDT', 'ZECUSDT', 'IOSTUSDT', 'CELRUSDT',
-                'DASHUSDT', 'NANOUSDT', 'OMGUSDT', 'THETAUSDT', 'ENJUSDT', 'MITHUSDT', 'MATICUSDT', 'ATOMUSDT',
-                'ONEUSDT', 'FTMUSDT',
-                'ALGOUSDT', 'DOGEUSDT', 'DUSKUSDT', 'ANKRUSDT', 'WINUSDT', 'COSUSDT', 'COCOSUSDT', 'MTLUSDT',
-                'TOMOUSDT',
-                'PERLUSDT', 'DENTUSDT', 'MFTUSDT', 'KEYUSDT', 'DOCKUSDT', 'WANUSDT', 'FUNUSDT', 'CVCUSDT', 'CHZUSDT',
-                'BANDUSDT',
-                'BEAMUSDT', 'XTZUSDT', 'RENUSDT', 'RVNUSDT', 'HBARUSDT', 'NKNUSDT', 'STXUSDT', 'KAVAUSDT', 'ARPAUSDT',
-                'IOTXUSDT',
-                'RLCUSDT', 'CTXCUSDT', 'BCHUSDT', 'TROYUSDT', 'VITEUSDT', 'OGNUSDT', 'WRXUSDT', 'BTSUSDT',
-                'LSKUSDT', 'BNTUSDT', 'LTOUSDT', 'AIONUSDT', 'MBLUSDT', 'COTIUSDT', 'STPTUSDT', 'DATAUSDT', 'SOLUSDT',
-                'CTSIUSDT', 'HIVEUSDT', 'CHRUSDT', 'ARDRUSDT', 'MDTUSDT', 'STMXUSDT', 'KNCUSDT', 'REPUSDT', 'LRCUSDT',
-                'PNTUSDT',
-                'COMPUSDT', 'SCUSDT', 'ZENUSDT', 'SNXUSDT', 'VTHOUSDT', 'DGBUSDT', 'SXPUSDT', 'DCRUSDT', 'STORJUSDT',
-                'MANAUSDT',
-                'BALUSDT', 'BLZUSDT', 'IRISUSDT', 'KMDUSDT', 'JSTUSDT', 'ANTUSDT', 'CRVUSDT', 'SANDUSDT', 'OCEANUSDT',
-                'NMRUSDT', 'DOTUSDT', 'LUNAUSDT', 'RSRUSDT', 'WNXMUSDT', 'TRBUSDT', 'SUSHIUSDT', 'KSMUSDT', 'EGLDUSDT',
-                'DIAUSDT', 'RUNEUSDT', 'FIOUSDT', 'UMAUSDT', 'BELUSDT', 'WINGUSDT', 'UNIUSDT', 'NBSUSDT', 'OXTUSDT',
-                'SUNUSDT',
-                'AVAXUSDT', 'HNTUSDT', 'FLMUSDT', 'ORNUSDT', 'UTKUSDT', 'XVSUSDT', 'ALPHAUSDT', 'AAVEUSDT', 'NEARUSDT',
-                'FILUSDT',
-                'INJUSDT', 'AUDIOUSDT', 'CTKUSDT', 'AKROUSDT', 'AXSUSDT', 'HARDUSDT', 'DNTUSDT', 'STRAXUSDT',
-                'UNFIUSDT', 'ROSEUSDT',
-                'AVAUSDT', 'XEMUSDT', 'SKLUSDT', 'GRTUSDT', '1INCHUSDT', 'REEFUSDT', 'CELOUSDT', 'RIFUSDT', 'BTCSTUSDT',
-                'TRUUSDT',
-                'CKBUSDT', 'TWTUSDT', 'FIROUSDT', 'LITUSDT', 'SFPUSDT', 'DODOUSDT', 'CAKEUSDT', 'BADGERUSDT', 'FISUSDT',
-                'OMUSDT',
-                'PONDUSDT', 'DEGOUSDT', 'ALICEUSDT', 'LINAUSDT']
+        return ['BTCUSDT','ETHUSDT','BNBUSDT','SOLUSDT','XRPUSDT','DOGEUSDT','TRXUSDT','ADAUSDT',
+                'AVAXUSDT','SHIBUSDT','LINKUSDT','BCHUSDT','DOTUSDT','NEARUSDT','LTCUSDT','UNIUSDT',
+                'ICPUSDT','FETUSDT','ETCUSDT','XLMUSDT','STXUSDT','IMXUSDT','AAVEUSDT','FILUSDT',
+                'HBARUSDT','INJUSDT','VETUSDT','ATOMUSDT','FTMUSDT','RUNEUSDT','GRTUSDT','MINAUSDT',
+                'MANAUSDT','IOTAUSDT','QTUMUSDT','CVCUSDT']
     def data(self,ad, adet, zaman, mod):
         """
         :param ad: Coin Adi (str)
@@ -181,3 +162,65 @@ class Binance:
             return satishacmi
         elif (mod == 11):
             return gozardiedilebilir
+
+    def trade_edilebilir_coinler(self):
+        url = "https://api.binance.com/api/v3/exchangeInfo"
+        response = requests.get(url)
+        # Dönen yanıtı kontrol et ve kullan
+        result=[]
+        if response.status_code == 200:
+            data = response.json()  # JSON yanıtı al
+            for i in data['symbols']:
+                if i['status']=="TRADING" and "USD" not in i['baseAsset'] and i['quoteAsset'] == "USDT" and  "SPOT" in i['permissionSets'][0]:
+                    result.append(i['symbol'])
+        else:
+            print("İstek başarısız oldu:", response.status_code)
+
+        olmayanlar=[]
+        olanlar=[]
+        coinlist=self.coin_list()
+        for i in coinlist:
+            if i not in result:
+                olmayanlar.append(i)
+            else:
+                olanlar.append(i)
+        print(f"Doğru olanların sayısı : {len(olanlar)} Kaldırılanların sayısı : {len(olmayanlar)} Trade edilebilir : {len(result)}")
+        return result
+
+    def get_coin_data(self,coin,periyot,adet):
+        data_url = f"/api/v3/klines?symbol={coin}&interval={periyot}&limit={adet}"
+        result={
+            'opendate':[],
+            'open':[],
+            'high':[],
+            'low':[],
+            'close':[],
+            'volume_coin':[],
+            'closedate':[],
+            'volume_usdt':[],
+            'trade_number':[],
+            'buy_coin_volume':[],
+            'buy_usdt_volume':[],
+            'ignore':[]
+        }
+        try:
+            response = requests.get(self.base_url + data_url,timeout=20)
+            response.raise_for_status()
+            data = response.json()  # JSON yanıtı al
+            for i in data:
+                result['opendate'].append(float(i[0]))
+                result['open'].append(float(i[1]))
+                result['high'].append(float(i[2]))
+                result['low'].append(float(i[3]))
+                result['close'].append(float(i[4]))
+                result['volume_coin'].append(float(i[5]))
+                result['closedate'].append(float(i[6]))
+                result['volume_usdt'].append(float(i[7]))
+                result['trade_number'].append(float(i[8]))
+                result['buy_coin_volume'].append(float(i[9]))
+                result['buy_usdt_volume'].append(float(i[10]))
+                result['ignore'].append(float(i[11]))
+        except requests.exceptions.RequestException as e:
+            print(f"İstek başarısız oldu: {e}")
+
+        return result
