@@ -132,11 +132,20 @@ class Trade:
                 logging.info(
                     f"DURUM : {periyot} {self.sell_strategy.__name__} {self.alinan_coin} Kar/Zarar: {((close[-1] / self.alim_fiyati) - 1) * 100:.2f}%")
 
-                if self.sell_strategy(high, low, close) == "SELL" or (self.gercek and self.binance.mevcut_adedim(self.alinan_coin) == 0):
+                sell_strategy_sonuc = self.sell_strategy(high, low, close,self.alim_fiyati)
+                if  sell_strategy_sonuc == "SELL" or (self.gercek and self.binance.mevcut_adedim(self.alinan_coin) == 0):
                     self.sell(self.alinan_coin, periyot, close, str(self.sell_strategy.__name__), self.alim_fiyati)
                     self.islem_acik = False
                     self.alinan_coin = None
                     self.alim_fiyati = None
+                    self.kaydet()
+                    break  # Satış yapıldı, döngüden çık
+                elif sell_strategy_sonuc == "STOP-LOSE":
+                    self.stop_lose(self.alinan_coin, periyot, close, str(self.sell_strategy.__name__), self.alim_fiyati)
+                    self.islem_acik = False
+                    self.alinan_coin = None
+                    self.alim_fiyati = None
+                    self.kaydet()
                     break  # Satış yapıldı, döngüden çık
                 time.sleep(10)
         except Exception as e:
@@ -182,4 +191,25 @@ class Trade:
             self.binance.sat(coin, adet)
         self.araclar.mail_gonder(f"SAT | {strateji_adi} {periyot}",
                                      f"{coin} satıldı, Adet: {self.adet}, Fiyat: {close[-1]} Kar/Zarar:{((close[-1] / buy_price) - 1) * 100:.2f}%")
+        return "SAT"
+
+    def stop_lose(self, coin, periyot, close, strateji_adi, buy_price):
+        kar_zarar = ((close[-1] / buy_price) - 1) * 100
+        logging.info(f"SAT [STOP-LOSE] {strateji_adi} {periyot}| {coin} satıldı, Adet: {self.adet}, Fiyat: {close[-1]}")
+        islemgecmisi.info(
+            f"{strateji_adi} {periyot} SAT [STOP-LOSE] | {coin} satıldı, Adet: {self.adet}, Fiyat: {close[-1]:.2f} Kar/Zarar: {kar_zarar:.2f}%"
+        )
+        print(
+            f"{strateji_adi} {periyot} SAT [STOP-LOSE] | {coin} satıldı, Adet: {self.adet}, Fiyat: {close[-1]:.2f} Kar/Zarar: {kar_zarar:.2f}%"
+        )
+
+        if self.gercek:
+            print("Gerçekten satıldı")
+            mevcut_adedim = self.binance.sahip_olduklarim()[coin]
+            adet = round(mevcut_adedim - (mevcut_adedim % float(self.binance.minimum_hareket(
+                float(self.binance.client.get_symbol_info(coin)["filters"][1]["minQty"])))))
+            self.nakit = (close[-1] * adet) * 0.999
+            self.binance.sat(coin, adet)
+        self.araclar.mail_gonder(f"SAT [STOP-LOSE] | {strateji_adi} {periyot}",
+                                 f"{coin} satıldı, Adet: {self.adet}, Fiyat: {close[-1]} Kar/Zarar:{((close[-1] / buy_price) - 1) * 100:.2f}%")
         return "SAT"
