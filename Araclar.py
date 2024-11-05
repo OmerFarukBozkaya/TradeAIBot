@@ -297,3 +297,12 @@ class Araclar:
         for strategy in strategys:
             print(f"{strategy.__name__} : {strategy(high, low, close)}")
 
+    @staticmethod
+    def mum_sagligi(open,close):
+        uzunluk=len(open)
+        resault=0
+        for i in range(uzunluk):
+            if open[i] == close[i]:
+                resault = resault + 1
+        return resault
+

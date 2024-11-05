@@ -106,6 +106,10 @@ class Trade:
             high = data['high']
             low = data['low']
             close = data['close']
+            open = data['open']
+            
+            if self.araclar.mum_sagligi(open=open[-50:],close=close[-50:]) > 5:
+                return False
 
             for strategy in strategys[periyot]:
                 with self.global_lock:  # Global kilit kullanarak sadece bir strateji kontrol et
