@@ -73,9 +73,14 @@ elif com == "5":
 elif com == "6":
     a=time.time()
     coin=input("Coin:")
+    adet = int(input("Adet : "))
     periyot = input("Periyot (15m,1h,4h,1d):")
-    adet= int(input("Adet : "))
-    araclar.coin_indikator_degerleri(coin,periyot,adet)
+    if periyot not in ["15m","1h","4h","1d"]:
+        for i in ["15m","1h","4h","1d"]:
+            print(i)
+            araclar.coin_indikator_degerleri(coin,i,adet)
+    else:
+        araclar.coin_indikator_degerleri(coin,periyot,adet)
     b=time.time()
     print(araclar.saniye_to_hms(b - a))
 elif com == "7":
