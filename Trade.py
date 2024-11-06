@@ -35,6 +35,7 @@ class Trade:
         self.global_lock = threading.Lock()  # Paralel işlemleri kontrol için global kilit
         self.nakit = None
         self.sell_strategy=None
+        self.mum_sayisi=0
 
     def kaydet(self):
         durum = {
@@ -44,7 +45,8 @@ class Trade:
             'adet': self.adet,
             'nakit': self.nakit,
             'sell_strategy': self.sell_strategy.__name__ if self.sell_strategy else None,
-            'periyot': self.periyot
+            'periyot': self.periyot,
+            'mum_sayisi':self.mum_sayisi
         }
         with open(f'trade_durumu_{self.periyot}.json', 'w') as f:
             json.dump(durum, f)
@@ -61,6 +63,7 @@ class Trade:
                 self.nakit = durum['nakit']
                 self.sell_strategy = getattr(Stratejiler, durum['sell_strategy']) if durum['sell_strategy'] else None
                 self.periyot = durum['periyot']
+                self.mum_sayisi = durum['mum_sayisi']
     def TradeEt(self, coinlist, periyot, gercek,nakit):
         self.gercek = gercek  # Gerçek işlem bilgisi kaydedildi
         self.nakit=nakit
@@ -129,12 +132,14 @@ class Trade:
         try:
             while self.islem_acik:
                 self.araclar.mum_olusmasini_bekle(periyot)
+                self.mum_sayisi = self.mum_sayisi + 1
+                self.kaydet()
                 data = self.binance.get_coin_data(self.alinan_coin, periyot, 1000)
                 high = data['high']
                 low = data['low']
                 close = data['close']
                 logging.info(
-                    f"DURUM : {periyot} {self.sell_strategy.__name__} {self.alinan_coin} Kar/Zarar: {((close[-1] / self.alim_fiyati) - 1) * 100:.2f}%")
+                    f"DURUM : {periyot} {self.sell_strategy.__name__} {self.alinan_coin} Islem Suresi: {self.mum_sayisi} mum. Kar/Zarar: {((close[-1] / self.alim_fiyati) - 1) * 100:.2f}%")
 
                 sell_strategy_sonuc = self.sell_strategy(high, low, close,self.alim_fiyati)
                 if  sell_strategy_sonuc == "SELL" or (self.gercek and self.binance.mevcut_adedim(self.alinan_coin) == 0):
