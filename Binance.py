@@ -1,6 +1,7 @@
 from binance.client import Client       #   pip install python-binance
 import requests
 from requests.adapters import HTTPAdapter
+import concurrent.futures
 class Binance:
     def __init__(self, api_key=None, api_secret=None):
         """
@@ -68,7 +69,7 @@ class Binance:
                   'CTSIUSDT', 'HIVEUSDT', 'CHRUSDT', 'ARDRUSDT', 'MDTUSDT', 'STMXUSDT', 'KNCUSDT', 'LRCUSDT', 'COMPUSDT', 'SCUSDT',
                   'ZENUSDT', 'SNXUSDT', 'VTHOUSDT', 'DGBUSDT', 'SXPUSDT', 'MKRUSDT', 'DCRUSDT', 'STORJUSDT', 'MANAUSDT', 'YFIUSDT',
                   'KMDUSDT', 'JSTUSDT', 'CRVUSDT', 'SANDUSDT', 'NMRUSDT', 'DOTUSDT', 'LUNAUSDT',
-                  'RSRUSDT', 'PAXGUSDT', 'TRBUSDT', 'SUSHIUSDT', 'KSMUSDT', 'EGLDUSDT', 'DIAUSDT', 'RUNEUSDT', 'FIOUSDT', 'UMAUSDT',
+                  'RSRUSDT', 'TRBUSDT', 'SUSHIUSDT', 'KSMUSDT', 'EGLDUSDT', 'DIAUSDT', 'RUNEUSDT', 'FIOUSDT', 'UMAUSDT',
                   'BELUSDT', 'WINGUSDT', 'UNIUSDT', 'OXTUSDT', 'AVAXUSDT', 'FLMUSDT', 'UTKUSDT', 'XVSUSDT', 'ALPHAUSDT',
                   'AAVEUSDT', 'NEARUSDT', 'FILUSDT', 'INJUSDT', 'AUDIOUSDT', 'CTKUSDT', 'AXSUSDT', 'STRAXUSDT',
                   'ROSEUSDT', 'AVAUSDT', 'SKLUSDT', 'GRTUSDT', '1INCHUSDT', 'CELOUSDT', 'RIFUSDT', 'TRUUSDT', 'CKBUSDT',
@@ -224,3 +225,27 @@ class Binance:
             print(f"İstek başarısız oldu: {e}")
 
         return result
+
+    def coins_sorted_by_volume(self, coinlist, periyot):
+        binance = Binance()
+        data = {}
+
+        # İşlemleri paralel hale getir
+        with concurrent.futures.ThreadPoolExecutor() as executor:
+            futures = {executor.submit(binance.get_coin_data, coin, periyot, 1): coin for coin in coinlist}
+            for future in concurrent.futures.as_completed(futures):
+                coin = futures[future]
+                try:
+                    data[coin] = future.result()['volume_usdt']
+                except Exception as e:
+                    print(f"{coin} için veri çekilirken hata oluştu: {e}")
+
+        # Hacim verisine göre sıralama
+        sirali_coinler = sorted(data.items(), key=lambda x: x[1], reverse=True)
+
+        # Sadece coin isimlerini içeren bir liste oluştur
+        sirali_coin_isimleri = [coin for coin, _ in sirali_coinler]
+
+        return sirali_coin_isimleri
+
+
