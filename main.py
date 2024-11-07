@@ -23,6 +23,7 @@ print("""
 7)Coin Strateji degerleri
 8)Cihaz bilgilerini görüntüle
 9)Piyasa durumu
+10)Coinlist olustur
 """)
 com = input("Ne yapılacak :")
 if com == "0":
@@ -103,5 +104,10 @@ elif com == "8":
 elif com == "9":
     a=time.time()
     print(Tarama.Piyasa_Durumu(binance.coin_list()))
+    b=time.time()
+    print(araclar.saniye_to_hms(b-a))
+elif com == "10":
+    a=time.time()
+    binance.create_coin_list()
     b=time.time()
     print(araclar.saniye_to_hms(b-a))
