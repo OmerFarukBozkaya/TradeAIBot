@@ -147,6 +147,7 @@ class Trade:
                     self.islem_acik = False
                     self.alinan_coin = None
                     self.alim_fiyati = None
+                    self.mum_sayisi=0
                     self.kaydet()
                     break  # Satış yapıldı, döngüden çık
                 elif sell_strategy_sonuc == "STOP-LOSE":
@@ -154,6 +155,7 @@ class Trade:
                     self.islem_acik = False
                     self.alinan_coin = None
                     self.alim_fiyati = None
+                    self.mum_sayisi = 0
                     self.kaydet()
                     break  # Satış yapıldı, döngüden çık
                 time.sleep(10)
