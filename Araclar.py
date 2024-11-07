@@ -222,15 +222,15 @@ class Araclar:
         print(f"Sonuçlar {output_file} dosyasına başarıyla kaydedildi.")
 
     @staticmethod
-    def listeden_sahip_olduklarimi_cikar(list):
+    def listeden_sahip_olduklarimi_cikar(coinlist):
         # Eğer alım yapacaksam sahip olunan coinleri liste dışı bırak
         binance = Binance()
         for sil in binance.sahip_olduklarim().keys():
             try:
-                list.remove(sil[0])
+                coinlist.remove(sil)
             except:
                 continue
-        return list
+        return coinlist
 
     @staticmethod
     def coin_indikator_degerleri(coin,periyot,adet=10):
@@ -305,4 +305,3 @@ class Araclar:
             if open[i] == close[i]:
                 resault = resault + 1
         return resault
-
