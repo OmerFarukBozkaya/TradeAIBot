@@ -132,14 +132,10 @@ class Trade:
         try:
             while self.islem_acik:
                 self.araclar.mum_olusmasini_bekle(periyot)
-                self.mum_sayisi = self.mum_sayisi + 1
-                self.kaydet()
                 data = self.binance.get_coin_data(self.alinan_coin, periyot, 1000)
                 high = data['high']
                 low = data['low']
                 close = data['close']
-                logging.info(
-                    f"DURUM : {periyot} {self.sell_strategy.__name__} {self.alinan_coin} Islem Suresi: {self.mum_sayisi} mum. Kar/Zarar: {((close[-1] / self.alim_fiyati) - 1) * 100:.2f}%")
 
                 sell_strategy_sonuc = self.sell_strategy(high, low, close,self.alim_fiyati)
                 if  sell_strategy_sonuc == "SELL" or (self.gercek and self.binance.mevcut_adedim(self.alinan_coin) == 0):
@@ -158,6 +154,12 @@ class Trade:
                     self.mum_sayisi = 0
                     self.kaydet()
                     break  # Satış yapıldı, döngüden çık
+
+                self.mum_sayisi = self.mum_sayisi + 1
+                self.kaydet()
+                logging.info(
+                    f"DURUM : {periyot} {self.sell_strategy.__name__} {self.alinan_coin} Islem Suresi: {self.mum_sayisi} mum. Kar/Zarar: {((close[-1] / self.alim_fiyati) - 1) * 100:.2f}%")
+
                 time.sleep(10)
         except Exception as e:
             hata = traceback.format_exc()
