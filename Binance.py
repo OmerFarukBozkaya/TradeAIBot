@@ -235,6 +235,17 @@ class Binance:
 
         return result
 
+    def get_coin_minQTY(self,coin):
+        url = "https://api.binance.com/api/v3/exchangeInfo"
+        response = requests.get(url)
+        if response.status_code == 200:
+            data = response.json()  # JSON yanıtı al
+            for i in data['symbols']:
+                if i['symbol'] == coin and i['status']=="TRADING" and "USD" not in i['baseAsset'] and i['quoteAsset'] == "USDT" and  "SPOT" in i['permissionSets'][0]:
+                    return float(i['filters'][1]['minQty'])
+        else:
+            print("İstek başarısız oldu:", response.status_code)
+            return None
     def coins_sorted_by_volume(self, coinlist, periyot):
         binance = Binance()
         data = {}

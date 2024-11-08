@@ -170,8 +170,10 @@ class Trade:
 
     def buy(self, coin, periyot, strateji_adi, close,nakit):
         # Adet hesapla
-        adet = round((nakit / close[-1]), self.binance.minimum_hareket(
-            float(self.binance.client.get_symbol_info(coin)["filters"][1]["minQty"])))
+        nakit = nakit * 0.999
+        minQty = self.binance.get_coin_minQTY(coin)
+        adet = nakit / close[-2]
+        adet = adet - (adet % minQty)
         if self.gercek:
             if nakit > 10:
                 print("Gerçekten alındı")
@@ -201,7 +203,8 @@ class Trade:
         if self.gercek:
             print("Gerçekten satıldı")
             mevcut_adedim = self.binance.sahip_olduklarim()[coin]
-            adet = round(mevcut_adedim - (mevcut_adedim % float(self.binance.minimum_hareket(float(self.binance.client.get_symbol_info(coin)["filters"][1]["minQty"])))))
+            minQty = self.binance.get_coin_minQTY(coin)
+            adet = mevcut_adedim-(mevcut_adedim % minQty)
             self.nakit = (close[-1] * adet)*0.999
             self.binance.sat(coin, adet)
         self.araclar.mail_gonder(f"SAT | {strateji_adi} {periyot}",
@@ -221,8 +224,8 @@ class Trade:
         if self.gercek:
             print("Gerçekten satıldı")
             mevcut_adedim = self.binance.sahip_olduklarim()[coin]
-            adet = round(mevcut_adedim - (mevcut_adedim % float(self.binance.minimum_hareket(
-                float(self.binance.client.get_symbol_info(coin)["filters"][1]["minQty"])))))
+            minQty = self.binance.get_coin_minQTY(coin)
+            adet = mevcut_adedim - (mevcut_adedim % minQty)
             self.nakit = (close[-1] * adet) * 0.999
             self.binance.sat(coin, adet)
         self.araclar.mail_gonder(f"SAT [STOP-LOSE] | {strateji_adi} {periyot}",
