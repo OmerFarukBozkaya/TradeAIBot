@@ -64,7 +64,7 @@ class Trade:
                 self.sell_strategy = getattr(Stratejiler, durum['sell_strategy']) if durum['sell_strategy'] else None
                 self.periyot = durum['periyot']
                 self.mum_sayisi = durum['mum_sayisi']
-    def TradeEt(self, coinlist, periyot, gercek,nakit):
+    def TradeEt(self, periyot, gercek,nakit):
         self.gercek = gercek  # Gerçek işlem bilgisi kaydedildi
         self.nakit=nakit
         self.periyot=periyot
@@ -78,6 +78,7 @@ class Trade:
         }
         logging.info(f"Trade {periyot} Calisiyor ... {gercek}")
         print(f"Trade {periyot} Calisiyor ... {gercek}", time.ctime())
+        coinlist=self.binance.coin_list()
 
         with ThreadPoolExecutor(max_workers=len(coinlist)) as executor:
             while True:
@@ -88,6 +89,7 @@ class Trade:
                 if self.islem_acik:
                     self.satis_sinyali_bekle(periyot)
                 else:
+                    coinlist = self.binance.coin_list()
                     # Sahip olunan coinleri hariç tutarak işlem yapılacak coin listesini güncelle
                     coinlist = self.araclar.listeden_sahip_olduklarimi_cikar(coinlist)
                     future_to_coin = {executor.submit(self.alim_sinyali_kontrol, coin, periyot, strategys,self.nakit): coin
