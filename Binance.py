@@ -268,4 +268,62 @@ class Binance:
 
         return sirali_coin_isimleri
 
+    def islem_gecmisi_analiz(self):
+        file = open("islem_gecmisi.log","r")
+        gunluk_islem_sonucu={}
+        strategy_islem_sonucu={}
+        periyot_islem_sonucu={}
+        for line in file.readlines():
+            line = line.split(" ")
+            tarih = line[0]
+            saat = line[1]
+            strategy = line[5]
+            periyot = line[6]
+            islem = line[7]
 
+            if islem == "SAT":
+                sonuc = float(line[-1][:-2])  # Sonucu yüzde olarak alıyoruz
+                if tarih not in gunluk_islem_sonucu:
+                    gunluk_islem_sonucu[tarih]={}
+                    gunluk_islem_sonucu[tarih]['sonuc'] = 100  # Başlangıç değeri ekliyoruz
+                    gunluk_islem_sonucu[tarih]['adet'] = 0
+                    gunluk_islem_sonucu[tarih]['stop_adet'] = 0
+                # Kümülatif olarak yüzdelik artış işlemi
+                gunluk_islem_sonucu[tarih]['sonuc'] += gunluk_islem_sonucu[tarih]['sonuc'] * sonuc / 100
+                gunluk_islem_sonucu[tarih]['adet'] = gunluk_islem_sonucu[tarih]['adet'] + 1
+
+                if line[8] == "[STOP-LOSE]":
+                    # Kümülatif olarak yüzdelik artış işlemi
+                    gunluk_islem_sonucu[tarih]['stop_adet'] = gunluk_islem_sonucu[tarih]['stop_adet'] + 1
+
+                if periyot not in strategy_islem_sonucu:
+                    strategy_islem_sonucu[periyot]={}
+                if strategy not in strategy_islem_sonucu[periyot]:
+                    strategy_islem_sonucu[periyot][strategy]={}
+                    strategy_islem_sonucu[periyot][strategy]['sonuc'] = 100
+                    strategy_islem_sonucu[periyot][strategy]['adet'] = 0
+                # Kümülatif olarak yüzdelik artış işlemi
+                strategy_islem_sonucu[periyot][strategy]['sonuc'] += strategy_islem_sonucu[periyot][strategy]['sonuc'] * sonuc / 100
+                strategy_islem_sonucu[periyot][strategy]['adet'] = strategy_islem_sonucu[periyot][strategy]['adet'] + 1
+
+
+                if periyot not in periyot_islem_sonucu:
+                    periyot_islem_sonucu[periyot]={}
+                    periyot_islem_sonucu[periyot]['sonuc']=100
+                    periyot_islem_sonucu[periyot]['adet'] = 0
+
+                periyot_islem_sonucu[periyot]['sonuc'] += periyot_islem_sonucu[periyot]['sonuc'] * sonuc / 100
+                periyot_islem_sonucu[periyot]['adet'] = periyot_islem_sonucu[periyot]['adet'] + 1
+
+
+
+        print(f"Gunluk islem sonucu:")
+        for i in gunluk_islem_sonucu.keys():
+            print(f"{i}: {(gunluk_islem_sonucu[i]['sonuc'])-100:.2f}% | {gunluk_islem_sonucu[i]['adet']} adet islem | {gunluk_islem_sonucu[i]['stop_adet']} adet stop.")
+        print(f"\nStrategy islem sonucu:")
+        for i in strategy_islem_sonucu.keys():
+            for j in strategy_islem_sonucu[i].keys():
+                print(f"{i} {j}: {(strategy_islem_sonucu[i][j]['sonuc'])-100:.2f}% | {strategy_islem_sonucu[i][j]['adet']} adet islem.")
+        print(f"\nPeriyot islem sonucu:")
+        for i in periyot_islem_sonucu.keys():
+            print(f"{i}: {(periyot_islem_sonucu[i]['sonuc'])-100:.2f}% | {periyot_islem_sonucu[i]['adet']} adet islem.")
