@@ -87,11 +87,13 @@ class Binance:
         file = open("./Data/coin_list.txt", "w")
         for coin in coinlist:
             file.write(f"{coin},")
+        file.close()
     def coin_list(self):
         file = open("./Data/coin_list.txt", "r")
         file_coinlist = file.readline().split(",")
         if file_coinlist[-1] == "":
             del file_coinlist[-1]
+        file.close()
         return file_coinlist
     def minimum_hareket(self,basamak):
         if (basamak == 1):
@@ -177,25 +179,20 @@ class Binance:
         url = "https://api.binance.com/api/v3/exchangeInfo"
         response = requests.get(url)
         # Dönen yanıtı kontrol et ve kullan
-        result=[]
+        result_usdt=[]
+        result_btc=[]
         if response.status_code == 200:
             data = response.json()  # JSON yanıtı al
             for i in data['symbols']:
-                if i['status']=="TRADING" and "USD" not in i['baseAsset'] and i['quoteAsset'] == "USDT" and  "SPOT" in i['permissionSets'][0]:
-                    result.append(i['symbol'])
+                if i['status']=="TRADING" and "USD" not in i['baseAsset'] and  "SPOT" in i['permissionSets'][0]:
+                    if i['quoteAsset'] == "USDT":
+                        result_usdt.append(i['symbol'])
+                    if i['quoteAsset'] == "BTC":
+                        result_btc.append(i['symbol'])
         else:
             print("İstek başarısız oldu:", response.status_code)
 
-        olmayanlar=[]
-        olanlar=[]
-        coinlist=self.coin_list()
-        for i in coinlist:
-            if i not in result:
-                olmayanlar.append(i)
-            else:
-                olanlar.append(i)
-        print(f"Doğru olanların sayısı : {len(olanlar)} Kaldırılanların sayısı : {len(olmayanlar)} Trade edilebilir : {len(result)}")
-        return result
+        return result_usdt
 
     def get_coin_data(self,coin,periyot,adet):
         data_url = f"/api/v3/klines?symbol={coin}&interval={periyot}&limit={adet}"
