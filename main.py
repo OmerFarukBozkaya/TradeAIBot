@@ -25,6 +25,7 @@ print("""
 9)Piyasa durumu
 10)Coinlist olustur
 11)Islem gecmisi analiz
+12)Hacime gore coinlist siralama
 """)
 com = input("Ne yapılacak :")
 if com == "0":
@@ -116,3 +117,9 @@ elif com == "11":
     binance.islem_gecmisi_analiz()
     b = time.time()
     print(araclar.saniye_to_hms(b - a))
+elif com == "12":
+    a=time.time()
+    periyot = input("Periyot:")
+    araclar.coinlist_sira_duzenle(periyot)
+    b=time.time()
+    print(araclar.saniye_to_hms(b-a))

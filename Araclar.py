@@ -305,3 +305,11 @@ class Araclar:
             if open[i] == close[i]:
                 resault = resault + 1
         return resault
+
+    @staticmethod
+    def coinlist_sira_duzenle(periyot):
+        binance = Binance()
+        Araclar.mum_olusmasini_bekle(periyot)
+        coinlist=binance.coin_list()
+        sirali_liste = binance.coins_sorted_by_volume(coinlist,periyot)
+        binance.create_coin_list(sirali_liste)
