@@ -79,12 +79,10 @@ class Trade:
         logging.info(f"Trade {periyot} Calisiyor ... {gercek}")
         print(f"Trade {periyot} Calisiyor ... {gercek}", time.ctime())
         coinlist=self.binance.coin_list()
+        self.araclar.mum_olusmasini_bekle(periyot)
 
         with ThreadPoolExecutor(max_workers=len(coinlist)) as executor:
             while True:
-                # Mum oluşmasını bekler
-                self.kaydet()
-                self.araclar.mum_olusmasini_bekle(periyot)
                 # Eğer bir işlem zaten açılmışsa, satış sinyali bekle
                 if self.islem_acik:
                     self.satis_sinyali_bekle(periyot)
@@ -104,6 +102,9 @@ class Trade:
                             logging.error(f"Bir hata olustu: {hata}")
                             self.araclar.mail_gonder(f"HATA | Trade {periyot}", f"{hata}")
                             time.sleep(5)
+                # Mum oluşmasını bekler
+                self.kaydet()
+                self.araclar.mum_olusmasini_bekle(periyot)
 
     def alim_sinyali_kontrol(self, coin, periyot, strategys,nakit):
         try:
@@ -132,8 +133,8 @@ class Trade:
 
     def satis_sinyali_bekle(self, periyot):
         try:
+            self.araclar.mum_olusmasini_bekle(periyot)
             while self.islem_acik:
-                self.araclar.mum_olusmasini_bekle(periyot)
                 data = self.binance.get_coin_data(self.alinan_coin, periyot, 1000)
                 high = data['high']
                 low = data['low']
@@ -161,8 +162,8 @@ class Trade:
                 self.kaydet()
                 logging.info(
                     f"DURUM : {periyot} {self.sell_strategy.__name__} {self.alinan_coin} Islem Suresi: {self.mum_sayisi} mum. Kar/Zarar: {((close[-1] / self.alim_fiyati) - 1) * 100:.2f}%")
-
                 time.sleep(10)
+                self.araclar.mum_olusmasini_bekle(periyot)
         except Exception as e:
             hata = traceback.format_exc()
             logging.error(f"Satış sinyali bekleme sırasında hata: {hata}")
