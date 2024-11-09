@@ -283,6 +283,7 @@ class Binance:
 
             if islem == "SAT":
                 sonuc = float(line[-1][:-2])  # Sonucu yüzde olarak alıyoruz
+                mum_sayisi = float(line[-7])
                 if tarih not in gunluk_islem_sonucu:
                     gunluk_islem_sonucu[tarih]={}
                     gunluk_islem_sonucu[tarih]['sonuc'] = 100  # Başlangıç değeri ekliyoruz
@@ -302,9 +303,14 @@ class Binance:
                     strategy_islem_sonucu[periyot][strategy]={}
                     strategy_islem_sonucu[periyot][strategy]['sonuc'] = 100
                     strategy_islem_sonucu[periyot][strategy]['adet'] = 0
+                    strategy_islem_sonucu[periyot][strategy]['toplam_mum'] = 0
+                    strategy_islem_sonucu[periyot][strategy]['ortalama_mum'] = 0
+
                 # Kümülatif olarak yüzdelik artış işlemi
                 strategy_islem_sonucu[periyot][strategy]['sonuc'] += strategy_islem_sonucu[periyot][strategy]['sonuc'] * sonuc / 100
                 strategy_islem_sonucu[periyot][strategy]['adet'] = strategy_islem_sonucu[periyot][strategy]['adet'] + 1
+                strategy_islem_sonucu[periyot][strategy]['toplam_mum'] = strategy_islem_sonucu[periyot][strategy]['toplam_mum'] + mum_sayisi
+                strategy_islem_sonucu[periyot][strategy]['ortalama_mum'] = strategy_islem_sonucu[periyot][strategy]['toplam_mum'] / strategy_islem_sonucu[periyot][strategy]['adet']
 
 
                 if periyot not in periyot_islem_sonucu:
@@ -323,7 +329,7 @@ class Binance:
         print(f"\nStrategy islem sonucu:")
         for i in strategy_islem_sonucu.keys():
             for j in strategy_islem_sonucu[i].keys():
-                print(f"{i} {j}: {(strategy_islem_sonucu[i][j]['sonuc'])-100:.2f}% | {strategy_islem_sonucu[i][j]['adet']} adet islem.")
+                print(f"{i} {j}: {(strategy_islem_sonucu[i][j]['sonuc'])-100:.2f}% | {strategy_islem_sonucu[i][j]['adet']} adet islem | {strategy_islem_sonucu[i][j]['ortalama_mum']:.2f} ortalama mum sayisi.")
         print(f"\nPeriyot islem sonucu:")
         for i in periyot_islem_sonucu.keys():
             print(f"{i}: {(periyot_islem_sonucu[i]['sonuc'])-100:.2f}% | {periyot_islem_sonucu[i]['adet']} adet islem.")
