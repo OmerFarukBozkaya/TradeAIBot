@@ -193,6 +193,7 @@ class Trade:
 
     def sell(self, coin, periyot, close, strateji_adi, buy_price):
         kar_zarar = ((close[-1] / buy_price) - 1) * 100
+        self.mum_sayisi = self.mum_sayisi + 1
         logging.info(f"SAT {strateji_adi} {periyot}| {coin} satıldı, Adet: {self.adet}, Fiyat: {close[-1]}")
         islemgecmisi.info(
             f"{strateji_adi} {periyot} SAT | {coin} satıldı, Mum sayisi : {self.mum_sayisi} Adet: {self.adet}, Fiyat: {close[-1]:.2f} Kar/Zarar: {kar_zarar:.2f}%"
@@ -214,6 +215,7 @@ class Trade:
 
     def stop_lose(self, coin, periyot, close, strateji_adi, buy_price):
         kar_zarar = ((close[-1] / buy_price) - 1) * 100
+        self.mum_sayisi = self.mum_sayisi + 1
         logging.info(f"SAT [STOP-LOSE] {strateji_adi} {periyot}| {coin} satıldı, Adet: {self.adet}, Fiyat: {close[-1]}")
         islemgecmisi.info(
             f"{strateji_adi} {periyot} SAT [STOP-LOSE] | {coin} satıldı, Mum sayisi : {self.mum_sayisi} Adet: {self.adet}, Fiyat: {close[-1]:.2f} Kar/Zarar: {kar_zarar:.2f}%"
