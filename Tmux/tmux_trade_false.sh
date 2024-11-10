@@ -3,7 +3,7 @@
 # Tmux oturumu adı
 SESSION_NAME="Trade"
 # Python script'in tam yolu
-SCRIPT_PATH="./main.py"  # Kendi script dosyanızın yolunu yazın
+SCRIPT_PATH="../main.py"  # Kendi script dosyanızın yolunu yazın
 
 # Tarama ve Trade işlemleri için periyot listeleri
 PERIODS=("15m" "1h" "1d")
