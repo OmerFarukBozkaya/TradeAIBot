@@ -165,7 +165,7 @@ class Trade:
 
                 self.mum_sayisi = self.mum_sayisi + 1
                 self.kaydet()
-                other_strategy = self.strategys[periyot]
+                other_strategy = self.strategys[periyot].copy()
                 other_strategy.remove(self.sell_strategy)
                 other_strategy_result = []
                 for strategy in other_strategy:
