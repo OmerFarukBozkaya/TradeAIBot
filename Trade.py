@@ -9,13 +9,18 @@ import threading
 import json
 import os
 
+if not os.path.exists('Log'):
+    os.makedirs('Log')
+if not os.path.exists('Trade_Durumu'):
+    os.makedirs('Trade_Durumu')
+
 # Log ayarları
-logging.basicConfig(filename='trading_log.log', level=logging.INFO,
+logging.basicConfig(filename='Log/trade.log', level=logging.INFO,
                     format='%(asctime)s - %(levelname)s - %(message)s')
 
 # İşlem geçmişi için ayrı bir logger oluştur
 islemgecmisi = logging.getLogger('islemgecmisi')
-handler = logging.FileHandler('islem_gecmisi.log')
+handler = logging.FileHandler('Log/islem_gecmisi.log')
 handler.setLevel(logging.INFO)
 formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
 handler.setFormatter(formatter)
@@ -36,6 +41,13 @@ class Trade:
         self.nakit = None
         self.sell_strategy=None
         self.mum_sayisi=0
+        self.strategys = {
+            "15m": [Stratejiler.BB_RSI, Stratejiler.BB_ADX, Stratejiler.BB_Close],
+            "1h": [Stratejiler.BB_RSI, Stratejiler.TSO, Stratejiler.FDI, Stratejiler.BB_ADX, Stratejiler.BB_Close],
+            "4h": [Stratejiler.DMO, Stratejiler.FDI, Stratejiler.VMZI],
+            "1d": [Stratejiler.MACD, Stratejiler.DMO, Stratejiler.VAMA, Stratejiler.VMZI, Stratejiler.MA_Cross,
+                   Stratejiler.FDI]
+        }
 
     def kaydet(self):
         durum = {
@@ -48,13 +60,13 @@ class Trade:
             'periyot': self.periyot,
             'mum_sayisi':self.mum_sayisi
         }
-        with open(f'trade_durumu_{self.periyot}.json', 'w') as f:
+        with open(f'Trade_Durumu/trade_durumu_{self.periyot}.json', 'w') as f:
             json.dump(durum, f)
 
     # Durumu yükleyen fonksiyon
     def yukle(self):
-        if os.path.exists(f'trade_durumu_{self.periyot}.json'):
-            with open(f'trade_durumu_{self.periyot}.json', 'r') as f:
+        if os.path.exists(f'Trade_Durumu/trade_durumu_{self.periyot}.json'):
+            with open(f'Trade_Durumu/trade_durumu_{self.periyot}.json', 'r') as f:
                 durum = json.load(f)
                 self.islem_acik = durum['islem_acik']
                 self.alinan_coin = durum['alinan_coin']
@@ -69,13 +81,6 @@ class Trade:
         self.nakit=nakit
         self.periyot=periyot
         self.yukle()
-        strategys = {
-            "15m": [Stratejiler.BB_RSI, Stratejiler.BB_ADX, Stratejiler.BB_Close],
-            "1h": [Stratejiler.BB_RSI, Stratejiler.TSO, Stratejiler.FDI, Stratejiler.BB_ADX, Stratejiler.BB_Close],
-            "4h": [Stratejiler.DMO, Stratejiler.FDI, Stratejiler.VMZI],
-            "1d": [Stratejiler.MACD, Stratejiler.DMO, Stratejiler.VAMA, Stratejiler.VMZI, Stratejiler.MA_Cross,
-                   Stratejiler.FDI]
-        }
         logging.info(f"Trade {periyot} Calisiyor ... {gercek}")
         print(f"Trade {periyot} Calisiyor ... {gercek}", time.ctime())
         coinlist=self.binance.coin_list()
@@ -90,7 +95,7 @@ class Trade:
                     coinlist = self.binance.coin_list()
                     # Sahip olunan coinleri hariç tutarak işlem yapılacak coin listesini güncelle
                     coinlist = self.araclar.listeden_sahip_olduklarimi_cikar(coinlist)
-                    future_to_coin = {executor.submit(self.alim_sinyali_kontrol, coin, periyot, strategys,self.nakit): coin
+                    future_to_coin = {executor.submit(self.alim_sinyali_kontrol, coin, periyot, self.strategys,self.nakit): coin
                                       for coin in coinlist}
                     for future in as_completed(future_to_coin):
                         try:
@@ -160,8 +165,19 @@ class Trade:
 
                 self.mum_sayisi = self.mum_sayisi + 1
                 self.kaydet()
+                other_strategy = self.strategys[periyot]
+                other_strategy.remove(self.sell_strategy)
+                other_strategy_result = []
+                for strategy in other_strategy:
+                    result=strategy(high,low,close)
+                    if result == "BUY":
+                        other_strategy_result.append(1)
+                    elif result == "SELL":
+                        other_strategy_result.append(-1)
+                    else:
+                        other_strategy_result.append(0)
                 logging.info(
-                    f"DURUM : {periyot} {self.sell_strategy.__name__} {self.alinan_coin} Islem Suresi: {self.mum_sayisi} mum. Kar/Zarar: {((close[-1] / self.alim_fiyati) - 1) * 100:.2f}%")
+                    f"DURUM : {periyot} {self.sell_strategy.__name__} {self.alinan_coin} Islem Suresi: {self.mum_sayisi} mum. Diger strategyler {other_strategy_result} Kar/Zarar: {((close[-1] / self.alim_fiyati) - 1) * 100:.2f}%")
                 time.sleep(10)
                 self.araclar.mum_olusmasini_bekle(periyot)
         except Exception as e:
