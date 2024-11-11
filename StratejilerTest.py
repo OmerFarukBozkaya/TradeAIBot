@@ -1,39 +1,48 @@
 from Indikator import Indikator
 
-class Stratejiler:
+class StratejilerTest:
     stop_lose = 0.025
 
     @staticmethod
     def check_stop_lose(close, buy_price):
         # Eğer alım fiyatı mevcutsa ve kapanış fiyatı stop-lose sınırının altındaysa "STOP-LOSE" döndür.
-        if buy_price is not None and close[-1] < (buy_price * (1 - Stratejiler.stop_lose)):
+        if buy_price is not None and close[-1] < (buy_price * (1 - StratejilerTest.stop_lose)):
             return "STOP-LOSE"
         return None
 
-    @staticmethod   #   OK
-    def MACD(high, low, close, buy_price=None):
-        stop_lose_check = Stratejiler.check_stop_lose(close, buy_price)
-        if stop_lose_check:
-            return stop_lose_check
-
+    @staticmethod
+    def MACD(high, low, close):
+        signals = []
         macd_values, macd_signal = Indikator.MACD(close)
         rsi = Indikator.RSI(close)
-        adx = Indikator.ADX(high, low, close)  # ADX eklendi
+        adx = Indikator.ADX(high, low, close)
 
         # Dinamik ADX filtresi ve volatilite kontrolü
-        if all(val is not None for val in [macd_values[-1], macd_signal[-1], rsi[-1], adx[-1],macd_values[-2], macd_signal[-2], rsi[-2], adx[-2],macd_values[-3], macd_signal[-3], rsi[-3], adx[-3]]):
-            if not (macd_values[-3] > macd_signal[-3] and rsi[-3] > 50 and adx[-3] > 25):
-                if macd_values[-2] > macd_signal[-2] and rsi[-2] > 50 and adx[-2] > 25:
-                    return "BUY"
-            elif macd_values[-2] < macd_signal[-2] and adx[-2] > 25:
-                return "SELL"
-            else :
-                return False
-        return None
+        for i in range(len(close)):  # Bu döngüde tüm verilere bakıyoruz
+            if i == 0 or i == 1:  # İlk iki veri için sinyal verilmiyor, çünkü MACD ve diğer göstergeler ilk iki indekste hesaplanamaz
+                signals.append("None")  # Bu noktada sinyal verilmiyor
+            else:
+                # Tüm göstergeler mevcutsa, sinyal kararını yapıyoruz
+                if all(val is not None for val in [macd_values[i - 1], macd_signal[i - 1], rsi[i - 1], adx[i - 1]]):
+                    # Al sinyali
+                    if macd_values[i - 1] < macd_signal[i - 1] and rsi[i - 1] > 50 and adx[i - 1] > 25:
+                        if macd_values[i] > macd_signal[i] and rsi[i] > 50 and adx[i] > 25:
+                            signals.append("BUY")
+                        else:
+                            signals.append("False")
+                    # Sat sinyali
+                    elif macd_values[i] < macd_signal[i] and adx[i] > 25:
+                        signals.append("SELL")
+                    else:
+                        signals.append("False")
+                else:
+                    signals.append("None")
+
+        return signals
 
     @staticmethod   #   OK
     def VMZI(high, low, close, buy_price=None):
-        stop_lose_check = Stratejiler.check_stop_lose(close, buy_price)
+        stop_lose_check = StratejilerTest.check_stop_lose(close, buy_price)
         if stop_lose_check:
             return stop_lose_check
 
@@ -55,7 +64,7 @@ class Stratejiler:
 
     @staticmethod   #   OK
     def VAMA(high, low, close, buy_price=None):
-        stop_lose_check = Stratejiler.check_stop_lose(close, buy_price)
+        stop_lose_check = StratejilerTest.check_stop_lose(close, buy_price)
         if stop_lose_check:
             return stop_lose_check
 
@@ -75,7 +84,7 @@ class Stratejiler:
 
     @staticmethod   #   OK
     def TSO(high, low, close, buy_price=None):
-        stop_lose_check = Stratejiler.check_stop_lose(close, buy_price)
+        stop_lose_check = StratejilerTest.check_stop_lose(close, buy_price)
         if stop_lose_check:
             return stop_lose_check
 
@@ -95,7 +104,7 @@ class Stratejiler:
 
     @staticmethod   #   OK
     def BB_RSI(high, low, close, buy_price=None):
-        stop_lose_check = Stratejiler.check_stop_lose(close, buy_price)
+        stop_lose_check = StratejilerTest.check_stop_lose(close, buy_price)
         if stop_lose_check:
             return stop_lose_check
 
@@ -117,7 +126,7 @@ class Stratejiler:
 
     @staticmethod   #   OK
     def FDI(high, low, close, buy_price=None):
-        stop_lose_check = Stratejiler.check_stop_lose(close, buy_price)
+        stop_lose_check = StratejilerTest.check_stop_lose(close, buy_price)
         if stop_lose_check:
             return stop_lose_check
 
@@ -140,7 +149,7 @@ class Stratejiler:
 
     @staticmethod   #   OK
     def BB_Close(high, low, close, buy_price=None):
-        stop_lose_check = Stratejiler.check_stop_lose(close, buy_price)
+        stop_lose_check = StratejilerTest.check_stop_lose(close, buy_price)
         if stop_lose_check:
             return stop_lose_check
 
@@ -161,7 +170,7 @@ class Stratejiler:
 
     @staticmethod   #   OK
     def MA_Cross(high, low, close, buy_price=None):
-        stop_lose_check = Stratejiler.check_stop_lose(close, buy_price)
+        stop_lose_check = StratejilerTest.check_stop_lose(close, buy_price)
         if stop_lose_check:
             return stop_lose_check
 
@@ -182,7 +191,7 @@ class Stratejiler:
 
     @staticmethod   #   OK
     def DMO(high, low, close, buy_price=None):
-        stop_lose_check = Stratejiler.check_stop_lose(close, buy_price)
+        stop_lose_check = StratejilerTest.check_stop_lose(close, buy_price)
         if stop_lose_check:
             return stop_lose_check
 
@@ -208,7 +217,7 @@ class Stratejiler:
 
     @staticmethod   #   OK
     def BB_ADX(high, low, close, buy_price=None):
-        stop_lose_check = Stratejiler.check_stop_lose(close, buy_price)
+        stop_lose_check = StratejilerTest.check_stop_lose(close, buy_price)
         if stop_lose_check:
             return stop_lose_check
 
