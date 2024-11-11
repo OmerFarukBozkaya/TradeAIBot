@@ -15,8 +15,8 @@ araclar = Araclar()
 print("""
 0)Veri seti olustur
 1)Backtest sonuçlarını kayıt et
-2)IndikatörTest sınıfını Test et
-3)Backtest testi yap
+2)Indikatör Test et
+3)Backtest yap
 4)Tarama
 5)Trade
 6)Coin Indikator degerleri
