@@ -179,7 +179,6 @@ class Trade:
                         other_strategy_result.append(0)
                 logging.info(
                     f"DURUM : {periyot} {self.sell_strategy.__name__} {self.alinan_coin} Islem Suresi: {self.mum_sayisi} mum. Diger strategyler {other_strategy_result} Kar/Zarar: {((close[-1] / self.alim_fiyati) - 1) * 100:.2f}%")
-                time.sleep(10)
                 self.araclar.mum_olusmasini_bekle(periyot)
         except Exception as e:
             hata = traceback.format_exc()
