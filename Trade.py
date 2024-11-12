@@ -182,6 +182,7 @@ class Trade:
                 self.araclar.mum_olusmasini_bekle(periyot)
         except Exception as e:
             hata = traceback.format_exc()
+            print(f"Sell Strategy Sonucu:{sell_strategy_sonuc}")
             logging.error(f"Satış sinyali bekleme sırasında hata: {hata}")
             self.araclar.mail_gonder(f"HATA | Trade {periyot}", f"{hata}")
 
