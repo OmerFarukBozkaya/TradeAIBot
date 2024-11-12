@@ -6,7 +6,7 @@ import os
 import pandas as pd
 import csv
 from Binance import Binance
-from Stratejiler import Stratejiler
+from StratejilerTest import StratejilerTest
 
 class Backtest:
     @staticmethod
@@ -34,7 +34,6 @@ class Backtest:
                 close.reverse()
                 high.reverse()
                 low.reverse()
-
         elif canli_veriler == True and hisse == False:  # Canlı coin verileri
             binance = Binance()
             data = binance.get_coin_data(coin, periyot, 1000)
@@ -42,61 +41,13 @@ class Backtest:
             low = data['low']
             close = data['close']
 
-        print("Yeni")
-        # Strateji listesi (Strateji adı, alım koşulu, satım koşulu)
-        strategies = [
-            {
-                "name": "MACD",
-                "buy_condition": lambda i: Stratejiler.MACD(high[:i], low[:i], close[:i]) == "BUY",
-                "sell_condition": lambda i: Stratejiler.MACD(high[:i], low[:i], close[:i]) == "SELL"
-            },
-            {
-                "name": "Ma Cross",
-                "buy_condition": lambda i: Stratejiler.MA_Cross(high[:i], low[:i], close[:i]) == "BUY",
-                "sell_condition": lambda i: Stratejiler.MA_Cross(high[:i], low[:i], close[:i]) == "SELL"
-            },
-            {
-                "name": "BB(RSI)",
-                "buy_condition": lambda i: Stratejiler.BB_RSI(high[:i], low[:i], close[:i]) == "BUY",
-                "sell_condition": lambda i: Stratejiler.BB_RSI(high[:i], low[:i], close[:i]) == "SELL"
-            },
-            {
-                "name": "BB(close)",
-                "buy_condition": lambda i: Stratejiler.BB_Close(high[:i], low[:i], close[:i]) == "BUY",
-                "sell_condition": lambda i: Stratejiler.BB_Close(high[:i], low[:i], close[:i]) == "SELL"
-            },
-            {
-                "name": "DMO",
-                "buy_condition": lambda i: Stratejiler.DMO(high[:i], low[:i], close[:i]) == "BUY",
-                "sell_condition": lambda i: Stratejiler.DMO(high[:i], low[:i], close[:i]) == "SELL"
-            },
-            {
-                "name": "VMZI",
-                "buy_condition": lambda i: Stratejiler.VMZI(high[:i], low[:i], close[:i]) == "BUY",
-                "sell_condition": lambda i: Stratejiler.VMZI(high[:i], low[:i], close[:i]) == "SELL"
-            },
-            {
-                "name": "FDI",
-                "buy_condition": lambda i: Stratejiler.FDI(high[:i], low[:i], close[:i]) == "BUY",
-                "sell_condition": lambda i: Stratejiler.FDI(high[:i], low[:i], close[:i]) == "SELL"
-            },
-            {
-                "name": "VAMA",
-                "buy_condition": lambda i: Stratejiler.VAMA(high[:i], low[:i], close[:i]) == "BUY",
-                "sell_condition": lambda i: Stratejiler.VAMA(high[:i], low[:i], close[:i]) == "SELL"
-            },
-            {
-                "name": "TSO",
-                "buy_condition": lambda i: Stratejiler.TSO(high[:i], low[:i], close[:i]) == "BUY",
-                "sell_condition": lambda i: Stratejiler.TSO(high[:i], low[:i], close[:i]) == "SELL"
-            },
-            {
-                "name": "BB ADX",
-                "buy_condition": lambda i: Stratejiler.BB_ADX(high[:i], low[:i], close[:i]) == "BUY",
-                "sell_condition": lambda i: Stratejiler.BB_ADX(high[:i], low[:i], close[:i]) == "SELL"
-            },
+        # Strateji listesi
+        strategies = [StratejilerTest.MACD,StratejilerTest.VMZI,StratejilerTest.VAMA,
+                      StratejilerTest.TSO,StratejilerTest.BB_RSI,StratejilerTest.FDI,
+                      StratejilerTest.BB_Close,StratejilerTest.MA_Cross,StratejilerTest.DMO,
+                      StratejilerTest.BB_ADX
+                      ]
 
-        ]
         if kayit_et != True:
             fig = plt.figure(figsize=(16, 30))
             gs = gridspec.GridSpec(len(strategies) + 1, 2, height_ratios=[2] + [1] * len(strategies))
@@ -140,17 +91,19 @@ class Backtest:
             current_capital = initial_capital
             capital_history = [initial_capital]
 
-            for i in range(4,len(close)):
+            strategy_resault = strategy(high,low,close)
+
+            for i in range(len(close)):
                 if last_signal is None or last_signal == 'red':
-                    if strategy["buy_condition"](i):
+                    if strategy_resault[i]=="BUY":
                         last_signal = 'green'
                         buy_price = close[i]
                         amount_purchased = current_capital / buy_price
                         current_capital = 0
-                        if selected_strategy_name == strategy["name"]:
+                        if selected_strategy_name == strategy.__name__:
                             buy_points.append(i)  # Alım noktasını kaydet
                 elif last_signal == 'green':
-                    if strategy["sell_condition"](i):
+                    if strategy_resault[i]=="SELL":
                         last_signal = 'red'
                         sell_price = close[i]
                         profit_percentage = ((sell_price - buy_price) / buy_price) * 100
@@ -165,7 +118,7 @@ class Backtest:
                         else:
                             losing_trades += 1
 
-                        if selected_strategy_name == strategy["name"]:
+                        if selected_strategy_name == strategy.__name__:
                             sell_points.append(i)  # Satım noktasını kaydet
 
                         buy_price = None
@@ -185,8 +138,8 @@ class Backtest:
                 ax2 = fig.add_subplot(gs[idx + 1, 0])
                 ax2.plot(capital_history, marker='o', markersize=5, linewidth=2,
                          color=colors[idx % len(colors)],
-                         label=f"{strategy['name']} Kapital\nSon Kapital: {final_capital:.2f}\nKümülatif Kâr/Zarar: {cumulative_total_profit_loss:.2f}%")
-                ax2.set_title(f"{strategy['name']} Kapital Durumu")
+                         label=f"{strategy.__name__} Kapital\nSon Kapital: {final_capital:.2f}\nKümülatif Kâr/Zarar: {cumulative_total_profit_loss:.2f}%")
+                ax2.set_title(f"{strategy.__name__} Kapital Durumu")
                 ax2.set_xlabel('İşlem Sayısı')
                 ax2.set_ylabel('Kapital (TL)')
                 ax2.axhline(initial_capital, color='black', linestyle='--')
@@ -196,8 +149,8 @@ class Backtest:
                 ax3 = fig.add_subplot(gs[idx + 1, 1])
                 ax3.plot(cumulative_profit_loss, marker='o', markersize=5, linewidth=2,
                          color=colors[idx % len(colors)],
-                         label=f"{strategy['name']} Kâr/Zarar\nKârlı İşlemler: {profitable_trades}\nZararlı İşlemler: {losing_trades}")
-                ax3.set_title(f"{strategy['name']} Kümülatif Kâr/Zarar (%)")
+                         label=f"{strategy.__name__} Kâr/Zarar\nKârlı İşlemler: {profitable_trades}\nZararlı İşlemler: {losing_trades}")
+                ax3.set_title(f"{strategy.__name__} Kümülatif Kâr/Zarar (%)")
                 ax3.set_xlabel('İşlem Sayısı')
                 ax3.set_ylabel('Kâr/Zarar (%)')
                 ax3.axhline(0, color='black', linestyle='--')
@@ -206,7 +159,7 @@ class Backtest:
             #Excel çıktısı oluştur.
             if kayit_et:
                 if selected_strategy_name==None:
-                    strategy_name = strategy['name']
+                    strategy_name = strategy.__name__
                     cumulative_total_profit_loss = ((capital_histories[idx][
                                                          -1] - 100) / 100) * 100  # Son kapital ile kümülatif kâr/zarar
                     profitable_trades = profitable_trade_counts[idx]
@@ -225,8 +178,8 @@ class Backtest:
                         'zararlı işlemler': losing_trades,
                         'ortalama işlem sonucu': ortalama_islem
                     })
-                elif selected_strategy_name == strategy['name'] :
-                    strategy_name = strategy['name']
+                elif selected_strategy_name == strategy.__name__ :
+                    strategy_name = strategy.__name__
                     cumulative_total_profit_loss = ((capital_histories[idx][
                                                          -1] - 100) / 100) * 100  # Son kapital ile kümülatif kâr/zarar
                     profitable_trades = profitable_trade_counts[idx]
