@@ -137,6 +137,9 @@ class Araclar:
         adx = indikator.ADX(high, low, close)
         sma50 = indikator.SMA(close, 50)
         sma200 = indikator.SMA(close, 200)
+        macd = indikator.MACD(close)
+        bb=indikator.BB(close)
+        tso = indikator.TSO(high, low, close)
         # Listeleri bir dataframe'e dönüştürüyoruz ve eksik olan yerleri None (veya NaN) ile dolduruyoruz
         df = pd.DataFrame({
             'opendate': opendate,
@@ -150,7 +153,13 @@ class Araclar:
             'atr': atr,
             'adx': adx,
             'sma50': sma50,
-            'sma200': sma200
+            'sma200': sma200,
+            'macd_val': macd[0],
+            'macd_signal': macd[1],
+            'bb_down' : bb[0],
+            'bb_mid' : bb[1],
+            'bb_up' : bb[2],
+            'tso' : tso,
         })
 
         # Eksik olan değerleri None (veya NaN) ile doldurma
@@ -213,15 +222,15 @@ class Araclar:
         print(f"Sonuçlar {output_file} dosyasına başarıyla kaydedildi.")
 
     @staticmethod
-    def listeden_sahip_olduklarimi_cikar(list):
+    def listeden_sahip_olduklarimi_cikar(coinlist):
         # Eğer alım yapacaksam sahip olunan coinleri liste dışı bırak
         binance = Binance()
         for sil in binance.sahip_olduklarim().keys():
             try:
-                list.remove(sil[0])
+                coinlist.remove(sil)
             except:
                 continue
-        return list
+        return coinlist
 
     @staticmethod
     def coin_indikator_degerleri(coin,periyot,adet=10):
@@ -275,7 +284,7 @@ class Araclar:
         print(f"TSO: {tso}")
 
     @staticmethod
-    def coin_strateji_degerleri(coin,periyot):
+    def coin_strateji_degerleri(coin,periyot,adet):
         binance = Binance()
         data = binance.get_coin_data(coin, periyot, 1000)
         high = data['high']
@@ -286,5 +295,21 @@ class Araclar:
                    Stratejiler.BB_RSI,Stratejiler.FDI,Stratejiler.BB_Close,Stratejiler.MA_Cross,
                    Stratejiler.DMO,Stratejiler.BB_ADX]
         for strategy in strategys:
-            print(f"{strategy.__name__} : {strategy(high, low, close)}")
+            print(f"{strategy.__name__} : {strategy(high, low, close)[-adet:]}")
 
+    @staticmethod
+    def mum_sagligi(open,close):
+        uzunluk=len(open)
+        resault=0
+        for i in range(uzunluk):
+            if open[i] == close[i]:
+                resault = resault + 1
+        return resault
+
+    @staticmethod
+    def coinlist_sira_duzenle(periyot):
+        binance = Binance()
+        Araclar.mum_olusmasini_bekle(periyot)
+        coinlist=binance.coin_list()
+        sirali_liste = binance.coins_sorted_by_volume(coinlist,periyot)
+        binance.create_coin_list(sirali_liste)

@@ -83,7 +83,7 @@ class Tarama:
 
             coin_results = {}
             for strategy in strategies:
-                calculate = strategy(high, low, close)
+                calculate = strategy(high, low, close)[-2]
                 if calculate == "BUY" or calculate == "SELL":
                     coin_results[strategy.__name__] = calculate
             return coin_results
@@ -107,7 +107,7 @@ class Tarama:
         result_table = pd.DataFrame(index=coinlist, columns=strategies_columns.keys())
 
         def calculate_strategy(coin, period, strategy, high, low, close):
-            result = strategy(high, low, close)
+            result = strategy(high, low, close)[-1]
             return 1 if result == "BUY" else -1 if result == "SELL" else 0
 
         # Her period ve coin için stratejileri hesapla ve ortalama sonuçları döndür
