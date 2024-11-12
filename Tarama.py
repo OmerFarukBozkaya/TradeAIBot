@@ -63,6 +63,7 @@ class Tarama:
                     araclar.mail_gonder(f"Tarama | {periyot}", mesaj)
 
                 mum_bekle = True
+                time.sleep(10)
             except Exception:
                 mum_bekle = False
                 hata = traceback.format_exc()

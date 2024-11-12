@@ -177,7 +177,7 @@ class Araclar:
             "12h": 43200, "1d": 86400, "3d": 259200, "1w": 604800, "1M": 2419200
         }
         if time.time() % zaman_dilimleri[periyot] > 10:
-            time.sleep(zaman_dilimleri[periyot] - (time.time() % zaman_dilimleri[periyot]) + 10)
+            time.sleep(zaman_dilimleri[periyot] - (time.time() % zaman_dilimleri[periyot]))
 
     @staticmethod
     def strategy_result_analyze(input="Data/strategy_results.xlsx", output_file='Data/strategy_results_analyze.xlsx'):
