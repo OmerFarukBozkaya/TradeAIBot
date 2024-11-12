@@ -2,236 +2,211 @@ from Indikator import Indikator
 
 class StratejilerTest:
     stop_lose = 0.025
-
     @staticmethod
     def check_stop_lose(close, buy_price):
         # Eğer alım fiyatı mevcutsa ve kapanış fiyatı stop-lose sınırının altındaysa "STOP-LOSE" döndür.
         if buy_price is not None and close[-1] < (buy_price * (1 - StratejilerTest.stop_lose)):
             return "STOP-LOSE"
         return None
-
     @staticmethod
     def MACD(high, low, close):
+        # Sonuçları tutmak için liste
         signals = []
+
+        # Tüm indikatörlerin bir defa hesaplanması
         macd_values, macd_signal = Indikator.MACD(close)
-        rsi = Indikator.RSI(close)
-        adx = Indikator.ADX(high, low, close)
+        rsi_values = Indikator.RSI(close)
+        adx_values = Indikator.ADX(high, low, close)
 
-        # Dinamik ADX filtresi ve volatilite kontrolü
-        for i in range(len(close)):  # Bu döngüde tüm verilere bakıyoruz
-            if i == 0 or i == 1:  # İlk iki veri için sinyal verilmiyor, çünkü MACD ve diğer göstergeler ilk iki indekste hesaplanamaz
-                signals.append("None")  # Bu noktada sinyal verilmiyor
+        # Her fiyat noktası için sinyal hesaplama
+        for i in range(len(close)):
+            if macd_values[i] is None or macd_signal[i] is None or rsi_values[i] is None or adx_values[i] is None:
+                signals.append(None)
+            elif macd_values[i] > macd_signal[i] and rsi_values[i] > 50 and adx_values[i] > 25:
+                signals.append("BUY")
+            elif macd_values[i] < macd_signal[i] and adx_values[i] > 25:
+                signals.append("SELL")
             else:
-                # Tüm göstergeler mevcutsa, sinyal kararını yapıyoruz
-                if all(val is not None for val in [macd_values[i - 1], macd_signal[i - 1], rsi[i - 1], adx[i - 1]]):
-                    # Al sinyali
-                    if macd_values[i - 1] < macd_signal[i - 1] and rsi[i - 1] > 50 and adx[i - 1] > 25:
-                        if macd_values[i] > macd_signal[i] and rsi[i] > 50 and adx[i] > 25:
-                            signals.append("BUY")
-                        else:
-                            signals.append("False")
-                    # Sat sinyali
-                    elif macd_values[i] < macd_signal[i] and adx[i] > 25:
-                        signals.append("SELL")
-                    else:
-                        signals.append("False")
-                else:
-                    signals.append("None")
-
+                signals.append(False)
         return signals
 
     @staticmethod   #   OK
-    def VMZI(high, low, close, buy_price=None):
-        stop_lose_check = StratejilerTest.check_stop_lose(close, buy_price)
-        if stop_lose_check:
-            return stop_lose_check
+    def VMZI(high, low, close):
+        signals=[]
 
         vmzi = Indikator.VMZI(close)
         adx = Indikator.ADX(high, low, close)
         rsi = Indikator.RSI(close)
         atr = Indikator.ATR(high, low, close)  # ATR eklendi
 
-        # ATR ve ADX ile volatilite ve trend filtreleme
-        if all(val is not None for val in [vmzi[-1],vmzi[-1], adx[-1], rsi[-1], atr[-2],vmzi[-2], adx[-2], rsi[-2], atr[-3],vmzi[-3], adx[-3], rsi[-3], atr[-4]]):
-            if not (vmzi[-3] > 1.5 and adx[-3] > 25 and rsi[-3] > 50 and atr[-3] > atr[-4]):
-                if vmzi[-2] > 1.5 and adx[-2] > 25 and rsi[-2] > 50 and atr[-2] > atr[-3]:
-                    return "BUY"
-            elif vmzi[-2] < 0 and rsi[-2] < 50 and atr[-2] > atr[-3]:
-                return "SELL"
-            else :
-                return False
-        return None
+        # Her fiyat noktası için sinyal hesaplama
+        for i in range(len(close)):
+            if vmzi[i] is None or adx[i] is None or rsi[i] is None or atr[i] is None or atr[i-1] is None:
+                signals.append(None)
+            elif vmzi[i] > 1.5 and adx[i] > 25 and atr[i] > atr[i-1]:
+                signals.append("BUY")
+            elif vmzi[i] < 0 and rsi[i] < 50 and atr[i] > atr[i-1]:
+                signals.append("SELL")
+            else:
+                signals.append(False)
+        return signals
 
     @staticmethod   #   OK
-    def VAMA(high, low, close, buy_price=None):
-        stop_lose_check = StratejilerTest.check_stop_lose(close, buy_price)
-        if stop_lose_check:
-            return stop_lose_check
-
+    def VAMA(high, low, close):
+        signals=[]
         vama = Indikator.VAMA(close)
         sma_50 = Indikator.SMA(close, 50)  # SMA karşılaştırması eklendi
 
-        # SMA ve VAMA uyumu ile al/sat sinyali
-        if all(val is not None for val in [vama[-1],sma_50[-1],vama[-2],sma_50[-2],vama[-3],sma_50[-3]]):
-            if not (vama[-3] * 1.02 < close[-3] and close[-3] > sma_50[-3]):
-                if vama[-2] * 1.02 < close[-2] and close[-2] > sma_50[-2]:
-                    return "BUY"
-            elif vama[-2] * 0.98 > close[-2]:
-                return "SELL"
-            else :
-                return False
-        return None
+        # Her fiyat noktası için sinyal hesaplama
+        for i in range(len(close)):
+            if vama[i] is None or sma_50[i] is None:
+                signals.append(None)
+            elif vama[i] * 1.02 < close[i] and close[i] > sma_50[i]:
+                signals.append("BUY")
+            elif vama[i] * 0.98 > close[i]:
+                signals.append("SELL")
+            else:
+                signals.append(False)
+        return signals
 
     @staticmethod   #   OK
-    def TSO(high, low, close, buy_price=None):
-        stop_lose_check = StratejilerTest.check_stop_lose(close, buy_price)
-        if stop_lose_check:
-            return stop_lose_check
+    def TSO(high, low, close):
+        signals=[]
 
         tso = Indikator.TSO(high, low, close)
         atr = Indikator.ATR(high, low, close)  # ATR eklendi
 
-        # ATR ile trend gücünün doğrulanması
-        if all(val is not None for val in [atr[-1],tso[-1],atr[-2],tso[-2],atr[-3],tso[-3],atr[-4]]):
-            if not (tso[-3] == 1 and atr[-3] > atr[-4]):
-                if tso[-2] == 1 and atr[-2] > atr[-3]:
-                    return "BUY"
-            elif tso[-2] == -1 and atr[-2] > atr[-3]:
-                return "SELL"
+        # Her fiyat noktası için sinyal hesaplama
+        for i in range(len(close)):
+            if tso[i] is None or atr[i] is None or atr[i - 1] is None:
+                signals.append(None)
+            elif tso[i] == 1 and atr[i] > atr[i - 1]:
+                signals.append("BUY")
+            elif tso[i] == -1 and atr[i] > atr[i - 1]:
+                signals.append("SELL")
             else:
-                return False
-        return None
+                signals.append(False)
+        return signals
 
     @staticmethod   #   OK
-    def BB_RSI(high, low, close, buy_price=None):
-        stop_lose_check = StratejilerTest.check_stop_lose(close, buy_price)
-        if stop_lose_check:
-            return stop_lose_check
+    def BB_RSI(high, low, close):
+        signals=[]
 
         rsi = Indikator.RSI(close)
-        bb_rsi = Indikator.BB(rsi)
-        bb_rsi_down, _, bb_rsi_up = bb_rsi
+        bb_rsi_down, bb_rsi_mid , bb_rsi_up = Indikator.BB(rsi)
         atr = Indikator.ATR(high, low, close)  # ATR eklendi
 
-        # ATR ile volatilite filtresi
-        if all(val is not None for val in [rsi[-1], bb_rsi_down[-1], atr[-1],rsi[-2], bb_rsi_down[-2], bb_rsi_up[-1], atr[-2],rsi[-3], bb_rsi_down[-3], bb_rsi_up[-2], atr[-3],rsi[-4], bb_rsi_down[-4], bb_rsi_up[-3], atr[-4]]):
-            if not (bb_rsi_down[-4] > rsi[-4] and bb_rsi_down[-3] < rsi[-3] and atr[-3] > atr[-4]):
-                if (bb_rsi_down[-3] > rsi[-3] and bb_rsi_down[-2] < rsi[-2] and atr[-2] > atr[-3]):
-                    return "BUY"
-            elif bb_rsi_up[-3] < rsi[-3] and bb_rsi_up[-2] > rsi[-2] and atr[-1] > atr[-2]:
-                return "SELL"
-            else :
-                return False
-        return None
+        # Her fiyat noktası için sinyal hesaplama
+        for i in range(len(close)):
+            if rsi[i] is None or rsi[i-1] is None or bb_rsi_down[i] is None or bb_rsi_down[i-1] is None or bb_rsi_up[i] is None or bb_rsi_up[i-1] is None or atr[i] is None or atr[i - 1] is None:
+                signals.append(None)
+            elif bb_rsi_down[i-1] > rsi[i-1] and bb_rsi_down[i]<rsi[i] and atr[i] > atr[i - 1]:
+                signals.append("BUY")
+            elif bb_rsi_up[i-1] < rsi[i-1] and bb_rsi_up[i] > rsi[i] and atr[i] > atr[i - 1]:
+                signals.append("SELL")
+            else:
+                signals.append(False)
+        return signals
 
     @staticmethod   #   OK
-    def FDI(high, low, close, buy_price=None):
-        stop_lose_check = StratejilerTest.check_stop_lose(close, buy_price)
-        if stop_lose_check:
-            return stop_lose_check
+    def FDI(high, low, close):
+        signals=[]
 
         fdi = Indikator.FDI(close)
         rsi = Indikator.RSI(close)
-        macd = Indikator.MACD(close)
-        macd_values, macd_signal = macd
+        macd_values, macd_signal = Indikator.MACD(close)
         adx = Indikator.ADX(high, low, close)  # ADX eklendi
 
-        # ADX ile trend doğrulama ve RSI için daha düşük bir eşik
-        if all(val is not None for val in [fdi[-1],fdi[-2], rsi[-1], macd_values[-1], macd_signal[-1],adx[-1],fdi[-3], rsi[-2], macd_values[-2], macd_signal[-2],adx[-2],fdi[-4], rsi[-3], macd_values[-3], macd_signal[-3],adx[-3]]):
-            if not (fdi[-4] > 0 and fdi[-4] < fdi[-3] and rsi[-3] > 40 and macd_values[-3] > macd_signal[-3] and adx[-3] > 20):
-                if fdi[-3] > 0 and fdi[-3] < fdi[-2] and rsi[-2] > 40 and macd_values[-2] > macd_signal[-2] and adx[-2] > 20:
-                    return "BUY"
-            elif fdi[-3] < 0 and fdi[-3] > fdi[-2] and rsi[-2] < 60 and macd_values[-2] < macd_signal[-2] and adx[-2] > 20:
-                return "SELL"
-            else :
-                return False
-        return None
+        # Her fiyat noktası için sinyal hesaplama
+        for i in range(len(close)):
+            if (fdi[i] is None or fdi[i - 1] is None or rsi[i] is None or macd_values[i] is None or
+                    macd_signal[i] is None or adx[i] is None ):
+                signals.append(None)
+            elif fdi[i - 1] > 0 and fdi[i-1] < fdi[i] and rsi[i] > 40 and macd_values[i] > macd_signal[i] and adx[i] > 20:
+                signals.append("BUY")
+            elif fdi[i - 1] < 0 and fdi[i-1] > fdi[i] and rsi[i] < 60 and macd_values[i] < macd_signal[i] and adx[i] > 20:
+                signals.append("SELL")
+            else:
+                signals.append(False)
+        return signals
 
     @staticmethod   #   OK
-    def BB_Close(high, low, close, buy_price=None):
-        stop_lose_check = StratejilerTest.check_stop_lose(close, buy_price)
-        if stop_lose_check:
-            return stop_lose_check
+    def BB_Close(high, low, close):
+        signals=[]
 
-        bb = Indikator.BB(close)
-        bb_down, bb_mid, bb_up = bb
+        bb_down, bb_mid, bb_up = Indikator.BB(close)
         atr = Indikator.ATR(high, low, close)  # ATR eklendi
 
-        # ATR ile volatilite doğrulaması
-        if all(val is not None for val in [bb_down[-1], bb_mid[-1], bb_up[-1], atr[-1],bb_down[-2], bb_mid[-2], bb_up[-2], atr[-2],bb_down[-3], bb_mid[-3], bb_up[-3], atr[-3]]):
-            if bb_down[-3] > close[-3] and bb_down[-2] < close[-2] and atr[-2] > atr[-3]:
-                return "BUY"
-            elif ((bb_up[-3] < close[-3] and bb_up[-2] > close[-2]) or (bb_down[-2] * 0.99 > close[-2]) or
-                  (bb_mid[-3] < close[-3] and bb_mid[-2] > close[-2])) and atr[-2] > atr[-3]:
-                return "SELL"
-            else :
-                return False
-        return None
+        # Her fiyat noktası için sinyal hesaplama
+        for i in range(len(close)):
+            if i == 0 or bb_down[i] is None or bb_down[i-1] is None or bb_mid[i] is None or bb_mid[i-1] is None or bb_up[i] is None or bb_up[i-1] is None or atr[i] is None or atr[i-1] is None:
+                signals.append(None)
+            elif bb_down[i-1] > close[i-1] and bb_down[i] < close[i] and atr[i] > atr[i-1]:
+                signals.append("BUY")
+            elif ((bb_up[i-1] < close[i-1] and bb_up[i] > close[i]) or (bb_down[i] * 0.99 > close[i] or (bb_mid[i-1] < close[i-1] and bb_mid[i] > close[i]))) and atr[i] > atr[i-1]:
+                signals.append("SELL")
+            else:
+                signals.append(False)
+        return signals
 
     @staticmethod   #   OK
-    def MA_Cross(high, low, close, buy_price=None):
-        stop_lose_check = StratejilerTest.check_stop_lose(close, buy_price)
-        if stop_lose_check:
-            return stop_lose_check
+    def MA_Cross(high, low, close):
+        signals=[]
 
         ma_9 = Indikator.SMA(close, 9)
         ma_50 = Indikator.SMA(close, 50)
         adx = Indikator.ADX(high, low, close)
         atr = Indikator.ATR(high, low, close)  # ATR eklendi
 
-        # ADX ve ATR ile trend gücü ve volatilite doğrulaması
-        if all(val is not None for val in [ma_9[-1], ma_50[-1],atr[-1],ma_9[-2], ma_50[-2],atr[-2],adx[-1],ma_9[-3], ma_50[-3],atr[-3],adx[-2]]):
-            if ma_9[-3] < ma_50[-3] and ma_9[-2] > ma_50[-2] and adx[-2] > 25 and atr[-2] > atr[-3] :
-                return "BUY"
-            elif ((ma_9[-3] > ma_50[-3] and ma_9[-2] < ma_50[-2]) or (ma_50[-2] * 0.99 > close[-2])) and adx[-2] > 25 and atr[-2] > atr[-3] :
-                return "SELL"
-            else :
-                return False
-        return None
+        # Her fiyat noktası için sinyal hesaplama
+        for i in range(len(close)):
+            if ma_9[i] is None or ma_9[i-1] is None or ma_50[i] is None or ma_50[i-1] is None or adx[i] is None or atr[i] is None or atr[i-1] is None:
+                signals.append(None)
+            elif ma_9[i-1] < ma_50[i-1] and ma_9[i] > ma_50[i] and adx[i] > 25 and atr[i] > atr[i-1]:
+                signals.append("BUY")
+            elif ((ma_9[i-1] > ma_50[i-1] and ma_9[i] < ma_50[i]) or (ma_50[i] * 0.99 > close[i])) and adx[i]>25 and atr[i] > atr[i-1]:
+                signals.append("SELL")
+            else:
+                signals.append(False)
+        return signals
 
     @staticmethod   #   OK
-    def DMO(high, low, close, buy_price=None):
-        stop_lose_check = StratejilerTest.check_stop_lose(close, buy_price)
-        if stop_lose_check:
-            return stop_lose_check
+    def DMO(high, low, close):
+        signals=[]
 
         dmo = Indikator.DMO(close)
         adx = Indikator.ADX(high, low, close)
         rsi = Indikator.RSI(close)
-        bb = Indikator.BB(close)
-        bb_down, bb_up = bb[0], bb[2]
+        bb_down, bb_mid ,bb_up = Indikator.BB(close)
         atr = Indikator.ATR(high, low, close)  # ATR eklendi
 
-        # ATR ile volatilite doğrulaması ve ADX ile trend gücü analizi
-        if all(val is not None for val in [atr[-1],dmo[-1], adx[-1], rsi[-1], bb_up[-1], atr[-2],
-            dmo[-2], adx[-2], rsi[-2], bb_down[-1], bb_up[-2], atr[-3],
-            dmo[-3], adx[-3], rsi[-3], bb_down[-2], bb_up[-3], atr[-4]]):
-            if not (dmo[-3] > 1.0 and adx[-3] > 20 and rsi[-3] > 50 and close[-3] >= bb_up[-3] and atr[-3] > atr[-4]):
-                if dmo[-2] > 1.0 and adx[-2] > 20 and rsi[-2] > 50 and close[-2] >= bb_up[-2] and atr[-2] > atr[-3]:
-                    return "BUY"
-            elif (dmo[-2] < 0.8 or adx[-2] < 20 or (rsi[-2] < 50 and close[-2] <= bb_down[-2])) and atr[-2] > atr[-3]:
-                return "SELL"
-            else :
-                return False
-        return None
+        # Her fiyat noktası için sinyal hesaplama
+        for i in range(len(close)):
+            if dmo[i] is None or adx[i] is None or rsi[i] is None or bb_up[i] is None or bb_down is None or atr[i] is None or atr[i-1] is None:
+                signals.append(None)
+            elif dmo[i] > 1.0 and adx[i] > 20 and rsi[i] > 50 and close[i] >= bb_up[i] and atr[i] > atr[i-1]:
+                signals.append("BUY")
+            elif (dmo[i] < 0.8 or adx[i] < 20 or (rsi[i] < 50 and close[i] <= bb_down[i])) and atr[i] > atr[i-1]:
+                signals.append("SELL")
+            else:
+                signals.append(False)
+        return signals
 
     @staticmethod   #   OK
-    def BB_ADX(high, low, close, buy_price=None):
-        stop_lose_check = StratejilerTest.check_stop_lose(close, buy_price)
-        if stop_lose_check:
-            return stop_lose_check
+    def BB_ADX(high, low, close):
+        signals=[]
 
-        bb = Indikator.BB(close)
-        bb_down, bb_up = bb[0], bb[2]
+        bb_down, bb_mid ,bb_up = Indikator.BB(close)
         adx = Indikator.ADX(high, low, close)
 
-        # ADX ve RSI ile trend ve aşırı alım/satım durumu kontrolü
-        if all(val is not None for val in [bb_down[-1], bb_up[-1], adx[-1],bb_down[-2], bb_up[-2], adx[-2],bb_down[-3], bb_up[-3], adx[-3]]):
-            if not (bb_down[-3] < close[-3] and adx[-3] > 30):
-                if bb_down[-2] < close[-2] and adx[-2] > 30:
-                    return "BUY"
-            elif bb_up[-3] < close[-3] and bb_up[-2] > close[-2]:
-                return "SELL"
-            else :
-                return False
-        return None
+        # Her fiyat noktası için sinyal hesaplama
+        for i in range(len(close)):
+            if i == 0 or adx[i] is None or bb_down[i] is None or bb_up[i] is None or bb_up[i-1] is None:
+                signals.append(None)
+            elif bb_down[i] < close[i] and adx[i] > 30:
+                signals.append("BUY")
+            elif bb_up[i-1] < close[i-1] and bb_up[i]>close[i]:
+                signals.append("SELL")
+            else:
+                signals.append(False)
+        return signals
