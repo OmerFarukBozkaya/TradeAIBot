@@ -6,6 +6,7 @@ import os
 import pandas as pd
 import csv
 from Binance import Binance
+from StratejilerTest import StratejilerTest
 
 class Backtest:
     @staticmethod
@@ -33,7 +34,6 @@ class Backtest:
                 close.reverse()
                 high.reverse()
                 low.reverse()
-
         elif canli_veriler == True and hisse == False:  # Canlı coin verileri
             binance = Binance()
             data = binance.get_coin_data(coin, periyot, 1000)
@@ -41,197 +41,13 @@ class Backtest:
             low = data['low']
             close = data['close']
 
-        # İndikatör hesaplamaları
-        pmai_values = IndikatorTest.PMAI(close)
-        pmai_sma = IndikatorTest.SMA(pmai_values, 14)
-        rsi_values = IndikatorTest.RSI(close)
-        adx = IndikatorTest.ADX(high, low, close)
-        ema_200 = IndikatorTest.EMA(close,200)
-        macd = IndikatorTest.MACD(close)
-        macd_values = macd[0]
-        macd_signal = macd[1]
-        bb_rsi = IndikatorTest.BB(rsi_values)
-        bb_rsi_down = bb_rsi[0]
-        bb_rsi_up = bb_rsi[2]
-        bb=IndikatorTest.BB(close)
-        bb_down = bb[0]
-        bb_mid = bb[1]
-        bb_up = bb[2]
-        max_high_20 = IndikatorTest.Max_Last(high, 20)
-        max_low_20 = IndikatorTest.Max_Last(low, 20)
-        ma_9 = IndikatorTest.SMA(close, 9)
-        ma_50 = IndikatorTest.SMA(close, 50)
-        fib = IndikatorTest.FIB(close)
-        dmo=IndikatorTest.DMO(close)
-        vmzi=IndikatorTest.VMZI(close)
-        fdi = IndikatorTest.FDI(close)
-        vama=IndikatorTest.VAMA(close,14)
-        ichimoku_bulutu=IndikatorTest.Ichimoku_Bulutu(high, low)
-        tso = IndikatorTest.TSO(high,low,close)
+        # Strateji listesi
+        strategies = [StratejilerTest.MACD,StratejilerTest.VMZI,StratejilerTest.VAMA,
+                      StratejilerTest.TSO,StratejilerTest.BB_RSI,StratejilerTest.FDI,
+                      StratejilerTest.BB_Close,StratejilerTest.MA_Cross,StratejilerTest.DMO,
+                      StratejilerTest.BB_ADX
+                      ]
 
-        # Strateji listesi (Strateji adı, alım koşulu, satım koşulu)
-        strategies = [
-            {
-                "name": "PMAI & RSI",
-                "buy_condition": lambda i: pmai_values[i] is not None and pmai_sma[i] is not None and
-                                           rsi_values[i] is not None and adx[i] is not None and
-
-                                           pmai_values[i] > pmai_sma[i] * 1.2 and rsi_values[i] > 50 and adx[i] > 25,
-                "sell_condition": lambda i: pmai_values[i] is not None and pmai_values[i] < 30
-            },
-            {
-                "name": "MACD",
-                "buy_condition": lambda i: macd_values[i] is not None and macd_signal[i] is not None and \
-                                           rsi_values[i] is not None and
-
-                                           macd_values[i] > macd_signal[i] and rsi_values[i] > 50,
-                "sell_condition": lambda i: macd_values[i] is not None and macd_signal[i] is not None and \
-                                            macd_values[i] < macd_signal[i]
-            },
-            {
-                "name": "Breakout",
-                "buy_condition": lambda i: max_high_20[i - 1] is not None and adx[i] is not None and
-
-                                           max_high_20[i - 1] < close[i] and adx[i] > 30,
-                "sell_condition": lambda i: max_low_20[i - 1] is not None and adx[i] is not None and
-                                            low[i - 1] is not None and ((max_low_20[i - 1] > close[i]) or
-                                        (close[i] > buy_price * 1.05 and close[i] < buy_price * 0.98) or (low[i - 1] * 0.98 > close[i]))
-            },
-            {
-                "name": "Ma Cross",
-                "buy_condition": lambda i: ma_9[i-1] is not None and ma_50[i-1] is not None and \
-                                           adx[i] is not None and ma_9[i] is not None and ma_50[i] is not None and
-
-                                           ma_9[i-1] < ma_50[i-1] and ma_9[i] > ma_50[i] and adx[i] > 30,
-                "sell_condition": lambda i: ma_9[i-1] is not None and ma_50[i-1] is not None and \
-                                           ma_9[i] is not None and ma_50[i] is not None and ((ma_9[i] < ma_50[i] and
-                                           ma_9[i-1] > ma_50[i-1]) or (close[i]>ma_9[i]*1.03 and close[i]<ma_9[i]*0.99) or (ma_50[i]*0.99>close[i]))
-            },
-            {
-                "name": "BB(RSI)",
-                "buy_condition": lambda i: bb_rsi_down[i - 1] is not None and bb_rsi_down[i] is not None and rsi_values[i - 1]
-                                           is not None and rsi_values[i] is not None and
-
-                                           bb_rsi_down[i - 1] > rsi_values[i - 1] and bb_rsi_down[i] < rsi_values[i],
-                "sell_condition": lambda i: bb_rsi_up[i - 1] is not None and bb_rsi_up[i] is not None and rsi_values[i - 1]
-                                           is not None and rsi_values[i] is not None and bb_rsi_up[i - 1] < rsi_values[i - 1]
-                                            and bb_rsi_up[i] > rsi_values[i]
-            },
-            {
-                "name": "BB(close)",
-                "buy_condition": lambda i: bb_down[i - 1] is not None and bb_down[i] is not None and
-
-                                           bb_down[i - 1] > close[i - 1] and bb_down[i] < close[i],
-                "sell_condition": lambda i: bb_up[i - 1] is not None and bb_up[i] is not None and
-                                            (bb_up[i - 1] < close[i - 1] and bb_up[i] > close[i]) or (bb_down[i]*0.99>close[i]) or
-                                            (bb_mid[i-1]<close[i-1] and bb_mid[i]>close[i]) or (close[i]<buy_price * 0.97)
-            },
-            {
-                "name": "RSI Aşırı Alım/Satım",
-                "buy_condition": lambda i: rsi_values[i] is not None and
-
-                                           rsi_values[i]<30,
-                "sell_condition": lambda i: rsi_values[i-1] is not None and rsi_values[i]>70 or
-                                            (rsi_values[i-1]>50 and rsi_values[i]<50) or (rsi_values[i]<25)
-            },
-            {
-                "name": "Fibonacci Retracement",
-                "buy_condition": lambda i: fib[i-1][0] is not None and fib[i][0] is not None and
-
-                                           (close[i-1] > fib[i-1][1] and close[i] < fib[i][1]),
-                "sell_condition": lambda i: fib[i][0] is not None and (fib[i][4]<close[i]) or (buy_price * 0.97 > close[i]) or
-                                            (close[i] > buy_price * 1.05 and fib[i][2]*0.99 > close[i] and fib[i-1][2] < close[i-1] )
-            },
-            {
-                "name": "DMO",
-                "buy_condition": lambda i: dmo[i] is not None and adx[i] is not None and rsi_values[i] is not None and bb_up[i] is not None and
-
-                #(dmo[i]>1.5 and adx[i] > 25 and rsi_values[i] > 50 and atr[i]<atr_14[i])
-                                           (dmo[i]>1.0 and adx[i] > 20 and rsi_values[i] > 50 and close[i]>=bb_up[i]),
-                "sell_condition": lambda i: dmo[i] is not None and adx[i] is not None and
-                                            (dmo[i]<0.8 or adx[i] < 20 or (rsi_values[i]<50 and close[i] <= bb_down[i]))
-            },
-            {
-                "name": "VMZI",
-                "buy_condition": lambda i: vmzi[i] is not None and adx[i] is not None and rsi_values[i] is not None and
-
-                                           (vmzi[i]>1.5 and adx[i] > 25 and rsi_values[i] > 50),
-                "sell_condition": lambda i: vmzi[i] is not None and rsi_values[i] is not None and
-                                            (vmzi[i]<0 and rsi_values[i] < 50)
-            },
-            {
-                "name": "FDI",
-                "buy_condition": lambda i: fdi[i-1] is not None and fdi[i] is not None and rsi_values[i] is not None and
-                                            macd_values[i] is not None and macd_signal[i] is not None and
-
-                                           (fdi[i-1]>0 and  fdi[i-1] < fdi[i] and rsi_values[i] > 40 and macd_values[i] > macd_signal[i]),
-                "sell_condition": lambda i: fdi[i-1] is not None and fdi[i] is not None and rsi_values[i] is not None and
-                                            (fdi[i-1]<0 and fdi[i-1] > fdi[i] and rsi_values[i] < 60 and macd_values[i] < macd_signal[i])
-            },
-            {
-                "name": "VAMA",
-                "buy_condition": lambda i: vama[i] is not None and
-
-                                           (vama[i]*1.02<close[i]),
-                "sell_condition": lambda i: vama[i] is not None and
-                                           (vama[i]*0.98>close[i])
-            },
-            {
-                "name": "Ichimoku Bulutu",
-                "buy_condition": lambda i: ichimoku_bulutu[0][i] is not None and ichimoku_bulutu[1][i] is not None and
-                                           ichimoku_bulutu[2][i] is not None and ichimoku_bulutu[3][i] is not None and
-                                           ichimoku_bulutu[0][i - 1] is not None and ichimoku_bulutu[1][i-1] is not None and
-                                            #ichimoku_bulutu[0][i]>close[i] and ichimoku_bulutu[1][i]>close[i] and
-                                            #ichimoku_bulutu[2][i]>close[i] and ichimoku_bulutu[3][i]>close[i] and
-                                           (
-                                            ichimoku_bulutu[0][i-1] < ichimoku_bulutu[1][i-1] and ichimoku_bulutu[0][i] > ichimoku_bulutu[1][i]),
-                "sell_condition": lambda i: ichimoku_bulutu[0][i] is not None and ichimoku_bulutu[1][i] is not None and
-                                           ichimoku_bulutu[2][i] is not None and ichimoku_bulutu[3][i] is not None and
-                                           ichimoku_bulutu[0][i - 1] is not None and ichimoku_bulutu[1][i-1] is not None and
-
-                                            ((ichimoku_bulutu[0][i]<close[i] and ichimoku_bulutu[1][i]<close[i] and
-                                            ichimoku_bulutu[2][i]<close[i] and ichimoku_bulutu[3][i]<close[i]) or (
-                                            ichimoku_bulutu[0][i-1] > ichimoku_bulutu[1][i-1] and ichimoku_bulutu[0][i] < ichimoku_bulutu[1][i]))
-            },
-            {
-                "name": "TSO",
-                "buy_condition": lambda i: tso[i] is not None and
-
-                                           (tso[i] == 1),
-                "sell_condition": lambda i: tso[i] is not None and
-                                           (tso[i] == -1)
-            },
-            {
-                "name": "Ma Range Breakout",
-                "buy_condition": lambda i: ma_50[i-1] is not None and ma_50[i] is not None and
-
-                                           (ma_50[i-1] > close[i-1] and ma_50[i] < close[i]),
-                "sell_condition": lambda i: ma_50[i-1] is not None and ma_50[i] is not None and
-
-                                           (ma_50[i-1] < close[i-1] and ma_50[i] > close[i]),
-            },
-            {
-                "name": "BB ADX",
-                "buy_condition": lambda i: bb_down[i] is not None and adx[i] is not None and
-
-                                           (close[i] < bb_down[i] and adx[i] > 25),
-                "sell_condition": lambda i: bb_up[i] is not None and adx[i] is not None and
-
-                                            (close[i] > bb_up[i] and adx[i] < 20),
-            },
-            {
-                "name": "MACD EMA",
-                "buy_condition": lambda i: macd_values[i-1] is not None and macd_values[i] is not None and
-                                            macd_signal[i-1] is not None and macd_signal[i] is not None and ema_200[i] is not None and
-
-                                           (macd_values[i] > macd_signal[i] and macd_values[i-1] < macd_signal[i-1] and close[i] > ema_200[i]),
-                "sell_condition": lambda i: macd_values[i-1] is not None and macd_values[i] is not None and
-                                            macd_signal[i-1] is not None and macd_signal[i] is not None and
-
-                                            (macd_values[i] < macd_signal[i] and macd_values[i-1] > macd_signal[i-1]),
-            }
-
-        ]
         if kayit_et != True:
             fig = plt.figure(figsize=(16, 30))
             gs = gridspec.GridSpec(len(strategies) + 1, 2, height_ratios=[2] + [1] * len(strategies))
@@ -275,17 +91,19 @@ class Backtest:
             current_capital = initial_capital
             capital_history = [initial_capital]
 
+            strategy_resault = strategy(high,low,close)
+
             for i in range(len(close)):
                 if last_signal is None or last_signal == 'red':
-                    if strategy["buy_condition"](i):
+                    if strategy_resault[i]=="BUY":
                         last_signal = 'green'
                         buy_price = close[i]
                         amount_purchased = current_capital / buy_price
                         current_capital = 0
-                        if selected_strategy_name == strategy["name"]:
+                        if selected_strategy_name == strategy.__name__:
                             buy_points.append(i)  # Alım noktasını kaydet
                 elif last_signal == 'green':
-                    if strategy["sell_condition"](i):
+                    if strategy_resault[i]=="SELL":
                         last_signal = 'red'
                         sell_price = close[i]
                         profit_percentage = ((sell_price - buy_price) / buy_price) * 100
@@ -300,7 +118,7 @@ class Backtest:
                         else:
                             losing_trades += 1
 
-                        if selected_strategy_name == strategy["name"]:
+                        if selected_strategy_name == strategy.__name__:
                             sell_points.append(i)  # Satım noktasını kaydet
 
                         buy_price = None
@@ -320,8 +138,8 @@ class Backtest:
                 ax2 = fig.add_subplot(gs[idx + 1, 0])
                 ax2.plot(capital_history, marker='o', markersize=5, linewidth=2,
                          color=colors[idx % len(colors)],
-                         label=f"{strategy['name']} Kapital\nSon Kapital: {final_capital:.2f}\nKümülatif Kâr/Zarar: {cumulative_total_profit_loss:.2f}%")
-                ax2.set_title(f"{strategy['name']} Kapital Durumu")
+                         label=f"{strategy.__name__} Kapital\nSon Kapital: {final_capital:.2f}\nKümülatif Kâr/Zarar: {cumulative_total_profit_loss:.2f}%")
+                ax2.set_title(f"{strategy.__name__} Kapital Durumu")
                 ax2.set_xlabel('İşlem Sayısı')
                 ax2.set_ylabel('Kapital (TL)')
                 ax2.axhline(initial_capital, color='black', linestyle='--')
@@ -331,8 +149,8 @@ class Backtest:
                 ax3 = fig.add_subplot(gs[idx + 1, 1])
                 ax3.plot(cumulative_profit_loss, marker='o', markersize=5, linewidth=2,
                          color=colors[idx % len(colors)],
-                         label=f"{strategy['name']} Kâr/Zarar\nKârlı İşlemler: {profitable_trades}\nZararlı İşlemler: {losing_trades}")
-                ax3.set_title(f"{strategy['name']} Kümülatif Kâr/Zarar (%)")
+                         label=f"{strategy.__name__} Kâr/Zarar\nKârlı İşlemler: {profitable_trades}\nZararlı İşlemler: {losing_trades}")
+                ax3.set_title(f"{strategy.__name__} Kümülatif Kâr/Zarar (%)")
                 ax3.set_xlabel('İşlem Sayısı')
                 ax3.set_ylabel('Kâr/Zarar (%)')
                 ax3.axhline(0, color='black', linestyle='--')
@@ -341,7 +159,7 @@ class Backtest:
             #Excel çıktısı oluştur.
             if kayit_et:
                 if selected_strategy_name==None:
-                    strategy_name = strategy['name']
+                    strategy_name = strategy.__name__
                     cumulative_total_profit_loss = ((capital_histories[idx][
                                                          -1] - 100) / 100) * 100  # Son kapital ile kümülatif kâr/zarar
                     profitable_trades = profitable_trade_counts[idx]
@@ -360,8 +178,8 @@ class Backtest:
                         'zararlı işlemler': losing_trades,
                         'ortalama işlem sonucu': ortalama_islem
                     })
-                elif selected_strategy_name == strategy['name'] :
-                    strategy_name = strategy['name']
+                elif selected_strategy_name == strategy.__name__ :
+                    strategy_name = strategy.__name__
                     cumulative_total_profit_loss = ((capital_histories[idx][
                                                          -1] - 100) / 100) * 100  # Son kapital ile kümülatif kâr/zarar
                     profitable_trades = profitable_trade_counts[idx]

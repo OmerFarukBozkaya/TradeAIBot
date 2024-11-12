@@ -1,178 +1,212 @@
 from Indikator import Indikator
+
 class Stratejiler:
     stop_lose = 0.025
     @staticmethod
-    def MACD(high, low, close,buy_price=None):
-        macd = Indikator.MACD(close)
-        macd_values = macd[0]
-        macd_signal = macd[1]
-        rsi = Indikator.RSI(close)
-        if macd_signal[-3] is not None and macd_values[-3] is not None and rsi[-3] is not None:
-            if  (macd_values[-3] < macd_signal[-3] or rsi[-3] < 50) and macd_values[-2] > macd_signal[-2] and rsi[-2] > 50:
-                return "BUY"
-            elif macd_values[-2] < macd_signal[-2]:
-                return "SELL"
-            elif buy_price is not None and close[-1] < (buy_price * (1 - Stratejiler.stop_lose)):
-                return "STOP-LOSE"
-            else:
-                return False
-        else:
-            return None
-
+    def check_stop_lose(close, buy_price):
+        # Eğer alım fiyatı mevcutsa ve kapanış fiyatı stop-lose sınırının altındaysa "STOP-LOSE" döndür.
+        if buy_price is not None and close[-1] < (buy_price * (1 - Stratejiler.stop_lose)):
+            return "STOP-LOSE"
+        return None
     @staticmethod
-    def VMZI(high, low, close,buy_price=None):
+    def MACD(high, low, close):
+        # Sonuçları tutmak için liste
+        signals = []
+
+        # Tüm indikatörlerin bir defa hesaplanması
+        macd_values, macd_signal = Indikator.MACD(close)
+        rsi_values = Indikator.RSI(close)
+        adx_values = Indikator.ADX(high, low, close)
+
+        # Her fiyat noktası için sinyal hesaplama
+        for i in range(len(close)):
+            if macd_values[i] is None or macd_signal[i] is None or rsi_values[i] is None or adx_values[i] is None:
+                signals.append(None)
+            elif macd_values[i] > macd_signal[i] and rsi_values[i] > 50 and adx_values[i] > 25:
+                signals.append("BUY")
+            elif macd_values[i] < macd_signal[i] and adx_values[i] > 25:
+                signals.append("SELL")
+            else:
+                signals.append(False)
+        return signals
+
+    @staticmethod   #   OK
+    def VMZI(high, low, close):
+        signals=[]
+
         vmzi = Indikator.VMZI(close)
         adx = Indikator.ADX(high, low, close)
         rsi = Indikator.RSI(close)
-        if vmzi[-3] is not None and adx[-3] is not None and rsi[-3] is not None:
-            if (vmzi[-3] < 1.5 or adx[-3] < 25 or rsi[-3] < 50) and vmzi[-2] > 1.5 and adx[-2] > 25 and rsi[-2] > 50:
-                return "BUY"
-            elif vmzi[-2] < 0 and rsi[-2] < 50:
-                return "SELL"
-            elif buy_price is not None and close[-1] < (buy_price * (1 - Stratejiler.stop_lose)):
-                return "STOP-LOSE"
-            else:
-                return False
-        else:
-            return None
+        atr = Indikator.ATR(high, low, close)  # ATR eklendi
 
-    @staticmethod
-    def VAMA(high, low, close,buy_price=None):
+        # Her fiyat noktası için sinyal hesaplama
+        for i in range(len(close)):
+            if vmzi[i] is None or adx[i] is None or rsi[i] is None or atr[i] is None or atr[i-1] is None:
+                signals.append(None)
+            elif vmzi[i] > 1.5 and adx[i] > 25 and atr[i] > atr[i-1]:
+                signals.append("BUY")
+            elif vmzi[i] < 0 and rsi[i] < 50 and atr[i] > atr[i-1]:
+                signals.append("SELL")
+            else:
+                signals.append(False)
+        return signals
+
+    @staticmethod   #   OK
+    def VAMA(high, low, close):
+        signals=[]
         vama = Indikator.VAMA(close)
-        if vama[-3] is not None:
-            if (vama[-3] * 1.02 > close[-3]) and vama[-2] * 1.02 < close[-2]:
-                return "BUY"
-            elif vama[-2] * 0.98 > close[-2]:
-                return "SELL"
-            elif buy_price is not None and close[-1] < (buy_price * (1 - Stratejiler.stop_lose)):
-                return "STOP-LOSE"
-            else:
-                return False
-        else:
-            return None
+        sma_50 = Indikator.SMA(close, 50)  # SMA karşılaştırması eklendi
 
-    @staticmethod
-    def TSO(high, low, close,buy_price=None):
+        # Her fiyat noktası için sinyal hesaplama
+        for i in range(len(close)):
+            if vama[i] is None or sma_50[i] is None:
+                signals.append(None)
+            elif vama[i] * 1.02 < close[i] and close[i] > sma_50[i]:
+                signals.append("BUY")
+            elif vama[i] * 0.98 > close[i]:
+                signals.append("SELL")
+            else:
+                signals.append(False)
+        return signals
+
+    @staticmethod   #   OK
+    def TSO(high, low, close):
+        signals=[]
+
         tso = Indikator.TSO(high, low, close)
-        if tso[-3] is not None:
-            if tso[-3] != 1 and tso[-2] == 1:
-                return "BUY"
-            elif tso[-2] == -1:
-                return "SELL"
-            elif buy_price is not None and close[-1] < (buy_price * (1 - Stratejiler.stop_lose)):
-                return "STOP-LOSE"
-            else:
-                return False
-        else:
-            return None
+        atr = Indikator.ATR(high, low, close)  # ATR eklendi
 
-    @staticmethod
-    def BB_RSI(high, low, close,buy_price=None):
+        # Her fiyat noktası için sinyal hesaplama
+        for i in range(len(close)):
+            if tso[i] is None or atr[i] is None or atr[i - 1] is None:
+                signals.append(None)
+            elif tso[i] == 1 and atr[i] > atr[i - 1]:
+                signals.append("BUY")
+            elif tso[i] == -1 and atr[i] > atr[i - 1]:
+                signals.append("SELL")
+            else:
+                signals.append(False)
+        return signals
+
+    @staticmethod   #   OK
+    def BB_RSI(high, low, close):
+        signals=[]
+
         rsi = Indikator.RSI(close)
-        bb_rsi = Indikator.BB(rsi)
-        bb_rsi_down = bb_rsi[0]
-        bb_rsi_up = bb_rsi[2]
-        if rsi[-3] is not None and bb_rsi_down[-3] is not None and bb_rsi_up[-3] is not None:
-            if bb_rsi_down[-3] > rsi[-3] and bb_rsi_down[-2] < rsi[-2]:
-                return "BUY"
-            elif bb_rsi_up[-3] < rsi[-3] and bb_rsi_up[-2] > rsi[-2]:
-                return "SELL"
-            elif buy_price is not None and close[-1] < (buy_price * (1 - Stratejiler.stop_lose)):
-                return "STOP-LOSE"
-            else:
-                return False
-        else:
-            return None
+        bb_rsi_down, bb_rsi_mid , bb_rsi_up = Indikator.BB(rsi)
+        atr = Indikator.ATR(high, low, close)  # ATR eklendi
 
-    @staticmethod
-    def FDI(high, low, close,buy_price=None):
+        # Her fiyat noktası için sinyal hesaplama
+        for i in range(len(close)):
+            if rsi[i] is None or rsi[i-1] is None or bb_rsi_down[i] is None or bb_rsi_down[i-1] is None or bb_rsi_up[i] is None or bb_rsi_up[i-1] is None or atr[i] is None or atr[i - 1] is None:
+                signals.append(None)
+            elif bb_rsi_down[i-1] > rsi[i-1] and bb_rsi_down[i]<rsi[i] and atr[i] > atr[i - 1]:
+                signals.append("BUY")
+            elif bb_rsi_up[i-1] < rsi[i-1] and bb_rsi_up[i] > rsi[i] and atr[i] > atr[i - 1]:
+                signals.append("SELL")
+            else:
+                signals.append(False)
+        return signals
+
+    @staticmethod   #   OK
+    def FDI(high, low, close):
+        signals=[]
+
         fdi = Indikator.FDI(close)
         rsi = Indikator.RSI(close)
-        macd = Indikator.MACD(close)
-        macd_values = macd[0]
-        macd_signal = macd[1]
-        if fdi[-4] is not None and rsi[-3] is not None and macd_values[-3] is not None and macd_signal[-3] is not None:
-            if (fdi[-4] < 0 or fdi[-4] > fdi[-3] or rsi[-3] < 40 or macd_values[-3] < macd_signal[-3]) and fdi[-3] > 0 and fdi[-3] < fdi[-2] and rsi[-2] > 40 and macd_values[-2] > macd_signal[-2]:
-                return "BUY"
-            elif fdi[-3] < 0 and fdi[-3] > fdi[-2] and rsi[-2] < 60 and macd_values[-2] < macd_signal[-2]:
-                return "SELL"
-            elif buy_price is not None and close[-1] < (buy_price * (1 - Stratejiler.stop_lose)):
-                return "STOP-LOSE"
-            else:
-                return False
-        else:
-            return None
+        macd_values, macd_signal = Indikator.MACD(close)
+        adx = Indikator.ADX(high, low, close)  # ADX eklendi
 
-    @staticmethod
-    def BB_Close(high, low, close,buy_price=None):
-        bb = Indikator.BB(close)
-        bb_down = bb[0]
-        bb_mid = bb[1]
-        bb_up = bb[2]
-        if bb_down[-3] is not None and bb_mid[-3] is not None and bb_up[-3] is not None:
-            if bb_down[-3] > close[-3] and bb_down[-2] < close[-2]:
-                return "BUY"
-            elif ((bb_up[-3] < close[-3] and bb_up[-2] > close[-2]) or (bb_down[-2] * 0.99 > close[-2]) or
-                  (bb_mid[-3] < close[-3] and bb_mid[-2] > close[-2])):
-                return "SELL"
-            elif buy_price is not None and close[-1] < (buy_price * (1 - Stratejiler.stop_lose)):
-                return "STOP-LOSE"
+        # Her fiyat noktası için sinyal hesaplama
+        for i in range(len(close)):
+            if (fdi[i] is None or fdi[i - 1] is None or rsi[i] is None or macd_values[i] is None or
+                    macd_signal[i] is None or adx[i] is None ):
+                signals.append(None)
+            elif fdi[i - 1] > 0 and fdi[i-1] < fdi[i] and rsi[i] > 40 and macd_values[i] > macd_signal[i] and adx[i] > 20:
+                signals.append("BUY")
+            elif fdi[i - 1] < 0 and fdi[i-1] > fdi[i] and rsi[i] < 60 and macd_values[i] < macd_signal[i] and adx[i] > 20:
+                signals.append("SELL")
             else:
-                return False
-        else:
-            return None
+                signals.append(False)
+        return signals
 
-    @staticmethod
-    def MA_Cross(high, low, close,buy_price=None):
+    @staticmethod   #   OK
+    def BB_Close(high, low, close):
+        signals=[]
+
+        bb_down, bb_mid, bb_up = Indikator.BB(close)
+        atr = Indikator.ATR(high, low, close)  # ATR eklendi
+
+        # Her fiyat noktası için sinyal hesaplama
+        for i in range(len(close)):
+            if i == 0 or bb_down[i] is None or bb_down[i-1] is None or bb_mid[i] is None or bb_mid[i-1] is None or bb_up[i] is None or bb_up[i-1] is None or atr[i] is None or atr[i-1] is None:
+                signals.append(None)
+            elif bb_down[i-1] > close[i-1] and bb_down[i] < close[i] and atr[i] > atr[i-1]:
+                signals.append("BUY")
+            elif ((bb_up[i-1] < close[i-1] and bb_up[i] > close[i]) or (bb_down[i] * 0.99 > close[i] or (bb_mid[i-1] < close[i-1] and bb_mid[i] > close[i]))) and atr[i] > atr[i-1]:
+                signals.append("SELL")
+            else:
+                signals.append(False)
+        return signals
+
+    @staticmethod   #   OK
+    def MA_Cross(high, low, close):
+        signals=[]
+
         ma_9 = Indikator.SMA(close, 9)
         ma_50 = Indikator.SMA(close, 50)
         adx = Indikator.ADX(high, low, close)
-        if ma_9[-2] is not None and ma_50[-2] is not None and adx[-1] is not None:
-            if ma_9[-3] < ma_50[-3] and ma_9[-2] > ma_50[-2] and adx[-2] > 30:
-                return "BUY"
-            elif (ma_9[-3] > ma_50[-3] and ma_9[-2] < ma_50[-2]) or (ma_50[-2] * 0.99 > close[-2]):
-                return "SELL"
-            elif buy_price is not None and close[-1] < (buy_price * (1 - Stratejiler.stop_lose)):
-                return "STOP-LOSE"
-            else:
-                return False
-        else:
-            return None
+        atr = Indikator.ATR(high, low, close)  # ATR eklendi
 
-    @staticmethod
-    def DMO(high, low, close,buy_price=None):
+        # Her fiyat noktası için sinyal hesaplama
+        for i in range(len(close)):
+            if ma_9[i] is None or ma_9[i-1] is None or ma_50[i] is None or ma_50[i-1] is None or adx[i] is None or atr[i] is None or atr[i-1] is None:
+                signals.append(None)
+            elif ma_9[i-1] < ma_50[i-1] and ma_9[i] > ma_50[i] and adx[i] > 25 and atr[i] > atr[i-1]:
+                signals.append("BUY")
+            elif ((ma_9[i-1] > ma_50[i-1] and ma_9[i] < ma_50[i]) or (ma_50[i] * 0.99 > close[i])) and adx[i]>25 and atr[i] > atr[i-1]:
+                signals.append("SELL")
+            else:
+                signals.append(False)
+        return signals
+
+    @staticmethod   #   OK
+    def DMO(high, low, close):
+        signals=[]
+
         dmo = Indikator.DMO(close)
         adx = Indikator.ADX(high, low, close)
         rsi = Indikator.RSI(close)
-        bb = Indikator.BB(close)
-        bb_down = bb[0]
-        bb_up = bb[2]
-        if dmo[-3] is not None and adx[-3] is not None and rsi[-3] is not None and bb_down[-2] is not None and bb_up[-3] is not None:
-            if (dmo[-3] < 1.0 or adx[-3] < 20 or rsi[-3] < 50 or close[-3] < bb_up[-3]) and dmo[-2] > 1.0 and adx[-2] > 20 and rsi[-2] > 50 and close[-2] >= bb_up[-2]:
-                return "BUY"
-            elif dmo[-2] < 0.8 or adx[-2] < 20 or (rsi[-2] < 50 and close[-2] <= bb_down[-2]):
-                return "SELL"
-            elif buy_price is not None and close[-1] < (buy_price * (1 - Stratejiler.stop_lose)):
-                return "STOP-LOSE"
-            else:
-                return False
-        else:
-            return None
+        bb_down, bb_mid ,bb_up = Indikator.BB(close)
+        atr = Indikator.ATR(high, low, close)  # ATR eklendi
 
-    @staticmethod
-    def BB_ADX(high, low, close,buy_price=None):
-        bb = Indikator.BB(close)
-        adx = Indikator.ADX(high, low, close)
-        bb_down = bb[0]
-        bb_up = bb[2]
-        if bb_down[-2] is not None and bb_up[-2] is not None and adx[-2] is not None:
-            if bb_down[-2] > close[-2] and adx[-2] > 25:
-                return "BUY"
-            elif (close[-2] > bb_up[-2] and adx[-2] < 20):
-                return "SELL"
-            elif buy_price is not None and close[-1] < (buy_price * (1 - Stratejiler.stop_lose)):
-                return "STOP-LOSE"
+        # Her fiyat noktası için sinyal hesaplama
+        for i in range(len(close)):
+            if dmo[i] is None or adx[i] is None or rsi[i] is None or bb_up[i] is None or bb_down is None or atr[i] is None or atr[i-1] is None:
+                signals.append(None)
+            elif dmo[i] > 1.0 and adx[i] > 20 and rsi[i] > 50 and close[i] >= bb_up[i] and atr[i] > atr[i-1]:
+                signals.append("BUY")
+            elif (dmo[i] < 0.8 or adx[i] < 20 or (rsi[i] < 50 and close[i] <= bb_down[i])) and atr[i] > atr[i-1]:
+                signals.append("SELL")
             else:
-                return False
-        else:
-            return None
+                signals.append(False)
+        return signals
+
+    @staticmethod   #   OK
+    def BB_ADX(high, low, close):
+        signals=[]
+
+        bb_down, bb_mid ,bb_up = Indikator.BB(close)
+        adx = Indikator.ADX(high, low, close)
+
+        # Her fiyat noktası için sinyal hesaplama
+        for i in range(len(close)):
+            if i == 0 or adx[i] is None or bb_down[i] is None or bb_up[i] is None or bb_up[i-1] is None:
+                signals.append(None)
+            elif bb_down[i] < close[i] and adx[i] > 30:
+                signals.append("BUY")
+            elif bb_up[i-1] < close[i-1] and bb_up[i]>close[i]:
+                signals.append("SELL")
+            else:
+                signals.append(False)
+        return signals
