@@ -210,26 +210,22 @@ class Binance:
             'buy_usdt_volume':[],
             'ignore':[]
         }
-        try:
-            response = requests.get(self.base_url + data_url,timeout=20)
-            response.raise_for_status()
-            data = response.json()  # JSON yanıtı al
-            for i in data:
-                result['opendate'].append(float(i[0]))
-                result['open'].append(float(i[1]))
-                result['high'].append(float(i[2]))
-                result['low'].append(float(i[3]))
-                result['close'].append(float(i[4]))
-                result['volume_coin'].append(float(i[5]))
-                result['closedate'].append(float(i[6]))
-                result['volume_usdt'].append(float(i[7]))
-                result['trade_number'].append(float(i[8]))
-                result['buy_coin_volume'].append(float(i[9]))
-                result['buy_usdt_volume'].append(float(i[10]))
-                result['ignore'].append(float(i[11]))
-        except requests.exceptions.RequestException as e:
-            print(f"İstek başarısız oldu: {e}")
-
+        response = requests.get(self.base_url + data_url, timeout=20)
+        response.raise_for_status()
+        data = response.json()  # JSON yanıtı al
+        for i in data:
+            result['opendate'].append(float(i[0]))
+            result['open'].append(float(i[1]))
+            result['high'].append(float(i[2]))
+            result['low'].append(float(i[3]))
+            result['close'].append(float(i[4]))
+            result['volume_coin'].append(float(i[5]))
+            result['closedate'].append(float(i[6]))
+            result['volume_usdt'].append(float(i[7]))
+            result['trade_number'].append(float(i[8]))
+            result['buy_coin_volume'].append(float(i[9]))
+            result['buy_usdt_volume'].append(float(i[10]))
+            result['ignore'].append(float(i[11]))
         return result
 
     def get_coin_minQTY(self,coin):
