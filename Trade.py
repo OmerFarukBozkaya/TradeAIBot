@@ -124,7 +124,7 @@ class Trade:
 
             for strategy in strategys[periyot]:
                 with self.global_lock:  # Global kilit kullanarak sadece bir strateji kontrol et
-                    if not self.islem_acik and strategy(high, low, close) == "BUY":
+                    if not self.islem_acik and strategy(high, low, close)[-2] == "BUY" and strategy(high, low, close)[-3] != "BUY":
                         sonislem, self.adet = self.buy(coin, periyot, str(strategy.__name__), close,nakit)
                         self.alinan_coin = coin  # Alınan coin'i kaydet
                         self.alim_fiyati = close[-1]  # Alım fiyatını kaydet
@@ -145,21 +145,21 @@ class Trade:
                 low = data['low']
                 close = data['close']
 
-                sell_strategy_sonuc = self.sell_strategy(high, low, close,self.alim_fiyati)
-                if  sell_strategy_sonuc == "SELL" or (self.gercek and self.binance.mevcut_adedim(self.alinan_coin) == 0):
-                    self.sell(self.alinan_coin, periyot, close, str(self.sell_strategy.__name__), self.alim_fiyati)
-                    self.islem_acik = False
-                    self.alinan_coin = None
-                    self.alim_fiyati = None
-                    self.mum_sayisi=0
-                    self.kaydet()
-                    break  # Satış yapıldı, döngüden çık
-                elif sell_strategy_sonuc == "STOP-LOSE":
+                sell_strategy_sonuc = self.sell_strategy(high, low, close,self.alim_fiyati)[-2]
+                if Stratejiler.check_stop_lose(close,self.alim_fiyati) == "STOP-LOSE":
                     self.stop_lose(self.alinan_coin, periyot, close, str(self.sell_strategy.__name__), self.alim_fiyati)
                     self.islem_acik = False
                     self.alinan_coin = None
                     self.alim_fiyati = None
                     self.mum_sayisi = 0
+                    self.kaydet()
+                    break  # Satış yapıldı, döngüden çık
+                elif sell_strategy_sonuc == "SELL" or (self.gercek and self.binance.mevcut_adedim(self.alinan_coin) == 0):
+                    self.sell(self.alinan_coin, periyot, close, str(self.sell_strategy.__name__), self.alim_fiyati)
+                    self.islem_acik = False
+                    self.alinan_coin = None
+                    self.alim_fiyati = None
+                    self.mum_sayisi=0
                     self.kaydet()
                     break  # Satış yapıldı, döngüden çık
 
@@ -169,7 +169,7 @@ class Trade:
                 other_strategy.remove(self.sell_strategy)
                 other_strategy_result = []
                 for strategy in other_strategy:
-                    result=strategy(high,low,close)
+                    result=strategy(high,low,close)[-2]
                     if result == "BUY":
                         other_strategy_result.append(1)
                     elif result == "SELL":
