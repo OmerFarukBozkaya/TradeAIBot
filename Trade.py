@@ -124,7 +124,8 @@ class Trade:
 
             for strategy in strategys[periyot]:
                 with self.global_lock:  # Global kilit kullanarak sadece bir strateji kontrol et
-                    if not self.islem_acik and strategy(high, low, close)[-2] == "BUY" and strategy(high, low, close)[-3] != "BUY":
+                    strategy_result=strategy(high, low, close)
+                    if not self.islem_acik and strategy_result[-2] == "BUY" and strategy_result[-3] != "BUY":
                         sonislem, self.adet = self.buy(coin, periyot, str(strategy.__name__), close,nakit)
                         self.alinan_coin = coin  # Alınan coin'i kaydet
                         self.alim_fiyati = close[-1]  # Alım fiyatını kaydet
@@ -145,7 +146,7 @@ class Trade:
                 low = data['low']
                 close = data['close']
 
-                sell_strategy_sonuc = self.sell_strategy(high, low, close,self.alim_fiyati)[-2]
+                sell_strategy_result = self.sell_strategy(high, low, close)[-2]
                 if Stratejiler.check_stop_lose(close,self.alim_fiyati) == "STOP-LOSE":
                     self.stop_lose(self.alinan_coin, periyot, close, str(self.sell_strategy.__name__), self.alim_fiyati)
                     self.islem_acik = False
@@ -154,7 +155,7 @@ class Trade:
                     self.mum_sayisi = 0
                     self.kaydet()
                     break  # Satış yapıldı, döngüden çık
-                elif sell_strategy_sonuc == "SELL" or (self.gercek and self.binance.mevcut_adedim(self.alinan_coin) == 0):
+                elif sell_strategy_result == "SELL" or (self.gercek and self.binance.mevcut_adedim(self.alinan_coin) == 0):
                     self.sell(self.alinan_coin, periyot, close, str(self.sell_strategy.__name__), self.alim_fiyati)
                     self.islem_acik = False
                     self.alinan_coin = None
@@ -182,7 +183,6 @@ class Trade:
                 self.araclar.mum_olusmasini_bekle(periyot)
         except Exception as e:
             hata = traceback.format_exc()
-            print(f"Sell Strategy Sonucu:{sell_strategy_sonuc}")
             logging.error(f"Satış sinyali bekleme sırasında hata: {hata}")
             self.araclar.mail_gonder(f"HATA | Trade {periyot}", f"{hata}")
 
