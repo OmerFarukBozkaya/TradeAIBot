@@ -88,13 +88,14 @@ elif com == "6":
 elif com == "7":
     coin = input("Coin:")
     periyot = input("Periyot (15m,1h,4h,1d):")
+    adet = int(input("Adet:"))
     a=time.time()
     if periyot not in ["15m","1h","4h","1d"]:
         for i in ["15m","1h","4h","1d"]:
             print(i)
-            araclar.coin_strateji_degerleri(coin,i)
+            araclar.coin_strateji_degerleri(coin,i,adet)
     else:
-        araclar.coin_strateji_degerleri(coin, periyot)
+        araclar.coin_strateji_degerleri(coin, periyot,adet)
     b=time.time()
     print(araclar.saniye_to_hms(b-a))
 elif com == "8":

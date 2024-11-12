@@ -284,7 +284,7 @@ class Araclar:
         print(f"TSO: {tso}")
 
     @staticmethod
-    def coin_strateji_degerleri(coin,periyot):
+    def coin_strateji_degerleri(coin,periyot,adet):
         binance = Binance()
         data = binance.get_coin_data(coin, periyot, 1000)
         high = data['high']
@@ -295,7 +295,7 @@ class Araclar:
                    Stratejiler.BB_RSI,Stratejiler.FDI,Stratejiler.BB_Close,Stratejiler.MA_Cross,
                    Stratejiler.DMO,Stratejiler.BB_ADX]
         for strategy in strategys:
-            print(f"{strategy.__name__} : {strategy(high, low, close)}")
+            print(f"{strategy.__name__} : {strategy(high, low, close)[-adet:]}")
 
     @staticmethod
     def mum_sagligi(open,close):
