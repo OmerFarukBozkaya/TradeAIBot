@@ -262,7 +262,7 @@ class Binance:
         return sirali_coin_isimleri
 
     def islem_gecmisi_analiz(self):
-        file = open("islem_gecmisi.log","r")
+        file = open("Log/islem_gecmisi.log","r")
         gunluk_islem_sonucu={}
         strategy_islem_sonucu={}
         periyot_islem_sonucu={}
