@@ -48,6 +48,7 @@ class Trade:
             "1d": [Stratejiler.MACD, Stratejiler.DMO, Stratejiler.VAMA, Stratejiler.VMZI, Stratejiler.MA_Cross,
                    Stratejiler.FDI]
         }
+        self.highest_price = None
 
     def kaydet(self):
         durum = {
@@ -58,7 +59,8 @@ class Trade:
             'nakit': self.nakit,
             'sell_strategy': self.sell_strategy.__name__ if self.sell_strategy else None,
             'periyot': self.periyot,
-            'mum_sayisi':self.mum_sayisi
+            'mum_sayisi':self.mum_sayisi,
+            'highest_price':self.highest_price
         }
         with open(f'Trade_Durumu/trade_durumu_{self.periyot}.json', 'w') as f:
             json.dump(durum, f)
@@ -76,6 +78,7 @@ class Trade:
                 self.sell_strategy = getattr(Stratejiler, durum['sell_strategy']) if durum['sell_strategy'] else None
                 self.periyot = durum['periyot']
                 self.mum_sayisi = durum['mum_sayisi']
+                self.highest_price = durum['highest_price']
     def TradeEt(self, periyot, gercek,nakit):
         self.gercek = gercek  # Gerçek işlem bilgisi kaydedildi
         self.nakit=nakit
@@ -148,7 +151,8 @@ class Trade:
                 close = data['close']
 
                 sell_strategy_result = self.sell_strategy(high, low, close)[-2]
-                if Stratejiler.check_stop_lose(close,self.alim_fiyati) == "STOP-LOSE":
+                stop_lose_check,self.highest_price = Stratejiler.check_stop_lose(high,low,close,self.alim_fiyati,self.highest_price)
+                if stop_lose_check == "STOP-LOSE":
                     self.stop_lose(self.alinan_coin, periyot, close, str(self.sell_strategy.__name__), self.alim_fiyati)
                     self.islem_acik = False
                     self.alinan_coin = None
