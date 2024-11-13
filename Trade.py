@@ -193,7 +193,6 @@ class Trade:
 
     def buy(self, coin, periyot, strateji_adi, close,nakit):
         # Adet hesapla
-        nakit = nakit * 0.999
         minQty = self.binance.get_coin_minQTY(coin)
         adet = nakit / close[-1]
         adet = adet - (adet % minQty)
