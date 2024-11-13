@@ -195,13 +195,13 @@ class Trade:
         # Adet hesapla
         nakit = nakit * 0.999
         minQty = self.binance.get_coin_minQTY(coin)
-        adet = nakit / close[-2]
+        adet = nakit / close[-1]
         adet = adet - (adet % minQty)
         if self.gercek:
             if nakit > 10:
                 print("Gerçekten alındı")
                 self.binance.al(coin, adet)
-                self.nakit = 0
+                self.nakit = self.nakit-(adet * close[-1])
             else:
                 print("Yeterli miktarda nakit yok !")
 
@@ -229,7 +229,7 @@ class Trade:
             mevcut_adedim = self.binance.sahip_olduklarim()[coin]
             minQty = self.binance.get_coin_minQTY(coin)
             adet = mevcut_adedim-(mevcut_adedim % minQty)
-            self.nakit = (close[-1] * adet)*0.999
+            self.nakit = self.nakit + ((close[-1] * adet)*0.999)
             self.binance.sat(coin, adet)
         self.araclar.mail_gonder(f"SAT | {strateji_adi} {periyot}",
                                      f"{coin} satıldı, Adet: {self.adet}, Fiyat: {close[-1]} Kar/Zarar:{((close[-1] / buy_price) - 1) * 100:.2f}%")
@@ -251,7 +251,7 @@ class Trade:
             mevcut_adedim = self.binance.sahip_olduklarim()[coin]
             minQty = self.binance.get_coin_minQTY(coin)
             adet = mevcut_adedim - (mevcut_adedim % minQty)
-            self.nakit = (close[-1] * adet) * 0.999
+            self.nakit = self.nakit + ((close[-1] * adet) * 0.999)
             self.binance.sat(coin, adet)
         self.araclar.mail_gonder(f"SAT [STOP-LOSE] | {strateji_adi} {periyot}",
                                  f"{coin} satıldı, Adet: {self.adet}, Fiyat: {close[-1]} Kar/Zarar:{((close[-1] / buy_price) - 1) * 100:.2f}%")
