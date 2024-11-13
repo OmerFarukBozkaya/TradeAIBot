@@ -8,6 +8,15 @@ SCRIPT_PATH="./main.py"  # Kendi script dosyanızın yolunu yazın
 # Tarama ve Trade işlemleri için periyot listeleri
 PERIODS=("15m" "1h" "1d")
 
+# Gerçek dosyasının var olup olmadığını kontrol et
+if [ ! -f gercek.txt ]; then
+    # Dosya yoksa, oluştur ve içine 'False' yaz
+    echo "False" > gercek.txt
+fi
+
+# gercek.txt dosyasını okuyarak True/False değerini değişkene atama
+REAL_VALUE=$(cat gercek.txt)
+
 # Yeni bir tmux oturumu başlatın, ilk pencere otomatik olarak atanacak
 tmux new-session -d -s $SESSION_NAME
 
@@ -20,7 +29,7 @@ for i in "${!PERIODS[@]}"; do
     tmux new-window -t $SESSION_NAME:$((i+1)) -n "$window_name" "python3 $SCRIPT_PATH <<EOF
 5
 $period
-True
+$REAL_VALUE
 100
 EOF
     bash"
