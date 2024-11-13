@@ -1,7 +1,7 @@
 from Indikator import Indikator
 
 class Stratejiler:
-    stop_lose = 0.025
+    static_stop_lose = 0.025
     atr_factor_strong_trend = 2.0
     atr_factor_weak_trend = 1.2
     @staticmethod
@@ -17,12 +17,12 @@ class Stratejiler:
             atr_factor = Stratejiler.atr_factor_weak_trend
         stop_seviyesi=(highest_price - (atr_values[-1] * atr_factor))
         if close[-1] < stop_seviyesi:
-            return "STOP-LOSE",None
+            return "STOP-LOSE",None,None
         # Eğer alım fiyatı mevcutsa ve kapanış fiyatı stop-lose sınırının altındaysa "STOP-LOSE" döndür.
-        if buy_price is not None and close[-1] < (buy_price * (1 - Stratejiler.stop_lose)):
-            return "STOP-LOSE",None
+        if buy_price is not None and close[-1] < (buy_price * (1 - Stratejiler.static_stop_lose)):
+            return "STOP-LOSE",None,None
 
-        return None,highest_price
+        return None,highest_price,stop_seviyesi
     @staticmethod
     def MACD(high, low, close):
         # Sonuçları tutmak için liste

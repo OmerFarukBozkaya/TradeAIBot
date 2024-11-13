@@ -151,7 +151,7 @@ class Trade:
                 close = data['close']
 
                 sell_strategy_result = self.sell_strategy(high, low, close)[-2]
-                stop_lose_check,self.highest_price = Stratejiler.check_stop_lose(high,low,close,self.alim_fiyati,self.highest_price)
+                stop_lose_check,self.highest_price,stop_seviyesi = Stratejiler.check_stop_lose(high,low,close,self.alim_fiyati,self.highest_price)
                 if stop_lose_check == "STOP-LOSE":
                     self.stop_lose(self.alinan_coin, periyot, close, str(self.sell_strategy.__name__), self.alim_fiyati)
                     self.islem_acik = False
@@ -183,7 +183,7 @@ class Trade:
                     else:
                         other_strategy_result.append(0)
                 logging.info(
-                    f"DURUM : {periyot} {self.sell_strategy.__name__} {self.alinan_coin} Islem Suresi: {self.mum_sayisi} mum. Diger strategyler {other_strategy_result} Kar/Zarar: {((close[-1] / self.alim_fiyati) - 1) * 100:.2f}%")
+                    f"DURUM : {periyot} {self.sell_strategy.__name__} {self.alinan_coin} Islem Suresi: {self.mum_sayisi} mum. Diger strategyler {other_strategy_result} Stop-Lose: {stop_seviyesi} Kar/Zarar: {((close[-1] / self.alim_fiyati) - 1) * 100:.2f}%")
                 time.sleep(10)
                 self.araclar.mum_olusmasini_bekle(periyot)
         except Exception as e:
