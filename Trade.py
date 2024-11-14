@@ -152,23 +152,52 @@ class Trade:
     def satis_sinyali_bekle(self, periyot):
         self.araclar.mum_olusmasini_bekle(periyot)
         while self.islem_acik:
+            # Veri ithali
             try:
                 data = self.binance.get_coin_data(self.alinan_coin, periyot, 1000)
                 high = data['high']
                 low = data['low']
                 close = data['close']
+            except Exception as e:
+                logging.error(
+                    f"Veri ithali sırasında hata: {e} \n [{periyot}] [{self.alinan_coin}] [{self.sell_strategy.__name__}]")
+                time.sleep(5)
+                hata = traceback.format_exc()
+                self.araclar.mail_gonder(f"HATA | Trade {periyot}", f"{hata}")
+                continue
 
+            # Hesaplamalar
+            try:
                 sell_strategy_result = self.sell_strategy(high, low, close)[-2]
                 stop_lose_check, self.highest_price, stop_seviyesi = Stratejiler.check_stop_lose(high, low, close,self.alim_fiyati,self.highest_price)
-                if stop_lose_check == "STOP-LOSE":
-                    self.stop_lose(self.alinan_coin, periyot, close, str(self.sell_strategy.__name__),self.alim_fiyati)
+                mevcut_adedim = self.binance.mevcut_adedim(self.alinan_coin)
+                minqty = self.binance.get_coin_minQTY(self.alinan_coin)
+            except Exception as e:
+                logging.error(
+                    f"Satış hesaplama sırasında hata: {e} \n [{periyot}] [{self.alinan_coin}] [{self.sell_strategy.__name__}]")
+                time.sleep(5)
+                hata = traceback.format_exc()
+                self.araclar.mail_gonder(f"HATA | Trade {periyot}", f"{hata}")
+                continue
+
+            # İşlemler
+            if stop_lose_check == "STOP-LOSE":
+                try:
+                    self.stop_lose(self.alinan_coin, periyot, close, str(self.sell_strategy.__name__), self.alim_fiyati)
                     self.islem_acik = False
                     self.alinan_coin = None
                     self.alim_fiyati = None
                     self.mum_sayisi = 0
                     self.kaydet()
                     break  # Satış yapıldı, döngüden çık
-                elif sell_strategy_result == "SELL" or (self.gercek and self.binance.mevcut_adedim(self.alinan_coin) <= self.binance.get_coin_minQTY(self.alinan_coin)):
+                except Exception as e:
+                    logging.error(f"STOP-LOSE işleminde hata: {e} \n [{periyot}] [{self.alinan_coin}]")
+                    time.sleep(5)
+                    hata = traceback.format_exc()
+                    self.araclar.mail_gonder(f"HATA | Trade {periyot}", f"{hata}")
+                    continue
+            elif sell_strategy_result == "SELL" or (self.gercek and mevcut_adedim <= minqty):
+                try:
                     self.sell(self.alinan_coin, periyot, close, str(self.sell_strategy.__name__), self.alim_fiyati)
                     self.islem_acik = False
                     self.alinan_coin = None
@@ -176,13 +205,18 @@ class Trade:
                     self.mum_sayisi = 0
                     self.kaydet()
                     break  # Satış yapıldı, döngüden çık
+                except Exception as e:
+                    logging.error(
+                        f"Hedef Satış işleminde hata: {e} \n [{periyot}] [{self.alinan_coin}] [{self.sell_strategy.__name__}]")
+                    time.sleep(5)
+                    hata = traceback.format_exc()
+                    self.araclar.mail_gonder(f"HATA | Trade {periyot}", f"{hata}")
+                    continue
 
-                self.mum_sayisi = self.mum_sayisi + 1
-                self.kaydet()
-
-                other_strategy = self.strategys[periyot].copy()
-                other_strategy.remove(self.sell_strategy)
-                other_strategy_result = []
+            other_strategy = self.strategys[periyot].copy()
+            other_strategy.remove(self.sell_strategy)
+            other_strategy_result = []
+            try:
                 for strategy in other_strategy:
                     result = strategy(high, low, close)[-2]
                     if result == "BUY":
@@ -191,18 +225,20 @@ class Trade:
                         other_strategy_result.append(-1)
                     else:
                         other_strategy_result.append(0)
-
-                logging.info(
-                    f"DURUM : {periyot} {self.sell_strategy.__name__} {self.alinan_coin} Islem Suresi: {self.mum_sayisi} mum. Diger strategyler {other_strategy_result} Stop-Lose: {stop_seviyesi} Kar/Zarar: {((close[-1] / self.alim_fiyati) - 1) * 100:.2f}%")
-
-                time.sleep(10)
-                self.araclar.mum_olusmasini_bekle(periyot)
-            except:
-                hata = traceback.format_exc()
-                logging.error(f"Satış sinyali bekleme sırasında hata: {hata}")
+            except Exception as e:
+                logging.error(f"Diger stratejilerin sonuclarini hesaplamada hata : {e} ")
                 time.sleep(5)
+                hata = traceback.format_exc()
                 self.araclar.mail_gonder(f"HATA | Trade {periyot}", f"{hata}")
                 continue
+
+            self.mum_sayisi = self.mum_sayisi + 1
+            self.kaydet()
+            logging.info(
+                f"DURUM : {periyot} {self.sell_strategy.__name__} {self.alinan_coin} Islem Suresi: {self.mum_sayisi} mum. Diger strategyler {other_strategy_result} Stop-Lose: {stop_seviyesi} Kar/Zarar: {((close[-1] / self.alim_fiyati) - 1) * 100:.2f}%")
+
+            time.sleep(10)
+            self.araclar.mum_olusmasini_bekle(periyot)
 
     def buy(self, coin, periyot, strateji_adi, close,nakit):
         # Adet hesapla
