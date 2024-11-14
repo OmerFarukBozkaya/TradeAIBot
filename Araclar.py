@@ -9,6 +9,7 @@ from Indikator import Indikator
 from Stratejiler import Stratejiler
 import pandas as pd
 import os
+import ip
 
 class Araclar:
     def __init__(self, from_email=None, to_email=None, email_password=None):
@@ -61,8 +62,11 @@ class Araclar:
             for i in low:
                 file.write(f"{i},")
 
-    def mail_gonder(self, baslik, mesaj, bekle=300, smtp_server="smtp.gmail.com", smtp_port=587):
-        try:
+    def mail_gonder(self, baslik, mesaj, smtp_server="smtp.gmail.com", smtp_port=587):
+        while True:
+            if not ip.internet_var_mi():
+                time.sleep(5)
+                continue
             # E-posta gövdesini oluşturma
             message = MIMEMultipart()
             message['From'] = self.from_email  # Nesneye ait from_email kullanılıyor
@@ -78,12 +82,7 @@ class Araclar:
             # E-posta gönderme
             server.sendmail(self.from_email, self.to_email, message.as_string())
             server.quit()
-        except Exception as e:
-            # Hata durumunda e-posta gönderimi tekrar denenir
-            hata = traceback.format_exc()
-            print("E-posta gönderilirken bir hata oluştu:", hata)
-            time.sleep(bekle)
-            self.mail_gonder(baslik, mesaj, bekle, smtp_server, smtp_port)  # Recursive olarak tekrar dene
+            break
 
     @staticmethod
     def saniye_to_hms(seconds):
