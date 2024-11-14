@@ -244,7 +244,7 @@ class Trade:
         # Adet hesapla
         minQty = self.binance.get_coin_minQTY(coin)
         adet = nakit / close[-1]
-        adet = adet - (adet % minQty)
+        adet = self.binance.miktar_duzelt(adet,minQty)
         if self.gercek:
             if nakit > 10:
                 self.binance.al(coin, adet)
@@ -275,7 +275,7 @@ class Trade:
         if self.gercek:
             mevcut_adedim = self.binance.sahip_olduklarim()[coin]
             minQty = self.binance.get_coin_minQTY(coin)
-            adet = mevcut_adedim-(mevcut_adedim % minQty)
+            adet = self.binance.miktar_duzelt(mevcut_adedim,minQty)
             self.nakit = round(self.nakit + ((close[-1] * adet)*0.999),2)
             self.binance.sat(coin, adet)
             print("Gerçekten satıldı")
@@ -297,7 +297,7 @@ class Trade:
         if self.gercek:
             mevcut_adedim = self.binance.sahip_olduklarim()[coin]
             minQty = self.binance.get_coin_minQTY(coin)
-            adet = mevcut_adedim - (mevcut_adedim % minQty)
+            adet = self.binance.miktar_duzelt(mevcut_adedim,minQty)
             self.nakit = round(self.nakit + ((close[-1] * adet) * 0.999),2)
             self.binance.sat(coin, adet)
             print("Gerçekten satıldı")

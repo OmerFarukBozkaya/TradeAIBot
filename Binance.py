@@ -2,6 +2,7 @@ from binance.client import Client       #   pip install python-binance
 import requests
 from requests.adapters import HTTPAdapter
 import concurrent.futures
+import math
 class Binance:
     def __init__(self, api_key=None, api_secret=None):
         """
@@ -95,21 +96,13 @@ class Binance:
             del file_coinlist[-1]
         file.close()
         return file_coinlist
-    def minimum_hareket(self,basamak):
-        if (basamak == 1):
-            return 0
-        if (basamak == 0.1):
-            return 1
-        if (basamak == 0.01):
-            return 2
-        if (basamak == 0.001):
-            return 3
-        if (basamak == 0.0001):
-            return 4
-        if (basamak == 0.00001):
-            return 5
-        if (basamak == 0.000001):
-            return 6
+
+    @staticmethod
+    # minQty'ye uygun miktarı aşağı yuvarlayan fonksiyon
+    def miktar_duzelt(quantity, min_qty):
+        precision = int(round(-math.log10(min_qty), 0))
+        return math.floor(quantity * (10 ** precision)) / (10 ** precision)
+
     def secili_list(self):
         return ['BTCUSDT','ETHUSDT','BNBUSDT','SOLUSDT','XRPUSDT','DOGEUSDT','TRXUSDT','ADAUSDT',
                 'AVAXUSDT','SHIBUSDT','LINKUSDT','BCHUSDT','DOTUSDT','NEARUSDT','LTCUSDT','UNIUSDT',
