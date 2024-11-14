@@ -9,7 +9,7 @@ from Indikator import Indikator
 from Stratejiler import Stratejiler
 import pandas as pd
 import os
-import ip
+import requests
 
 class Araclar:
     def __init__(self, from_email=None, to_email=None, email_password=None):
@@ -36,6 +36,17 @@ class Araclar:
 
         return setting[2], setting[3], setting[4]
 
+    @staticmethod
+    def internet_var_mi():
+        try:
+            # Google'a bir istek göndererek internet bağlantısını kontrol ediyoruz
+            response = requests.get("https://www.google.com", timeout=5)
+            # Eğer durum kodu 200 ise bağlantı başarılı
+            if response.status_code == 200:
+                return True
+        except (requests.ConnectionError, requests.Timeout):
+            return False
+        return False
     @staticmethod
     def data_test_olustur(coin,periyot):
         binance = Binance()
@@ -64,7 +75,7 @@ class Araclar:
 
     def mail_gonder(self, baslik, mesaj, smtp_server="smtp.gmail.com", smtp_port=587):
         while True:
-            if not ip.internet_var_mi():
+            if not Araclar.internet_var_mi():
                 time.sleep(5)
                 continue
 
