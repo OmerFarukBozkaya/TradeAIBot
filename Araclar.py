@@ -67,22 +67,30 @@ class Araclar:
             if not ip.internet_var_mi():
                 time.sleep(5)
                 continue
-            # E-posta gövdesini oluşturma
-            message = MIMEMultipart()
-            message['From'] = self.from_email  # Nesneye ait from_email kullanılıyor
-            message['To'] = self.to_email  # Nesneye ait to_email kullanılıyor
-            message['Subject'] = baslik
-            message.attach(MIMEText(mesaj, 'plain'))
 
-            # SMTP sunucusuna bağlanma
-            server = smtplib.SMTP(smtp_server, smtp_port)
-            server.starttls()  # TLS bağlantısı başlatma
-            server.login(self.from_email, self.email_password)  # Nesneye ait şifre kullanılıyor
+            try:
+                # E-posta gövdesini oluşturma
+                message = MIMEMultipart()
+                message['From'] = self.from_email  # Nesneye ait from_email kullanılıyor
+                message['To'] = self.to_email  # Nesneye ait to_email kullanılıyor
+                message['Subject'] = baslik
+                message.attach(MIMEText(mesaj, 'plain'))
 
-            # E-posta gönderme
-            server.sendmail(self.from_email, self.to_email, message.as_string())
-            server.quit()
-            break
+                # SMTP sunucusuna bağlanma
+                server = smtplib.SMTP(smtp_server, smtp_port)
+                server.starttls()  # TLS bağlantısı başlatma
+                server.login(self.from_email, self.email_password)  # Nesneye ait şifre kullanılıyor
+
+                # E-posta gönderme
+                server.sendmail(self.from_email, self.to_email, message.as_string())
+                server.quit()
+                break
+            except:
+                hata = traceback.format_exc()
+                print("E-posta gönderilirken bir hata oluştu:", hata)
+                continue
+
+
 
     @staticmethod
     def saniye_to_hms(seconds):
