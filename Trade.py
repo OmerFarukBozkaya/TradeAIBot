@@ -116,30 +116,38 @@ class Trade:
                 self.araclar.mum_olusmasini_bekle(periyot)
 
     def alim_sinyali_kontrol(self, coin, periyot, strategys,nakit):
-        try:
-            data = self.binance.get_coin_data(coin, periyot, 1000)
-            high = data['high']
-            low = data['low']
-            close = data['close']
-            open = data['open']
-            
-            if self.araclar.mum_sagligi(open=open[-50:],close=close[-50:]) > 5:
+        while True:
+            try:
+                data = self.binance.get_coin_data(coin, periyot, 1000)
+                high = data['high']
+                low = data['low']
+                close = data['close']
+                open = data['open']
+            except Exception as e:
+                logging.error(f"Veri ithalinde hata oluştu: {e} \n [{periyot}] [{coin}]")
+                continue
+
+            if self.araclar.mum_sagligi(open=open[-50:], close=close[-50:]) > 5:
                 return False
 
             for strategy in strategys[periyot]:
                 with self.global_lock:  # Global kilit kullanarak sadece bir strateji kontrol et
-                    strategy_result=strategy(high, low, close)
-                    if not self.islem_acik and strategy_result[-2] == "BUY" and strategy_result[-3] != "BUY":
-                        sonislem, self.adet = self.buy(coin, periyot, str(strategy.__name__), close,nakit)
-                        self.alinan_coin = coin  # Alınan coin'i kaydet
-                        self.alim_fiyati = close[-1]  # Alım fiyatını kaydet
-                        self.islem_acik = True  # İşlem açıldı
-                        self.sell_strategy = strategy  # Kullanılan strateji
-                        return True  # İşlem açıldı, döngüden çık
+                    strategy_result = strategy(high, low, close)
+                    succes = False
+                    while not succes:
+                        try:
+                            if not self.islem_acik and strategy_result[-2] == "BUY" and strategy_result[-3] != "BUY":
+                                sonislem, self.adet = self.buy(coin, periyot, str(strategy.__name__), close, nakit)
+                                self.alinan_coin = coin  # Alınan coin'i kaydet
+                                self.alim_fiyati = close[-1]  # Alım fiyatını kaydet
+                                self.islem_acik = True  # İşlem açıldı
+                                self.sell_strategy = strategy  # Kullanılan strateji
+                                return True  # İşlem açıldı, döngüden çık
+                            succes = True
+                        except Exception as e:
+                            logging.error(f"Alim sinyali kontrolünde hata oluştu: {e} \n [{strategy.__name__}] [{periyot}] [{coin}]")
+                            time.sleep(2)
             return False  # İşlem açılmadı
-        except Exception as e:
-            logging.error(f"Alim sinyali kontrolünde hata oluştu: {e} \n [{periyot}] [{coin}]")
-            return False
 
     def satis_sinyali_bekle(self, periyot):
         self.araclar.mum_olusmasini_bekle(periyot)
@@ -195,9 +203,6 @@ class Trade:
                 time.sleep(5)
                 self.araclar.mail_gonder(f"HATA | Trade {periyot}", f"{hata}")
                 continue
-
-
-
 
     def buy(self, coin, periyot, strateji_adi, close,nakit):
         # Adet hesapla
