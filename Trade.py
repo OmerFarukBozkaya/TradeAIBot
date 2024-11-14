@@ -138,58 +138,66 @@ class Trade:
                         return True  # İşlem açıldı, döngüden çık
             return False  # İşlem açılmadı
         except Exception as e:
-            logging.error(f"Alim sinyali kontrolünde hata oluştu: {e}")
+            logging.error(f"Alim sinyali kontrolünde hata oluştu: {e} \n [{periyot}] [{coin}]")
             return False
 
     def satis_sinyali_bekle(self, periyot):
-        try:
-            self.araclar.mum_olusmasini_bekle(periyot)
-            while self.islem_acik:
+        self.araclar.mum_olusmasini_bekle(periyot)
+        while self.islem_acik:
+            try:
                 data = self.binance.get_coin_data(self.alinan_coin, periyot, 1000)
                 high = data['high']
                 low = data['low']
                 close = data['close']
 
                 sell_strategy_result = self.sell_strategy(high, low, close)[-2]
-                stop_lose_check,self.highest_price,stop_seviyesi = Stratejiler.check_stop_lose(high,low,close,self.alim_fiyati,self.highest_price)
+                stop_lose_check, self.highest_price, stop_seviyesi = Stratejiler.check_stop_lose(high, low, close,self.alim_fiyati,self.highest_price)
                 if stop_lose_check == "STOP-LOSE":
-                    self.stop_lose(self.alinan_coin, periyot, close, str(self.sell_strategy.__name__), self.alim_fiyati)
+                    self.stop_lose(self.alinan_coin, periyot, close, str(self.sell_strategy.__name__),self.alim_fiyati)
                     self.islem_acik = False
                     self.alinan_coin = None
                     self.alim_fiyati = None
                     self.mum_sayisi = 0
                     self.kaydet()
                     break  # Satış yapıldı, döngüden çık
-                elif sell_strategy_result == "SELL" or (self.gercek and self.binance.mevcut_adedim(self.alinan_coin) == 0):
+                elif sell_strategy_result == "SELL" or (self.gercek and self.binance.mevcut_adedim(self.alinan_coin) <= self.binance.get_coin_minQTY(self.alinan_coin)):
                     self.sell(self.alinan_coin, periyot, close, str(self.sell_strategy.__name__), self.alim_fiyati)
                     self.islem_acik = False
                     self.alinan_coin = None
                     self.alim_fiyati = None
-                    self.mum_sayisi=0
+                    self.mum_sayisi = 0
                     self.kaydet()
                     break  # Satış yapıldı, döngüden çık
 
                 self.mum_sayisi = self.mum_sayisi + 1
                 self.kaydet()
+
                 other_strategy = self.strategys[periyot].copy()
                 other_strategy.remove(self.sell_strategy)
                 other_strategy_result = []
                 for strategy in other_strategy:
-                    result=strategy(high,low,close)[-2]
+                    result = strategy(high, low, close)[-2]
                     if result == "BUY":
                         other_strategy_result.append(1)
                     elif result == "SELL":
                         other_strategy_result.append(-1)
                     else:
                         other_strategy_result.append(0)
+
                 logging.info(
                     f"DURUM : {periyot} {self.sell_strategy.__name__} {self.alinan_coin} Islem Suresi: {self.mum_sayisi} mum. Diger strategyler {other_strategy_result} Stop-Lose: {stop_seviyesi} Kar/Zarar: {((close[-1] / self.alim_fiyati) - 1) * 100:.2f}%")
+
                 time.sleep(10)
                 self.araclar.mum_olusmasini_bekle(periyot)
-        except Exception as e:
-            hata = traceback.format_exc()
-            logging.error(f"Satış sinyali bekleme sırasında hata: {hata}")
-            self.araclar.mail_gonder(f"HATA | Trade {periyot}", f"{hata}")
+            except:
+                hata = traceback.format_exc()
+                logging.error(f"Satış sinyali bekleme sırasında hata: {hata}")
+                time.sleep(5)
+                self.araclar.mail_gonder(f"HATA | Trade {periyot}", f"{hata}")
+                continue
+
+
+
 
     def buy(self, coin, periyot, strateji_adi, close,nakit):
         # Adet hesapla
@@ -198,9 +206,9 @@ class Trade:
         adet = adet - (adet % minQty)
         if self.gercek:
             if nakit > 10:
-                print("Gerçekten alındı")
                 self.binance.al(coin, adet)
                 self.nakit = self.nakit-(adet * close[-1])
+                print("Gerçekten alındı")
             else:
                 print("Yeterli miktarda nakit yok !")
 
@@ -224,12 +232,12 @@ class Trade:
         )
 
         if self.gercek:
-            print("Gerçekten satıldı")
             mevcut_adedim = self.binance.sahip_olduklarim()[coin]
             minQty = self.binance.get_coin_minQTY(coin)
             adet = mevcut_adedim-(mevcut_adedim % minQty)
             self.nakit = self.nakit + ((close[-1] * adet)*0.999)
             self.binance.sat(coin, adet)
+            print("Gerçekten satıldı")
         self.araclar.mail_gonder(f"SAT | {strateji_adi} {periyot}",
                                      f"{coin} satıldı, Adet: {self.adet}, Fiyat: {close[-1]} Kar/Zarar:{((close[-1] / buy_price) - 1) * 100:.2f}%")
         return "SAT"
@@ -246,12 +254,12 @@ class Trade:
         )
 
         if self.gercek:
-            print("Gerçekten satıldı")
             mevcut_adedim = self.binance.sahip_olduklarim()[coin]
             minQty = self.binance.get_coin_minQTY(coin)
             adet = mevcut_adedim - (mevcut_adedim % minQty)
             self.nakit = self.nakit + ((close[-1] * adet) * 0.999)
             self.binance.sat(coin, adet)
+            print("Gerçekten satıldı")
         self.araclar.mail_gonder(f"SAT [STOP-LOSE] | {strateji_adi} {periyot}",
                                  f"{coin} satıldı, Adet: {self.adet}, Fiyat: {close[-1]} Kar/Zarar:{((close[-1] / buy_price) - 1) * 100:.2f}%")
         return "SAT"
