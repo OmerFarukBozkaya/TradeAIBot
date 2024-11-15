@@ -132,11 +132,11 @@ class Trade:
 
             for strategy in strategys[periyot]:
                 with self.global_lock:  # Global kilit kullanarak sadece bir strateji kontrol et
-                    strategy_result = strategy(high, low, close)
+                    strategy_result = strategy(high[:-1], low[:-1], close[:-1])
                     succes = False
                     while not succes:
                         try:
-                            if not self.islem_acik and strategy_result[-2] == "BUY" and strategy_result[-3] != "BUY":
+                            if not self.islem_acik and strategy_result[-1] == "BUY" and strategy_result[-2] != "BUY":
                                 sonislem, self.adet = self.buy(coin, periyot, str(strategy.__name__), close, nakit)
                                 self.alinan_coin = coin  # Alınan coin'i kaydet
                                 self.alim_fiyati = close[-1]  # Alım fiyatını kaydet
@@ -168,7 +168,7 @@ class Trade:
 
             # Hesaplamalar
             try:
-                sell_strategy_result = self.sell_strategy(high, low, close)[-2]
+                sell_strategy_result = self.sell_strategy(high[:-1], low[:-1], close[:-1])[-1]
                 stop_lose_check, self.highest_price, stop_seviyesi = Stratejiler.check_stop_lose(high, low, close,self.alim_fiyati,self.highest_price)
                 mevcut_adedim = self.binance.mevcut_adedim(self.alinan_coin)
                 minqty = self.binance.get_coin_minQTY(self.alinan_coin)
@@ -218,7 +218,7 @@ class Trade:
             other_strategy_result = []
             try:
                 for strategy in other_strategy:
-                    result = strategy(high, low, close)[-2]
+                    result = strategy(high[:-1], low[:-1], close[:-1])[-1]
                     if result == "BUY":
                         other_strategy_result.append(1)
                     elif result == "SELL":

@@ -102,7 +102,7 @@ class Tarama:
 
             coin_results = {}
             for strategy in strategies:
-                calculate = strategy(high, low, close)[-2]
+                calculate = strategy(high[:-1], low[:-1], close[:-1])[-1]
                 if calculate == "BUY" or calculate == "SELL":
                     coin_results[strategy.__name__] = calculate
             return coin_results
