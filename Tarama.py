@@ -7,6 +7,21 @@ import pandas as pd
 import numpy as np
 from concurrent.futures import ThreadPoolExecutor
 import concurrent.futures
+import logging
+import os
+
+if not os.path.exists('Log'):
+    os.makedirs('Log')
+
+# İşlem geçmişi için ayrı bir logger oluştur
+tarama = logging.getLogger('tarama')
+handler = logging.FileHandler('Log/tarama.log')
+handler.setLevel(logging.INFO)
+formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
+handler.setFormatter(formatter)
+tarama.addHandler(handler)
+tarama.propagate = False
+
 class Tarama:
     @staticmethod
     def Tara(coinlist, periyot, mum_bekle=True):
@@ -21,6 +36,7 @@ class Tarama:
         }
 
         print(f"Tarama {periyot} Calisiyor ...", time.ctime())
+        tarama.info(f"Tarama {periyot} Calisiyor ...")
 
         while True:
             try:
@@ -47,7 +63,8 @@ class Tarama:
                                 elif signal == "SELL":
                                     result[strategy_name]["SELL"].append(coin)
                         except Exception as e:
-                            print(f"{coin} için işlem hatası: {e}")
+                            tarama.error(f"{coin} {strategy_name} için işlem hatası: {e}")
+                            print(f"{coin} {strategy_name} için işlem hatası: {e}")
                             continue
 
                 # E-posta gönderme
@@ -61,6 +78,7 @@ class Tarama:
 
                 if gonder:
                     araclar.mail_gonder(f"Tarama | {periyot}", mesaj)
+                    tarama.info(f"{periyot} tarama mail gonderildi")
 
                 mum_bekle = True
                 time.sleep(10)
@@ -68,6 +86,7 @@ class Tarama:
                 mum_bekle = False
                 hata = traceback.format_exc()
                 print(f"Bir hata olustu: {hata}, {time.ctime()}")
+                tarama.error(f"Bir hata olustu: {hata}")
                 time.sleep(5)
                 araclar.mail_gonder("HATA | Tarama", f"{periyot} \n{hata}")
                 continue
@@ -89,6 +108,7 @@ class Tarama:
             return coin_results
         except Exception as e:
             print(f"Veri işleme hatası ({coin}): {e}")
+            tarama.error(f"Veri işleme hatası ({coin}): {e}")
             return {}
 
     @staticmethod
