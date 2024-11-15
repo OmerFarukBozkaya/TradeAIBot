@@ -113,8 +113,8 @@ class Trade:
                 # Mum oluşmasını bekler
                 self.kaydet()
                 if not self.islem_acik:
-                    time.sleep(10)
                     self.araclar.mum_olusmasini_bekle(periyot)
+                    time.sleep(10)
 
     def alim_sinyali_kontrol(self, coin, periyot, strategys,nakit):
         while True:
