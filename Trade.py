@@ -235,7 +235,7 @@ class Trade:
             self.mum_sayisi = self.mum_sayisi + 1
             self.kaydet()
             logging.info(
-                f"DURUM : {periyot} {self.sell_strategy.__name__} {self.alinan_coin} Islem Suresi: {self.mum_sayisi} mum. Diger strategyler {other_strategy_result} Stop-Lose: {stop_seviyesi} Kar/Zarar: {((close[-1] / self.alim_fiyati) - 1) * 100:.2f}%")
+                f"DURUM : {periyot} {self.sell_strategy.__name__} {self.alinan_coin} Islem Suresi: {self.mum_sayisi} mum. Diger strategyler {other_strategy_result} Stop-Lose: {stop_seviyesi:.7f} Kar/Zarar: {((close[-1] / self.alim_fiyati) - 1) * 100:.2f}%")
 
             time.sleep(10)
             self.araclar.mum_olusmasini_bekle(periyot)
@@ -252,6 +252,7 @@ class Trade:
                 print("Gerçekten alındı")
             else:
                 print("Yeterli miktarda nakit yok !")
+                self.araclar.mail_gonder(f"AL(!) | {strateji_adi} {periyot} ",f"Yeterli miktarda nakit yok. Mevcut nakit : {nakit}")
 
         logging.info(f"AL | {coin} alındı, Adet: {adet}, Fiyat: {close[-1]}")
         islemgecmisi.info(f"{strateji_adi} {periyot} AL | {coin} alındı, Adet: {adet}, Fiyat: {close[-1]}")
@@ -266,10 +267,10 @@ class Trade:
         self.mum_sayisi = self.mum_sayisi + 1
         logging.info(f"SAT {strateji_adi} {periyot}| {coin} satıldı, Adet: {self.adet}, Fiyat: {close[-1]}")
         islemgecmisi.info(
-            f"{strateji_adi} {periyot} SAT | {coin} satıldı, Mum sayisi : {self.mum_sayisi} Adet: {self.adet}, Fiyat: {close[-1]:.2f} Kar/Zarar: {kar_zarar:.2f}%"
+            f"{strateji_adi} {periyot} SAT | {coin} satıldı, Mum sayisi : {self.mum_sayisi} Adet: {self.adet}, Fiyat: {close[-1]} Kar/Zarar: {kar_zarar:.2f}%"
         )
         print(
-            f"{strateji_adi} {periyot} SAT | {coin} satıldı, Mum sayisi : {self.mum_sayisi} Adet: {self.adet}, Fiyat: {close[-1]:.2f} Kar/Zarar: {kar_zarar:.2f}%"
+            f"{strateji_adi} {periyot} SAT | {coin} satıldı, Mum sayisi : {self.mum_sayisi} Adet: {self.adet}, Fiyat: {close[-1]} Kar/Zarar: {kar_zarar:.2f}%"
         )
 
         if self.gercek:
@@ -288,10 +289,10 @@ class Trade:
         self.mum_sayisi = self.mum_sayisi + 1
         logging.info(f"SAT [STOP-LOSE] {strateji_adi} {periyot}| {coin} satıldı, Adet: {self.adet}, Fiyat: {close[-1]}")
         islemgecmisi.info(
-            f"{strateji_adi} {periyot} SAT [STOP-LOSE] | {coin} satıldı, Mum sayisi : {self.mum_sayisi} Adet: {self.adet}, Fiyat: {close[-1]:.2f} Kar/Zarar: {kar_zarar:.2f}%"
+            f"{strateji_adi} {periyot} SAT [STOP-LOSE] | {coin} satıldı, Mum sayisi : {self.mum_sayisi} Adet: {self.adet}, Fiyat: {close[-1]} Kar/Zarar: {kar_zarar:.2f}%"
         )
         print(
-            f"{strateji_adi} {periyot} SAT [STOP-LOSE] | {coin} satıldı, Mum sayisi : {self.mum_sayisi} Adet: {self.adet}, Fiyat: {close[-1]:.2f} Kar/Zarar: {kar_zarar:.2f}%"
+            f"{strateji_adi} {periyot} SAT [STOP-LOSE] | {coin} satıldı, Mum sayisi : {self.mum_sayisi} Adet: {self.adet}, Fiyat: {close[-1]} Kar/Zarar: {kar_zarar:.2f}%"
         )
 
         if self.gercek:
