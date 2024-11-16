@@ -10,6 +10,9 @@ from Stratejiler import Stratejiler
 import pandas as pd
 import os
 import requests
+import json
+import threading
+
 
 class Araclar:
     def __init__(self, from_email=None, to_email=None, email_password=None):
@@ -19,9 +22,10 @@ class Araclar:
             self.email_password = email_password  # Nesnenin şifresi
         elif(to_email is not None):
             self.to_email = to_email
-            self.from_email,self.email_password,self.default_to_email = self.load_settings()
+            self.from_email,self.email_password,self.default_to_email,self.telegram_api_token , self.telegram_chat_id = self.load_settings()
         else:
-            self.from_email,self.email_password, self.to_email= self.load_settings()
+            self.from_email,self.email_password, self.to_email , self.telegram_api_token , self.telegram_chat_id = self.load_settings()
+        self.telegram_api_token = self.telegram_api_token.replace(".",":")
 
     def load_settings(self):
         """
@@ -33,8 +37,8 @@ class Araclar:
             for line in settings_file:
                 line = line.strip().split(":")
                 setting.append(line[1].strip())
-
-        return setting[2], setting[3], setting[4]
+        print(setting)
+        return setting[2], setting[3], setting[4],setting[6],setting[7]
 
     @staticmethod
     def internet_var_mi():
@@ -100,8 +104,6 @@ class Araclar:
                 hata = traceback.format_exc()
                 print("E-posta gönderilirken bir hata oluştu:", hata)
                 continue
-
-
 
     @staticmethod
     def saniye_to_hms(seconds):
@@ -197,7 +199,6 @@ class Araclar:
         if time.time() % zaman_dilimleri[periyot] > 10:
             time.sleep(zaman_dilimleri[periyot] - (time.time() % zaman_dilimleri[periyot]))
 
-    @staticmethod
     def strategy_result_analyze(input="Data/strategy_results.xlsx", output_file='Data/strategy_results_analyze.xlsx'):
         # Excel dosyasını oku
         df = pd.read_excel(input)
@@ -207,7 +208,7 @@ class Araclar:
             karlilik_ortalamasi=pd.NamedAgg(column='kümülatif kar zarar (%)', aggfunc='mean'),
             toplam_karli_islem=pd.NamedAgg(column='karlı işlemler', aggfunc='sum'),
             toplam_zararli_islem=pd.NamedAgg(column='zararlı işlemler', aggfunc='sum'),
-            ortalama_islem_sonucu = pd.NamedAgg(column='ortalama işlem sonucu', aggfunc='mean')
+            ortalama_islem_sonucu=pd.NamedAgg(column='ortalama işlem sonucu', aggfunc='mean')
         ).reset_index()
 
         # (Karlı işlemler / Zararlı işlemler) oranını hesapla ve başarılı stratejilere '*' ekle
@@ -217,13 +218,16 @@ class Araclar:
 
         # Her periyot için ayrı pivot tablolar oluştur ve sıralama işlemi yap
         pivot_tables = []
+        result_dict = {}
+
         for period in grouped['periyot'].unique():
             period_group = grouped[grouped['periyot'] == period]
             period_group_sorted = period_group.sort_values('karlilik_ortalamasi', ascending=False)
 
             # Sadece strategy_summary, karlilik_ortalamasi, toplam karlı ve toplam zararlı işlemleri al
             period_summary = period_group_sorted[['strategy_summary', 'karlilik_ortalamasi',
-                                                  'toplam_karli_islem', 'toplam_zararli_islem','ortalama_islem_sonucu']]
+                                                  'toplam_karli_islem', 'toplam_zararli_islem',
+                                                  'ortalama_islem_sonucu']]
             period_summary.index = range(len(period_summary))  # Satırları sıfırdan numaralandır
             period_summary.columns = [f'{period} Strategy', f'{period} Karlilik Ortalaması',
                                       f'{period} Karlı İşlemler',
@@ -231,13 +235,77 @@ class Araclar:
                                       f'{period} Ortalama İşlem Sonucu']  # Sütun adlarını değiştir
             pivot_tables.append(period_summary)
 
+            # JSON için veriyi hazırlama
+            result_dict[period] = period_summary.to_dict(orient='records')
+
         # Tüm pivot tabloları birleştir (eksik değerleri doldurmayacak şekilde)
         final_table = pd.concat(pivot_tables, axis=1, ignore_index=False)
 
-        # Sonucu bir Excel dosyasına yaz
+        # Excel dosyasına kaydet
         final_table.to_excel(output_file, index=False)
 
-        print(f"Sonuçlar {output_file} dosyasına başarıyla kaydedildi.")
+        # JSON dosyasına kaydet
+        json_output_file = output_file.replace(".xlsx", ".json")
+        with open(json_output_file, 'w', encoding='utf-8') as f:
+            json.dump(result_dict, f, indent=4, ensure_ascii=False)
+
+        print(f"Sonuçlar {output_file} ve {json_output_file} dosyalarına başarıyla kaydedildi.")
+
+    @staticmethod
+    def strategy_analyze_save():
+        # Dosya var mı kontrolü
+        if os.path.exists('Data/strategy_results_analyze.json'):
+            with open('Data/strategy_results_analyze.json', 'r') as f:
+                result = json.load(f)  # JSON dosyasını yükle
+                strategys = {}
+
+                # JSON içindeki periyotlara göre işlem
+                for period, data in result.items():
+                    strategies_list = []
+                    # Periyoda göre strateji sayısını belirle
+                    if period == '15m':
+                        num_strategies = 3
+                    elif period == '1h':
+                        num_strategies = 3
+                    elif period == '4h':
+                        num_strategies = 3
+                    elif period == '1d':
+                        num_strategies = 3
+                    else:
+                        num_strategies = 0  # Eğer belirli bir periyot yoksa 0 strateji al
+
+                    # Stratejileri listeye ekle, yalnızca belirli sayıda strateji al
+                    strategies_list = [
+                        strategy[f"{period} Strategy"].replace("*", "")
+                        for strategy in data[:num_strategies]
+                    ]
+
+                    # Stratejileri kaydet
+                    strategys[period] = strategies_list
+
+                # Sonuçları yeni JSON dosyasına yaz
+                with open('Data/strategys.json', 'w') as f:
+                    json.dump(strategys, f, indent=4)
+
+            print("Strateji analizi başarıyla tamamlandı ve stratejiler kaydedildi.")
+        else:
+            print("Hata: 'strategy_results_analyze.json' dosyası bulunamadı.")
+
+    @staticmethod
+    def get_strategys():
+        with open(f'Data/strategys.json', 'r') as f:
+            result = json.load(f)
+            strategys = {}
+            for period in result.keys():
+                function_list = []
+                # Fonksiyon isimlerini globals() ile eşleştir ve diziye ekle
+                for name in result[period]:
+                    if hasattr(Stratejiler, name):  # functions modülünde bu isimde bir fonksiyon var mı?
+                        function_list.append(getattr(Stratejiler, name))
+                    else:
+                        print(f"Fonksiyon tanımlı değil: {name}")
+                strategys[period] = function_list
+        return strategys
 
     @staticmethod
     def listeden_sahip_olduklarimi_cikar(coinlist):
