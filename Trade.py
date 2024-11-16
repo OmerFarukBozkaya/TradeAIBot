@@ -261,6 +261,7 @@ class Trade:
 
         self.araclar.mail_gonder(f"AL | {strateji_adi} {periyot}",
                                  f"{coin} alındı, Adet: {adet}, Maliyet: {close[-1]} USDT")
+        self.araclar.telegram_mesaj_gonder(f"AL | {strateji_adi} {periyot}\n{coin} alındı, Adet: {adet}, Maliyet: {close[-1]} USDT")
         return "AL", adet
 
     def sell(self, coin, periyot, close, strateji_adi, buy_price):
@@ -283,6 +284,7 @@ class Trade:
             print("Gerçekten satıldı")
         self.araclar.mail_gonder(f"SAT | {strateji_adi} {periyot}",
                                      f"{coin} satıldı, Adet: {self.adet}, Fiyat: {close[-1]} Kar/Zarar:{((close[-1] / buy_price) - 1) * 100:.2f}%")
+        self.araclar.telegram_mesaj_gonder(f"SAT | {strateji_adi} {periyot} \n{coin} satıldı, Adet: {self.adet}, Fiyat: {close[-1]} Kar/Zarar:{((close[-1] / buy_price) - 1) * 100:.2f}%")
         return "SAT"
 
     def stop_lose(self, coin, periyot, close, strateji_adi, buy_price):
@@ -305,4 +307,5 @@ class Trade:
             print("Gerçekten satıldı")
         self.araclar.mail_gonder(f"SAT [STOP-LOSE] | {strateji_adi} {periyot}",
                                  f"{coin} satıldı, Adet: {self.adet}, Fiyat: {close[-1]} Kar/Zarar:{((close[-1] / buy_price) - 1) * 100:.2f}%")
+        self.araclar.telegram_mesaj_gonder(f"SAT [STOP-LOSE] | {strateji_adi} {periyot} \n{coin} satıldı, Adet: {self.adet}, Fiyat: {close[-1]} Kar/Zarar:{((close[-1] / buy_price) - 1) * 100:.2f}%")
         return "SAT"

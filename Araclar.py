@@ -399,3 +399,22 @@ class Araclar:
         coinlist=binance.coin_list()
         sirali_liste = binance.coins_sorted_by_volume(coinlist,periyot)
         binance.create_coin_list(sirali_liste)
+
+    def telegram_mesaj_gonder(self,mesaj):
+        while True:
+            # Mesaj gönderme URL'si
+            url = f"https://api.telegram.org/bot{self.telegram_api_token}/sendMessage"
+
+            # Mesaj gönderme isteği
+            payload = {
+                "chat_id": self.telegram_chat_id,
+                "text": mesaj
+            }
+            response = requests.post(url, data=payload)
+
+            if response.status_code == 200:
+                break
+            else:
+                print("Mesaj gönderilemedi:", response.text)
+                time.sleep(5)
+                continue
