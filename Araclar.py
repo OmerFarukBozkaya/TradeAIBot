@@ -15,29 +15,16 @@ import threading
 
 
 class Araclar:
-    def __init__(self, from_email=None, to_email=None, email_password=None):
-        if from_email and to_email and email_password :
-            self.from_email = from_email  # Nesnenin from_email değeri
-            self.to_email = to_email  # Nesnenin to_email değeri
-            self.email_password = email_password  # Nesnenin şifresi
-        elif(to_email is not None):
+    def __init__(self , to_email=None):
+        with open("settings.json","r") as file:
+            data=json.load(file)
+        self.from_email=data['GONDERICI_EMAIL']
+        self.to_email=data['ALICI_EMAIL']
+        self.email_password=data['GONDERICI_EMAIL_SIFRE']
+        self.telegram_api_token=data['TELEGRAM_API_TOKEN']
+        self.telegram_chat_id=data['TELEGRAM_CHAT_ID']
+        if(to_email is not None):
             self.to_email = to_email
-            self.from_email,self.email_password,self.default_to_email,self.telegram_api_token , self.telegram_chat_id = self.load_settings()
-        else:
-            self.from_email,self.email_password, self.to_email , self.telegram_api_token , self.telegram_chat_id = self.load_settings()
-        self.telegram_api_token = self.telegram_api_token.replace(".",":")
-
-    def load_settings(self):
-        """
-        API anahtarlarını 'settings.txt' dosyasından okur.
-        Dosyanın her satırı 'key: value' formatında olmalıdır.
-        """
-        setting = []
-        with open("settings.txt", "r") as settings_file:
-            for line in settings_file:
-                line = line.strip().split(":")
-                setting.append(line[1].strip())
-        return setting[2], setting[3], setting[4],setting[6],setting[7]
 
     @staticmethod
     def internet_var_mi():

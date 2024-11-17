@@ -3,35 +3,19 @@ import requests
 from requests.adapters import HTTPAdapter
 import concurrent.futures
 import math
+import json
 class Binance:
-    def __init__(self, api_key=None, api_secret=None):
-        """
-        Binance sınıfının yapıcısı. API anahtarı ve gizli anahtarı ile Binance istemcisi başlatır.
-        Eğer anahtarlar None ise settings.txt dosyasından yükler.
-        """
-        if api_key and api_secret:
-            self.key = api_key
-            self.secret = api_secret
-        else:
-            self.key, self.secret = self.load_settings()
-
+    def __init__(self):
+        with open("settings.json","r") as file:
+            data=json.load(file)
+        self.key = data['BINANCE_API_KEY']
+        self.secret = data['BINANCE_API_SECRET']
         self.client = Client(self.key, self.secret)
         self.base_url = "https://api.binance.com"
         self.session = requests.Session()
         adapter = requests.adapters.HTTPAdapter(pool_connections=100, pool_maxsize=300)
         self.session.mount('https://', adapter)
-    def load_settings(self):
-        """
-        API anahtarlarını 'settings.txt' dosyasından okur.
-        Dosyanın her satırı 'key: value' formatında olmalıdır.
-        """
-        setting = []
-        with open("settings.txt", "r") as settings_file:
-            for line in settings_file:
-                line = line.strip().split(":")
-                setting.append(line[1].strip())
 
-        return setting[0], setting[1]
     def sahip_olduklarim(self):
         sahip_olduklarim = {}
         for i in self.client.get_account()["balances"]:
