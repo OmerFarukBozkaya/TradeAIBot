@@ -37,7 +37,6 @@ class Araclar:
             for line in settings_file:
                 line = line.strip().split(":")
                 setting.append(line[1].strip())
-        print(setting)
         return setting[2], setting[3], setting[4],setting[6],setting[7]
 
     @staticmethod
