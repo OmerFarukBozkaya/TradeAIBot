@@ -7,6 +7,7 @@ import pandas as pd
 import csv
 from Binance import Binance
 from StratejilerTest import StratejilerTest
+from concurrent.futures import ProcessPoolExecutor
 
 class Backtest:
     @staticmethod
@@ -229,3 +230,111 @@ class Backtest:
 
             plt.tight_layout()
             plt.show()
+
+    @staticmethod
+    def Hesapla(coin,periyot):
+        binance = Binance()
+        # Veri ithali
+        data = binance.get_coin_data(coin, periyot, 1000)
+        high = data['high']
+        low = data['low']
+        close = data['close']
+
+        # Strateji listesi
+        strategies = [StratejilerTest.MACD, StratejilerTest.VMZI, StratejilerTest.VAMA,
+                      StratejilerTest.TSO, StratejilerTest.BB_RSI, StratejilerTest.FDI,
+                      StratejilerTest.BB_Close, StratejilerTest.MA_Cross, StratejilerTest.DMO,
+                      StratejilerTest.BB_ADX]
+        capital_histories = []
+        cumulative_profit_losses = []
+        total_profit_losses = []
+        profitable_trade_counts = []
+        losing_trade_counts = []
+
+        # Excel'e yazılacak veriler için bir liste oluştur
+        excel_data = []
+
+        # Her strateji için ayrı bir subplot
+        for idx, strategy in enumerate(strategies):
+            last_signal = None
+            buy_price = None
+            cumulative_profit_loss = []
+            total_profit_loss = 0
+            profitable_trades = 0
+            losing_trades = 0
+            initial_capital = 100
+            capital_history = [initial_capital]
+            strategy_resault = strategy(high, low, close)
+
+            for i in range(len(close)):
+                if last_signal is None or last_signal == 'red':
+                    if strategy_resault[i] == "BUY":
+                        last_signal = 'green'
+                        buy_price = close[i]
+                elif last_signal == 'green':
+                    if strategy_resault[i] == "SELL":
+                        last_signal = 'red'
+                        sell_price = close[i]
+                        profit_percentage = ((sell_price - buy_price) / buy_price) * 100
+                        current_capital = capital_history[-1] * (1 + profit_percentage / 100)
+                        capital_history.append(current_capital)
+
+                        cumulative_profit_loss.append(profit_percentage)
+                        total_profit_loss += profit_percentage
+
+                        if profit_percentage > 0:
+                            profitable_trades += 1
+                        else:
+                            losing_trades += 1
+                        buy_price = None
+
+            capital_histories.append(capital_history)
+            cumulative_profit_losses.append(cumulative_profit_loss)
+            total_profit_losses.append(total_profit_loss)
+            profitable_trade_counts.append(profitable_trades)
+            losing_trade_counts.append(losing_trades)
+
+            # Excel çıktısı oluştur.
+            strategy_name = strategy.__name__
+            cumulative_total_profit_loss = ((capital_histories[idx][-1] - 100) / 100) * 100  # Son kapital ile kümülatif kâr/zarar
+            profitable_trades = profitable_trade_counts[idx]
+            losing_trades = losing_trade_counts[idx]
+            if len(cumulative_profit_loss) > 0:
+                ortalama_islem = IndikatorTest.SMA(cumulative_profit_loss, len(cumulative_profit_loss))[-1]
+            else:
+                ortalama_islem = 0
+            # Veriyi ekle
+            excel_data.append({
+                'coin': coin,
+                'periyot': periyot,
+                'strategy name': strategy_name,
+                'kümülatif kar zarar (%)': cumulative_total_profit_loss,
+                'karlı işlemler': profitable_trades,
+                'zararlı işlemler': losing_trades,
+                'ortalama işlem sonucu': ortalama_islem
+            })
+
+        return excel_data
+
+    @staticmethod
+    def Kayit_Et(excel_data_list):
+        # Kayıt yapılacak dosyanın yolu
+        output_file = "Data/strategy_results.xlsx"
+
+        # Dosyanın bulunduğu klasörün varlığını kontrol et ve yoksa oluştur
+        os.makedirs(os.path.dirname(output_file), exist_ok=True)
+
+        # İç içe listelerdeki verileri düz bir listeye ayıkla
+        flattened_data = []
+        for data in excel_data_list:
+            for item in data:  # İçteki sözlükleri ayıkla
+                flattened_data.append(item)
+
+        # Yeni veriler için DataFrame oluştur
+        new_data_df = pd.DataFrame(flattened_data)
+
+        # Veriyi sıfırdan dosyaya yaz (önceki veriler silinir)
+        new_data_df.to_excel(output_file, index=False, engine='openpyxl')
+    @staticmethod
+    def Grafik_Ciz():
+        return

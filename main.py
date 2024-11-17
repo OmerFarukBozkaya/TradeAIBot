@@ -1,4 +1,3 @@
-import os
 from Binance import Binance
 from Backtest import Backtest
 from IndikatorTest import IndikatorTest
@@ -37,11 +36,14 @@ if com == "0":
     print(araclar.saniye_to_hms(b - a))
 elif com == "1":
     a = time.time()
-    if os.path.exists("Data/strategy_results.xlsx"):
-        os.remove("Data/strategy_results.xlsx")
-    for i in binance.secili_list():
-        for j in ["15m", "1h", "4h", "1d"]:
-            backtest.Test(canli_veriler=True, coin=i,periyot=j, kayit_et=True)
+    #Hesaplamalar Yapılıyor
+    coins = binance.secili_list()
+    periyots = ["15m", "1h", "4h", "1d"]
+    sonuclar=[]
+    for coin in coins:
+        for periyot in periyots:
+            sonuclar.append(backtest.Hesapla(coin,periyot))
+    backtest.Kayit_Et(sonuclar)
     # Analiz yapılıyor
     Araclar.strategy_result_analyze()
     # strategy.json hazırlanıyor
