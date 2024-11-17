@@ -237,7 +237,7 @@ class Trade:
             self.kaydet()
             logging.info(
                 f"DURUM : {periyot} {self.sell_strategy.__name__} {self.alinan_coin} Islem Suresi: {self.mum_sayisi} mum. Diger strategyler {other_strategy_result} Stop-Lose: {stop_seviyesi:.7f} Kar/Zarar: {((close[-1] / self.alim_fiyati) - 1) * 100:.2f}%")
-
+            self.araclar.telegram_mesaj_gonder(f"DURUM : {periyot} {self.sell_strategy.__name__} {self.alinan_coin} Islem Suresi: {self.mum_sayisi} mum. Diger strategyler {other_strategy_result} Stop-Lose: {stop_seviyesi:.7f} Kar/Zarar: {((close[-1] / self.alim_fiyati) - 1) * 100:.2f}%")
             time.sleep(10)
             self.araclar.mum_olusmasini_bekle(periyot)
 
