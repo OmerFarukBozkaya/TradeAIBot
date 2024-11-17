@@ -1,3 +1,4 @@
+import os
 from Binance import Binance
 from Backtest import Backtest
 from IndikatorTest import IndikatorTest
@@ -6,6 +7,7 @@ from Araclar import Araclar
 from Trade import Trade
 import time
 from raspi_status import raspi_status
+
 binance = Binance()
 backtest = Backtest()
 trade = Trade()
@@ -35,12 +37,16 @@ if com == "0":
     print(araclar.saniye_to_hms(b - a))
 elif com == "1":
     a = time.time()
+    if os.path.exists("Data/strategy_results.xlsx"):
+        os.remove("Data/strategy_results.xlsx")
     for i in binance.secili_list():
         for j in ["15m", "1h", "4h", "1d"]:
             backtest.Test(canli_veriler=True, coin=i,periyot=j, kayit_et=True)
     # Analiz yapılıyor
     Araclar.strategy_result_analyze()
-    b=time.time()
+    # strategy.json hazırlanıyor
+    Araclar.strategy_analyze_save()
+    b = time.time()
     print(araclar.saniye_to_hms(b-a))
 elif com == "2":
     a=time.time()
