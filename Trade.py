@@ -250,7 +250,6 @@ class Trade:
             if nakit > 10:
                 self.binance.al(coin, adet)
                 self.nakit = round(self.nakit-(adet * close[-1]),2)
-                print("Gerçekten alındı")
             else:
                 print("Yeterli miktarda nakit yok !")
                 self.araclar.mail_gonder(f"AL(!) | {strateji_adi} {periyot} ",f"Yeterli miktarda nakit yok. Mevcut nakit : {nakit}")
@@ -281,7 +280,6 @@ class Trade:
             adet = self.binance.miktar_duzelt(mevcut_adedim,minQty)
             self.nakit = round(self.nakit + ((close[-1] * adet)*0.999),2)
             self.binance.sat(coin, adet)
-            print("Gerçekten satıldı")
         self.araclar.mail_gonder(f"SAT | {strateji_adi} {periyot}",
                                      f"{coin} satıldı, Adet: {self.adet}, Fiyat: {close[-1]} Kar/Zarar:{((close[-1] / buy_price) - 1) * 100:.2f}%")
         self.araclar.telegram_mesaj_gonder(f"🔴 SAT | {strateji_adi} {periyot} \n{coin} satıldı, Adet: {self.adet}, Fiyat: {close[-1]} Kar/Zarar:{((close[-1] / buy_price) - 1) * 100:.2f}%")
@@ -304,7 +302,6 @@ class Trade:
             adet = self.binance.miktar_duzelt(mevcut_adedim,minQty)
             self.nakit = round(self.nakit + ((close[-1] * adet) * 0.999),2)
             self.binance.sat(coin, adet)
-            print("Gerçekten satıldı")
         self.araclar.mail_gonder(f"SAT [STOP-LOSE] | {strateji_adi} {periyot}",
                                  f"{coin} satıldı, Adet: {self.adet}, Fiyat: {close[-1]} Kar/Zarar:{((close[-1] / buy_price) - 1) * 100:.2f}%")
         self.araclar.telegram_mesaj_gonder(f"🛑 SAT [STOP-LOSE] | {strateji_adi} {periyot} \n{coin} satıldı, Adet: {self.adet}, Fiyat: {close[-1]} Kar/Zarar:{((close[-1] / buy_price) - 1) * 100:.2f}%")
