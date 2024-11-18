@@ -170,6 +170,7 @@ class Trade:
                     static_stop_lose_check = Stratejiler.static_stop_lose(close,self.alim_fiyati)
                 else:
                     dinamik_stop_lose_check=None
+                    stop_seviyesi = None
                     static_stop_lose_check = Stratejiler.static_stop_lose(close,self.alim_fiyati)
                 mevcut_adedim = self.binance.mevcut_adedim(self.alinan_coin)
                 minqty = self.binance.get_coin_minQTY(self.alinan_coin)
