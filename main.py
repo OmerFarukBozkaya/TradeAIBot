@@ -29,6 +29,7 @@ def main ():
     11)Islem gecmisi analiz
     12)Hacime gore coinlist siralama
     13)Strategys update olusturma
+    14)Strategys.json olustur
     """)
     com = input("Ne yapılacak :")
     if com == "0":
@@ -131,6 +132,11 @@ def main ():
         periyot = input("Periyot:")
         Araclar.update_strategys(periyot)
         b = time.time()
+        print(araclar.saniye_to_hms(b-a))
+    elif com == "14":
+        a=time.time()
+        Araclar.strategy_analyze_save()
+        b=time.time()
         print(araclar.saniye_to_hms(b-a))
 
 if __name__ == "__main__":
