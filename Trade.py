@@ -132,7 +132,7 @@ class Trade:
                     succes = False
                     while not succes:
                         try:
-                            if not self.islem_acik and strategy_result[-1] == "BUY" and strategy_result[-2] != "BUY":
+                            if not self.islem_acik and strategy_result[-1] == "BUY" and "BUY" not in strategy_result[-5:]:
                                 sonislem, self.adet = self.buy(coin, periyot, str(strategy.__name__), close, nakit)
                                 self.alinan_coin = coin  # Alınan coin'i kaydet
                                 self.alim_fiyati = close[-1]  # Alım fiyatını kaydet
@@ -165,7 +165,12 @@ class Trade:
             # Hesaplamalar
             try:
                 sell_strategy_result = self.sell_strategy(high[:-1], low[:-1], close[:-1])[-1]
-                stop_lose_check, self.highest_price, stop_seviyesi = Stratejiler.check_stop_lose(high, low, close,self.alim_fiyati,self.highest_price)
+                if periyot in ["15m","1d"]:
+                    dinamik_stop_lose_check, self.highest_price, stop_seviyesi = Stratejiler.dinamik_stop_lose(high, low, close,self.highest_price)
+                    static_stop_lose_check = Stratejiler.static_stop_lose(close,self.alim_fiyati)
+                else:
+                    dinamik_stop_lose_check=None
+                    static_stop_lose_check = Stratejiler.static_stop_lose(close,self.alim_fiyati)
                 mevcut_adedim = self.binance.mevcut_adedim(self.alinan_coin)
                 minqty = self.binance.get_coin_minQTY(self.alinan_coin)
             except Exception as e:
@@ -177,7 +182,7 @@ class Trade:
                 continue
 
             # İşlemler
-            if stop_lose_check == "STOP-LOSE":
+            if static_stop_lose_check == "STOP-LOSE" or dinamik_stop_lose_check == "STOP-LOSE":
                 try:
                     self.stop_lose(self.alinan_coin, periyot, close, str(self.sell_strategy.__name__), self.alim_fiyati)
                     self.islem_acik = False
