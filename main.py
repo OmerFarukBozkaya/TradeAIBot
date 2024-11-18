@@ -28,6 +28,7 @@ def main ():
     10)Coinlist olustur
     11)Islem gecmisi analiz
     12)Hacime gore coinlist siralama
+    13)Strategys update olusturma
     """)
     com = input("Ne yapılacak :")
     if com == "0":
@@ -41,8 +42,6 @@ def main ():
         backtest.paralel_hesaplama()
         # Analiz yapılıyor
         Araclar.strategy_result_analyze()
-        # strategy.json hazırlanıyor
-        Araclar.strategy_analyze_save()
         b = time.time()
         print(araclar.saniye_to_hms(b - a))
     elif com == "2":
@@ -127,7 +126,12 @@ def main ():
         araclar.coinlist_sira_duzenle(periyot)
         b = time.time()
         print(araclar.saniye_to_hms(b - a))
-
+    elif com == "13":
+        a = time.time()
+        periyot = input("Periyot:")
+        Araclar.update_strategys(periyot)
+        b = time.time()
+        print(araclar.saniye_to_hms(b-a))
 
 if __name__ == "__main__":
     main()

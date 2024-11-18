@@ -12,6 +12,7 @@ import os
 import requests
 import json
 import threading
+from Backtest import Backtest
 
 
 class Araclar:
@@ -404,3 +405,15 @@ class Araclar:
                 print("Mesaj gönderilemedi:", response.text)
                 time.sleep(5)
                 continue
+
+    @staticmethod
+    def update_strategys(periyod):
+        backtest=Backtest()
+        while True:
+            Araclar.mum_olusmasini_bekle(periyod)
+            # Hesaplamalar Yapılıyor
+            backtest.paralel_hesaplama()
+            # Analiz yapılıyor
+            Araclar.strategy_result_analyze()
+            # strategy.json hazırlanıyor
+            Araclar.strategy_analyze_save()
