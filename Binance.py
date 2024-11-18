@@ -82,7 +82,6 @@ class Binance:
         return file_coinlist
 
     @staticmethod
-    # minQty'ye uygun miktarı aşağı yuvarlayan fonksiyon
     def miktar_duzelt(quantity, min_qty):
         precision = int(round(-math.log10(min_qty), 0))
         return math.floor(quantity * (10 ** precision)) / (10 ** precision)
@@ -93,65 +92,6 @@ class Binance:
                 'ICPUSDT','FETUSDT','ETCUSDT','XLMUSDT','STXUSDT','IMXUSDT','AAVEUSDT','FILUSDT',
                 'HBARUSDT','INJUSDT','VETUSDT','ATOMUSDT','FTMUSDT','RUNEUSDT','GRTUSDT','MINAUSDT',
                 'MANAUSDT','IOTAUSDT','QTUMUSDT','CVCUSDT']
-    def data(self,ad, adet, zaman, mod):
-        """
-        :param ad: Coin Adi (str)
-        :param adet: Cekilecek veri adedi (int)
-        :param zaman: Mum periyodu (str)
-        :param mod: 0=Anlik fiyat 1=Mum kapanisi (int)
-        :return: 0=Acılıs Zamani
-                 1=Acilis
-                 2=En yuksek
-                 3=En dusuk
-                 4=Kapanis
-                 5=Burut Hacim
-                 6=Kapanis Zamani
-                 7=Varlik Hacmi Teklifi
-                 8=Trader Sayisi
-                 9=Alis Hacmi
-                 10=Satis Hacmi
-                 11=Göz Ardi Edilebilir
-        """
-        klines = self.client.get_klines(symbol=ad, limit=adet, interval=zaman)
-
-        opentime = [float(entry[0]) for entry in klines]
-        open = [float(entry[1]) for entry in klines]
-        high = [float(entry[2]) for entry in klines]
-        low = [float(entry[3]) for entry in klines]
-        close = [float(entry[4]) for entry in klines]
-        burutvolume = [float(entry[5]) for entry in klines]
-        closetime = [float(entry[6]) for entry in klines]
-        varlikhacmiteklifi = [float(entry[7]) for entry in klines]
-        tuccarsayisi = [float(entry[8]) for entry in klines]
-        alishacmi = [float(entry[9]) for entry in klines]
-        satishacmi = [float(entry[10]) for entry in klines]
-        gozardiedilebilir = [float(entry[11]) for entry in klines]
-
-        if (mod == 0):
-            return opentime
-        elif (mod == 1):
-            return open
-        elif (mod == 2):
-            return high
-        elif (mod == 3):
-            return low
-        elif (mod == 4):
-            return close
-        elif (mod == 5):
-            return burutvolume
-        elif (mod == 6):
-            return closetime
-        elif (mod == 7):
-            return varlikhacmiteklifi
-        elif (mod == 8):
-            return tuccarsayisi
-        elif (mod == 9):
-            return alishacmi
-        elif (mod == 10):
-            return satishacmi
-        elif (mod == 11):
-            return gozardiedilebilir
-
     def trade_edilebilir_coinler(self):
         url = "https://api.binance.com/api/v3/exchangeInfo"
         response = requests.get(url)
@@ -169,7 +109,7 @@ class Binance:
         else:
             print("İstek başarısız oldu:", response.status_code)
 
-        return result_usdt
+        return {'USDT':result_usdt,'BTC':result_btc}
 
     def get_coin_data(self,coin,periyot,adet):
         data_url = f"/api/v3/klines?symbol={coin}&interval={periyot}&limit={adet}"
