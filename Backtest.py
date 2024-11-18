@@ -230,7 +230,6 @@ class Backtest:
 
             plt.tight_layout()
             plt.show()
-
     @staticmethod
     def Hesapla(coin, periyot):
         binance = Binance()
@@ -306,6 +305,84 @@ class Backtest:
         return excel_data
 
     @staticmethod
+    def Hesapla_stop_lose(coin, periyot,stop=False):
+        binance = Binance()
+        # Veri ithali
+        data = binance.get_coin_data(coin, periyot, 1000)
+        high = data['high']
+        low = data['low']
+        close = data['close']
+
+        # Strateji listesi
+        strategies = [StratejilerTest.MACD, StratejilerTest.VMZI, StratejilerTest.VAMA,
+                      StratejilerTest.TSO, StratejilerTest.BB_RSI, StratejilerTest.FDI,
+                      StratejilerTest.BB_Close, StratejilerTest.MA_Cross, StratejilerTest.DMO,
+                      StratejilerTest.BB_ADX]
+
+        # Excel'e yazılacak veriler için bir liste oluştur
+        excel_data = []
+
+        # Her strateji için hesaplamalar
+        for strategy in strategies:
+            last_signal = None
+            buy_price = None
+            cumulative_profit_loss = []
+            total_profit_loss = 0
+            profitable_trades = 0
+            losing_trades = 0
+            initial_capital = 100
+            capital_history = [initial_capital]
+
+            # Strateji sonucu hesaplama
+            strategy_result = strategy(high, low, close)
+            high_price = 0
+
+            for i in range(len(close)):
+                if last_signal is None or last_signal == 'red':  # Yeni pozisyon açma
+                    if strategy_result[i] == "BUY":
+                        last_signal = 'green'
+                        buy_price = close[i]
+                elif last_signal == 'green':  # Mevcut pozisyonu kapama
+                    if stop:
+                        dinamik_stop_signal,high_price,stop_level=StratejilerTest.dinamik_stop_lose(high[:i],low[:i],close[:i],high_price)
+                        static_stop_signal = StratejilerTest.static_stop_lose(close[:i],buy_price)
+                    if strategy_result[i] == "SELL" or (stop and dinamik_stop_signal == "STOP-LOSE" or static_stop_signal == "STOP-LOSE"):
+                        last_signal = 'red'
+                        sell_price = close[i]
+                        profit_percentage = ((sell_price - buy_price) / buy_price) * 100
+                        current_capital = capital_history[-1] * (1 + profit_percentage / 100)
+                        capital_history.append(current_capital)
+
+                        cumulative_profit_loss.append(profit_percentage)
+                        total_profit_loss += profit_percentage
+
+                        if profit_percentage > 0:
+                            profitable_trades += 1
+                        else:
+                            losing_trades += 1
+                        buy_price = None  # Pozisyon kapandı
+
+            # Kümülatif sonuçları hesapla
+            cumulative_total_profit_loss = ((capital_history[-1] - initial_capital) / initial_capital) * 100
+            if len(cumulative_profit_loss) > 0:
+                ortalama_islem = IndikatorTest.SMA(cumulative_profit_loss, len(cumulative_profit_loss))[-1]
+            else:
+                ortalama_islem = 0
+
+            # Excel çıktısı oluştur
+            strategy_name = strategy.__name__
+            excel_data.append({
+                'coin': coin,
+                'periyot': periyot,
+                'strategy name': strategy_name,
+                'kümülatif kar zarar (%)': cumulative_total_profit_loss,
+                'karlı işlemler': profitable_trades,
+                'zararlı işlemler': losing_trades,
+                'ortalama işlem sonucu': ortalama_islem
+            })
+        print(excel_data)
+        return excel_data
+    @staticmethod
     def Kayit_Et(excel_data_list):
         # Kayıt yapılacak dosyanın yolu
         output_file = "Data/strategy_results.xlsx"
@@ -334,7 +411,7 @@ class Backtest:
     @staticmethod
     def paralel_hesaplama():
         binance = Binance()
-        coins = binance.coin_list()  # Coin listesini al
+        coins = binance.secili_list()  # Coin listesini al
         periyots = ["15m", "1h", "4h", "1d"]  # Periyotlar
         sonuclar = []
 
@@ -342,7 +419,7 @@ class Backtest:
         tasks = [(coin, periyot) for coin in coins for periyot in periyots]
 
         # Paralel işlem yapmak için ProcessPoolExecutor kullanıyoruz
-        with ProcessPoolExecutor() as executor:
+        with ProcessPoolExecutor(max_workers=4) as executor:
             # Görevleri paralel çalıştır
             results = executor.map(Backtest.hesapla_wrapper, tasks)
 
