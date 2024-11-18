@@ -27,19 +27,13 @@ class Tarama:
     def Tara(coinlist, periyot, mum_bekle=True):
         binance = Binance()
         araclar = Araclar()
-        strategys = {
-            "15m": [Stratejiler.BB_RSI, Stratejiler.BB_ADX, Stratejiler.BB_Close],
-            "1h": [Stratejiler.BB_RSI, Stratejiler.TSO, Stratejiler.FDI, Stratejiler.BB_ADX, Stratejiler.BB_Close],
-            "4h": [Stratejiler.DMO, Stratejiler.FDI, Stratejiler.VMZI],
-            "1d": [Stratejiler.MACD, Stratejiler.DMO, Stratejiler.VAMA, Stratejiler.VMZI, Stratejiler.MA_Cross,
-                   Stratejiler.FDI]
-        }
 
         print(f"Tarama {periyot} Calisiyor ...", time.ctime())
         tarama.info(f"Tarama {periyot} Calisiyor ...")
 
         while True:
             try:
+                strategys = araclar.get_strategys()
                 result = {strategy.__name__: {"BUY": [], "SELL": []} for strategy in strategys[periyot]}
 
                 if mum_bekle:
@@ -114,13 +108,7 @@ class Tarama:
     @staticmethod
     def Piyasa_Durumu(coinlist):
         binance = Binance()
-        strategys = {
-            "15m": [Stratejiler.BB_RSI, Stratejiler.BB_ADX, Stratejiler.BB_Close],
-            "1h": [Stratejiler.BB_RSI, Stratejiler.TSO, Stratejiler.FDI, Stratejiler.BB_ADX, Stratejiler.BB_Close],
-            "4h": [Stratejiler.DMO, Stratejiler.FDI, Stratejiler.VMZI],
-            "1d": [Stratejiler.MACD, Stratejiler.DMO, Stratejiler.VAMA, Stratejiler.VMZI, Stratejiler.MA_Cross,
-                   Stratejiler.FDI]
-        }
+        strategys = Araclar.get_strategys()
 
         strategies_columns = {period: [strat.__name__ for strat in period_strategies] for period, period_strategies in
                               strategys.items()}

@@ -41,13 +41,7 @@ class Trade:
         self.nakit = None
         self.sell_strategy=None
         self.mum_sayisi=0
-        self.strategys = {
-            "15m": [Stratejiler.BB_RSI, Stratejiler.BB_ADX, Stratejiler.BB_Close],
-            "1h": [Stratejiler.BB_RSI, Stratejiler.TSO, Stratejiler.FDI, Stratejiler.BB_ADX, Stratejiler.BB_Close],
-            "4h": [Stratejiler.DMO, Stratejiler.FDI, Stratejiler.VMZI],
-            "1d": [Stratejiler.MACD, Stratejiler.DMO, Stratejiler.VAMA, Stratejiler.VMZI, Stratejiler.MA_Cross,
-                   Stratejiler.FDI]
-        }
+        self.strategys = Araclar.get_strategys()
         self.highest_price = None
 
     def kaydet(self):
@@ -96,6 +90,7 @@ class Trade:
                     self.satis_sinyali_bekle(periyot)
                 else:
                     coinlist = self.binance.coin_list()
+                    self.strategys = self.araclar.get_strategys()
                     # Sahip olunan coinleri hariç tutarak işlem yapılacak coin listesini güncelle
                     coinlist = self.araclar.listeden_sahip_olduklarimi_cikar(coinlist)
                     future_to_coin = {executor.submit(self.alim_sinyali_kontrol, coin, periyot, self.strategys,self.nakit): coin
