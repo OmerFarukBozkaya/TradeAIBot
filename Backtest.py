@@ -338,3 +338,27 @@ class Backtest:
     @staticmethod
     def Grafik_Ciz():
         return
+    @staticmethod
+    def hesapla_wrapper(args):
+        coin, periyot = args
+        return Backtest.Hesapla(coin, periyot)
+    @staticmethod
+    def paralel_hesaplama():
+        binance = Binance()
+        coins = binance.coin_list()  # Coin listesini al
+        periyots = ["15m", "1h", "4h", "1d"]  # Periyotlar
+        sonuclar = []
+
+        # Coin ve periyot kombinasyonlarını oluştur
+        tasks = [(coin, periyot) for coin in coins for periyot in periyots]
+
+        # Paralel işlem yapmak için ProcessPoolExecutor kullanıyoruz
+        with ProcessPoolExecutor() as executor:
+            # Görevleri paralel çalıştır
+            results = executor.map(Backtest.hesapla_wrapper, tasks)
+
+        # Sonuçları birleştir
+        sonuclar.extend(results)
+
+        # Sonuçları kaydet
+        Backtest.Kayit_Et(sonuclar)
