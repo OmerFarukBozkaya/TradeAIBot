@@ -232,7 +232,7 @@ class Backtest:
             plt.show()
 
     @staticmethod
-    def Hesapla(coin,periyot):
+    def Hesapla(coin, periyot):
         binance = Binance()
         # Veri ithali
         data = binance.get_coin_data(coin, periyot, 1000)
@@ -245,17 +245,12 @@ class Backtest:
                       StratejilerTest.TSO, StratejilerTest.BB_RSI, StratejilerTest.FDI,
                       StratejilerTest.BB_Close, StratejilerTest.MA_Cross, StratejilerTest.DMO,
                       StratejilerTest.BB_ADX]
-        capital_histories = []
-        cumulative_profit_losses = []
-        total_profit_losses = []
-        profitable_trade_counts = []
-        losing_trade_counts = []
 
         # Excel'e yazılacak veriler için bir liste oluştur
         excel_data = []
 
-        # Her strateji için ayrı bir subplot
-        for idx, strategy in enumerate(strategies):
+        # Her strateji için hesaplamalar
+        for strategy in strategies:
             last_signal = None
             buy_price = None
             cumulative_profit_loss = []
@@ -264,15 +259,17 @@ class Backtest:
             losing_trades = 0
             initial_capital = 100
             capital_history = [initial_capital]
-            strategy_resault = strategy(high, low, close)
+
+            # Strateji sonucu hesaplama
+            strategy_result = strategy(high, low, close)
 
             for i in range(len(close)):
-                if last_signal is None or last_signal == 'red':
-                    if strategy_resault[i] == "BUY":
+                if last_signal is None or last_signal == 'red':  # Yeni pozisyon açma
+                    if strategy_result[i] == "BUY":
                         last_signal = 'green'
                         buy_price = close[i]
-                elif last_signal == 'green':
-                    if strategy_resault[i] == "SELL":
+                elif last_signal == 'green':  # Mevcut pozisyonu kapama
+                    if strategy_result[i] == "SELL":
                         last_signal = 'red'
                         sell_price = close[i]
                         profit_percentage = ((sell_price - buy_price) / buy_price) * 100
@@ -286,24 +283,17 @@ class Backtest:
                             profitable_trades += 1
                         else:
                             losing_trades += 1
-                        buy_price = None
+                        buy_price = None  # Pozisyon kapandı
 
-            capital_histories.append(capital_history)
-            cumulative_profit_losses.append(cumulative_profit_loss)
-            total_profit_losses.append(total_profit_loss)
-            profitable_trade_counts.append(profitable_trades)
-            losing_trade_counts.append(losing_trades)
-
-            # Excel çıktısı oluştur.
-            strategy_name = strategy.__name__
-            cumulative_total_profit_loss = ((capital_histories[idx][-1] - 100) / 100) * 100  # Son kapital ile kümülatif kâr/zarar
-            profitable_trades = profitable_trade_counts[idx]
-            losing_trades = losing_trade_counts[idx]
+            # Kümülatif sonuçları hesapla
+            cumulative_total_profit_loss = ((capital_history[-1] - initial_capital) / initial_capital) * 100
             if len(cumulative_profit_loss) > 0:
                 ortalama_islem = IndikatorTest.SMA(cumulative_profit_loss, len(cumulative_profit_loss))[-1]
             else:
                 ortalama_islem = 0
-            # Veriyi ekle
+
+            # Excel çıktısı oluştur
+            strategy_name = strategy.__name__
             excel_data.append({
                 'coin': coin,
                 'periyot': periyot,
@@ -313,7 +303,6 @@ class Backtest:
                 'zararlı işlemler': losing_trades,
                 'ortalama işlem sonucu': ortalama_islem
             })
-
         return excel_data
 
     @staticmethod
