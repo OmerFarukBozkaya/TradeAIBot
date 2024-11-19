@@ -10,80 +10,9 @@ from concurrent.futures import ProcessPoolExecutor
 
 class Backtest:
     @staticmethod
-    def Hesapla(coin, periyot):
-        binance = Binance()
-        # Veri ithali
-        data = binance.get_coin_data(coin, periyot, 1000)
-        high = data['high']
-        low = data['low']
-        close = data['close']
-
-        # Strateji listesi
-        strategies = [StratejilerTest.MACD, StratejilerTest.VMZI, StratejilerTest.VAMA,
-                      StratejilerTest.TSO, StratejilerTest.BB_RSI, StratejilerTest.FDI,
-                      StratejilerTest.BB_Close, StratejilerTest.MA_Cross, StratejilerTest.DMO,
-                      StratejilerTest.BB_ADX]
-
-        # Excel'e yazılacak veriler için bir liste oluştur
-        excel_data = []
-
-        # Her strateji için hesaplamalar
-        for strategy in strategies:
-            last_signal = None
-            buy_price = None
-            cumulative_profit_loss = []
-            total_profit_loss = 0
-            profitable_trades = 0
-            losing_trades = 0
-            initial_capital = 100
-            capital_history = [initial_capital]
-
-            # Strateji sonucu hesaplama
-            strategy_result = strategy(high, low, close)
-
-            for i in range(len(close)):
-                if last_signal is None or last_signal == 'red':  # Yeni pozisyon açma
-                    if strategy_result[i] == "BUY":
-                        last_signal = 'green'
-                        buy_price = close[i]
-                elif last_signal == 'green':  # Mevcut pozisyonu kapama
-                    if strategy_result[i] == "SELL":
-                        last_signal = 'red'
-                        sell_price = close[i]
-                        profit_percentage = ((sell_price - buy_price) / buy_price) * 100
-                        current_capital = capital_history[-1] * (1 + profit_percentage / 100)
-                        capital_history.append(current_capital)
-
-                        cumulative_profit_loss.append(profit_percentage)
-                        total_profit_loss += profit_percentage
-
-                        if profit_percentage > 0:
-                            profitable_trades += 1
-                        else:
-                            losing_trades += 1
-                        buy_price = None  # Pozisyon kapandı
-
-            # Kümülatif sonuçları hesapla
-            cumulative_total_profit_loss = ((capital_history[-1] - initial_capital) / initial_capital) * 100
-            if len(cumulative_profit_loss) > 0:
-                ortalama_islem = IndikatorTest.SMA(cumulative_profit_loss, len(cumulative_profit_loss))[-1]
-            else:
-                ortalama_islem = 0
-
-            # Excel çıktısı oluştur
-            strategy_name = strategy.__name__
-            excel_data.append({
-                'coin': coin,
-                'periyot': periyot,
-                'strategy name': strategy_name,
-                'kümülatif kar zarar (%)': cumulative_total_profit_loss,
-                'karlı işlemler': profitable_trades,
-                'zararlı işlemler': losing_trades,
-                'ortalama işlem sonucu': ortalama_islem
-            })
-        return excel_data
-    @staticmethod
-    def Hesapla_stop_lose(coin, periyot,stop=False,canli_veri=True):
+    def Hesapla(coin, periyot,stop=False,canli_veri=True):
+        dinamik_stop=True
+        static_stop=True
         binance = Binance()
         # Veri ithali
         data = binance.get_coin_data(coin, periyot, 1000)
@@ -107,6 +36,7 @@ class Backtest:
 
         # Excel'e yazılacak veriler için bir liste oluştur
         excel_data = []
+        islem_gecmisi = []
 
         # Her strateji için hesaplamalar
         for strategy in strategies:
@@ -121,6 +51,8 @@ class Backtest:
 
             # Strateji sonucu hesaplama
             strategy_result = strategy(high, low, close)
+            if strategy.__name__ in ["MA_Cross","BB_ADX","BB_RSI","TSO"]:
+                dinamik_stop=False
             high_price = 0
             atr = IndikatorTest.ATR(high,low,close)
             adx = IndikatorTest.ADX(high,low,close)
@@ -128,13 +60,23 @@ class Backtest:
             for i in range(len(close)):
                 if last_signal is None or last_signal == 'red':  # Yeni pozisyon açma
                     if strategy_result[i] == "BUY":
+                        islem_gecmisi.append(f"{i}.mum {strategy.__name__} {periyot} {coin} fiyat : {close[i]} alindi.")
                         last_signal = 'green'
                         buy_price = close[i]
                 elif last_signal == 'green':  # Mevcut pozisyonu kapama
                     if stop:
-                        dinamik_stop_signal,high_price,stop_level=StratejilerTest.dinamik_stop_lose(atr,adx,close,high_price,i)
-                        static_stop_signal = StratejilerTest.static_stop_lose(close,buy_price,i)
-                    if strategy_result[i] == "SELL" or (stop and dinamik_stop_signal == "STOP-LOSE" or static_stop_signal == "STOP-LOSE"):
+                        if dinamik_stop:
+                            dinamik_stop_signal,high_price,stop_level=StratejilerTest.dinamik_stop_lose(atr,adx,close,high_price,i)
+                        if static_stop:
+                            static_stop_signal = StratejilerTest.static_stop_lose(close,buy_price,i)
+                    if strategy_result[i] == "SELL" or (stop and ((dinamik_stop and dinamik_stop_signal == "STOP-LOSE") or (static_stop and static_stop_signal == "STOP-LOSE"))):
+                        kar_zarar = ((close[i] / buy_price) - 1) * 100
+                        if strategy_result[i] == "SELL":
+                            islem_gecmisi.append(f"{i}.mum {strategy.__name__} {periyot} {coin} fiyat : {close[i]} satildi [HEDEF]. Kar/Zarar: {kar_zarar} %")
+                        elif static_stop_signal == "STOP-LOSE":
+                            islem_gecmisi.append(f"{i}.mum {strategy.__name__} {periyot} {coin} fiyat : {close[i]} satildi [STOP-LOSE][STATIC]. Kar/Zarar: {kar_zarar} %")
+                        else:
+                            islem_gecmisi.append(f"{i}.mum {strategy.__name__} {periyot} {coin} fiyat : {close[i]} satildi [STOP-LOSE][DINAMIK]. Kar/Zarar: {kar_zarar} %")
                         last_signal = 'red'
                         sell_price = close[i]
                         profit_percentage = ((sell_price - buy_price) / buy_price) * 100
@@ -168,8 +110,7 @@ class Backtest:
                 'zararlı işlemler': losing_trades,
                 'ortalama işlem sonucu': ortalama_islem
             })
-        print(excel_data)
-        return excel_data
+        return {'EXCEL DATA':excel_data,"ISLEM GECMISI":islem_gecmisi}
     @staticmethod
     def Kayit_Et(excel_data_list):
         # Kayıt yapılacak dosyanın yolu
@@ -326,7 +267,7 @@ class Backtest:
     @staticmethod
     def hesapla_wrapper(args):
         coin, periyot = args
-        return Backtest.Hesapla(coin, periyot)
+        return Backtest.Hesapla(coin, periyot)['EXCEL DATA']
     @staticmethod
     def paralel_hesaplama():
         binance = Binance()
@@ -338,7 +279,7 @@ class Backtest:
         tasks = [(coin, periyot) for coin in coins for periyot in periyots]
 
         # Paralel işlem yapmak için ProcessPoolExecutor kullanıyoruz
-        with ProcessPoolExecutor(max_workers=4) as executor:
+        with ProcessPoolExecutor() as executor:
             # Görevleri paralel çalıştır
             results = executor.map(Backtest.hesapla_wrapper, tasks)
 
@@ -347,3 +288,45 @@ class Backtest:
 
         # Sonuçları kaydet
         Backtest.Kayit_Et(sonuclar)
+
+    @staticmethod
+    def backtest_islem_gecmisi_analiz(islem_gecmisi):
+        strategys=[]
+        dinamik_stop_sonucu=[]
+        static_stop_sonucu=[]
+        hedef_satis_sonucu=[]
+        sonuc={}
+        for islem in islem_gecmisi:
+            islem=islem.split(" ")
+            if islem[1] not in strategys:
+                if len(strategys) >0:
+                    dinamik_sayisi=len(dinamik_stop_sonucu)
+                    static_sayisi=len(static_stop_sonucu)
+                    hedef_sayisi=len(hedef_satis_sonucu)
+                    oran=((static_sayisi+dinamik_sayisi)/(static_sayisi+dinamik_sayisi+hedef_sayisi))*100
+                    oran=f"{oran:.2f}%"
+                    sonuc[strategys[-1]]={"dinamik_stop_sayisi":dinamik_sayisi,"static_stop_sayisi":static_sayisi,"hedef_satis_sayisi":hedef_sayisi,"stop_orani":oran}
+                    dinamik_stop_sonucu = []
+                    static_stop_sonucu = []
+                    hedef_satis_sonucu = []
+                strategys.append(islem[1])
+            if "%" in islem:
+                if "[STOP-LOSE][DINAMIK]." in islem:
+                    dinamik_stop_sonucu.append(islem[10])
+                elif "[STOP-LOSE][STATIC]." in islem:
+                    static_stop_sonucu.append(islem[10])
+                elif "[HEDEF]." in islem:
+                    hedef_satis_sonucu.append(islem[10])
+        dinamik_sayisi = len(dinamik_stop_sonucu)
+        static_sayisi = len(static_stop_sonucu)
+        hedef_sayisi = len(hedef_satis_sonucu)
+        oran = ((static_sayisi + dinamik_sayisi) / (static_sayisi + dinamik_sayisi + hedef_sayisi)) * 100
+        oran = f"{oran:.2f}%"
+        sonuc[strategys[-1]] = {"dinamik_stop_sayisi": dinamik_sayisi, "static_stop_sayisi": static_sayisi,
+                                "hedef_satis_sayisi": hedef_sayisi, "stop_orani": oran}
+
+        for strategy in strategys:
+            print(f"{strategy}:Dinamik stop:{sonuc[strategy]['dinamik_stop_sayisi']} Static stop: {sonuc[strategy]['static_stop_sayisi']} Hedef: {sonuc[strategy]['hedef_satis_sayisi']} Stop Orani: {sonuc[strategy]['stop_orani']}")
+        return sonuc
+
+

@@ -29,7 +29,7 @@ class StratejilerTest:
         return None, highest_price, stop_seviyesi
 
     @staticmethod
-    def static_stop_lose(close, buy_price,i):
+    def static_stop_lose(close, buy_price, i):
         if buy_price is not None and close[i] < (buy_price * (1 - StratejilerTest.static_stop_lose_value)):
             return "STOP-LOSE"
         return None
