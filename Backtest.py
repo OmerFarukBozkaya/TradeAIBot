@@ -83,14 +83,22 @@ class Backtest:
             })
         return excel_data
     @staticmethod
-    def Hesapla_stop_lose(coin, periyot,stop=False):
+    def Hesapla_stop_lose(coin, periyot,stop=False,canli_veri=True):
         binance = Binance()
         # Veri ithali
         data = binance.get_coin_data(coin, periyot, 1000)
-        high = data['high']
-        low = data['low']
-        close = data['close']
-
+        if canli_veri :
+            high = data['high']
+            low = data['low']
+            close = data['close']
+        else:
+            close = open("Data/close-test.txt", "r").read().split(",")
+            low = open("Data/low-test.txt", "r").read().split(",")
+            high = open("Data/high-test.txt", "r").read().split(",")
+            for i in range(len(close)):
+                close[i] = float(close[i])
+                low[i] = float(low[i])
+                high[i] = float(high[i])
         # Strateji listesi
         strategies = [StratejilerTest.MACD, StratejilerTest.VMZI, StratejilerTest.VAMA,
                       StratejilerTest.TSO, StratejilerTest.BB_RSI, StratejilerTest.FDI,
