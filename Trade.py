@@ -132,7 +132,7 @@ class Trade:
                     succes = False
                     while not succes:
                         try:
-                            if not self.islem_acik and strategy_result[-1] == "BUY" and "BUY" not in strategy_result[-5:]:
+                            if not self.islem_acik and strategy_result[-1] == "BUY" and "BUY" not in strategy_result[-6:-1]:
                                 sonislem, self.adet = self.buy(coin, periyot, str(strategy.__name__), close, nakit)
                                 self.alinan_coin = coin  # Alınan coin'i kaydet
                                 self.alim_fiyati = close[-1]  # Alım fiyatını kaydet
