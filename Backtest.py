@@ -114,6 +114,8 @@ class Backtest:
             # Strateji sonucu hesaplama
             strategy_result = strategy(high, low, close)
             high_price = 0
+            atr = IndikatorTest.ATR(high,low,close)
+            adx = IndikatorTest.ADX(high,low,close)
 
             for i in range(len(close)):
                 if last_signal is None or last_signal == 'red':  # Yeni pozisyon açma
@@ -122,8 +124,8 @@ class Backtest:
                         buy_price = close[i]
                 elif last_signal == 'green':  # Mevcut pozisyonu kapama
                     if stop:
-                        dinamik_stop_signal,high_price,stop_level=StratejilerTest.dinamik_stop_lose(high[:i],low[:i],close[:i],high_price)
-                        static_stop_signal = StratejilerTest.static_stop_lose(close[:i],buy_price)
+                        dinamik_stop_signal,high_price,stop_level=StratejilerTest.dinamik_stop_lose(atr,adx,close,high_price,i)
+                        static_stop_signal = StratejilerTest.static_stop_lose(close,buy_price,i)
                     if strategy_result[i] == "SELL" or (stop and dinamik_stop_signal == "STOP-LOSE" or static_stop_signal == "STOP-LOSE"):
                         last_signal = 'red'
                         sell_price = close[i]

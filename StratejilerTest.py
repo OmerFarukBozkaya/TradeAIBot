@@ -6,35 +6,31 @@ class StratejilerTest:
     atr_factor_weak_trend = 1.2
 
     @staticmethod
-    def dinamik_stop_lose(high, low, close, highest_price):
-        if highest_price is None or close[-1] > highest_price:
-            highest_price = close[-1]
-
-        atr_values = Indikator.ATR(high, low, close)
-        adx_values = Indikator.ADX(high, low, close)
-
+    def dinamik_stop_lose(atr,adx,close, highest_price,i):
+        if highest_price is None or close[i] > highest_price:
+            highest_price = close[i]
         # Piyasa modu belirleme
-        adx = adx_values[-1]
-        if adx < 20:
+        adx = adx[i]
+        if adx is not None and adx < 20:
             return None, highest_price, None  # Yatay piyasada stop çalışmaz
 
         # ATR çarpanı seçimi
-        if adx > 30:
-            atr_factor = Stratejiler.atr_factor_strong_trend
+        if adx is not None and adx > 30:
+            atr_factor = StratejilerTest.atr_factor_strong_trend
         else:
-            atr_factor = Stratejiler.atr_factor_weak_trend
+            atr_factor = StratejilerTest.atr_factor_weak_trend
 
         # Stop seviyesi hesaplama
-        stop_seviyesi = highest_price - (atr_values[-1] * atr_factor)
+        stop_seviyesi = highest_price - (atr[i] * atr_factor)
 
-        if close[-1] < stop_seviyesi:
+        if close[i] < stop_seviyesi:
             return "STOP-LOSE", None, None
 
         return None, highest_price, stop_seviyesi
 
     @staticmethod
-    def static_stop_lose(close, buy_price):
-        if buy_price is not None and close[-1] < (buy_price * (1 - Stratejiler.static_stop_lose_value)):
+    def static_stop_lose(close, buy_price,i):
+        if buy_price is not None and close[i] < (buy_price * (1 - StratejilerTest.static_stop_lose_value)):
             return "STOP-LOSE"
         return None
 
