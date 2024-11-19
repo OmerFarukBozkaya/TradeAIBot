@@ -6,6 +6,7 @@ from Araclar import Araclar
 from Trade import Trade
 import time
 from raspi_status import raspi_status
+from Stratejiler import Stratejiler
 
 def main ():
     binance = Binance()
@@ -30,6 +31,7 @@ def main ():
     12)Hacime gore coinlist siralama
     13)Strategys update olusturma
     14)Strategys.json olustur
+    15)Buy veren coinler
     """)
     com = input("Ne yapılacak :")
     if com == "0":
@@ -136,6 +138,17 @@ def main ():
     elif com == "14":
         a=time.time()
         Araclar.strategy_analyze_save()
+        b=time.time()
+        print(araclar.saniye_to_hms(b-a))
+    elif com == "15":
+        a=time.time()
+        functions = [func for func in dir(Stratejiler) if callable(getattr(Stratejiler, func)) and not func.startswith("__")]
+        functions.remove("dinamik_stop_lose")
+        functions.remove("static_stop_lose")
+        print(functions)
+        strategy=input("Strateji adi: ")
+        periyot = input("Periyot: ")
+        araclar.stratejinin_buy_verdikleri(strategy,periyot)
         b=time.time()
         print(araclar.saniye_to_hms(b-a))
 

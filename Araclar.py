@@ -417,3 +417,23 @@ class Araclar:
             Araclar.strategy_result_analyze()
             # strategy.json hazırlanıyor
             Araclar.strategy_analyze_save()
+
+    @staticmethod
+    def stratejinin_buy_verdikleri(strategy_name,periyot):
+        binance = Binance()
+        coinlist = binance.coin_list()
+        strategy = getattr(Stratejiler,strategy_name)
+        sonuc=[]
+        for coin in coinlist:
+            data=binance.get_coin_data(coin,periyot,1000)
+            high=data['high']
+            low=data['low']
+            close=data['close']
+            signal = strategy(high[:-1],low[:-1],close[:-1])
+            if signal[-1]=="BUY" and "BUY" not in signal[-6:-1]:
+                sonuc.append(coin)
+        print(sonuc)
+        return sonuc
+
+
+
