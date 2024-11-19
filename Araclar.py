@@ -435,5 +435,12 @@ class Araclar:
         print(sonuc)
         return sonuc
 
+    @staticmethod
+    def tekli_analiz(coin, periyot):
+        result = Backtest.Hesapla(coin, periyot, stop=True)
+        Backtest.Kayit_Et([result['EXCEL DATA']])
+        Backtest.backtest_islem_gecmisi_analiz(result['ISLEM GECMISI'])
+        Araclar.strategy_result_analyze()
+
 
 
