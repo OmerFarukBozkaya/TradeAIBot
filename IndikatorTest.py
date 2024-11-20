@@ -590,3 +590,85 @@ class IndikatorTest:
             else:
                 tso.append(0)
         return tso
+
+    @staticmethod
+    def Alpha_Trend(high, low, close, volume=None, coeff=1.0, period=14, use_volume=False):
+        """
+        AlphaTrend göstergesini hesaplar.
+        """
+        # ATR Hesaplama
+        atr = IndikatorTest.ATR(high, low, close, length=period)
+
+        # UpT ve DownT Hesaplama
+        upT = [low[i] - (atr[i] * coeff) if atr[i] is not None else None for i in range(len(low))]
+        downT = [high[i] + (atr[i] * coeff) if atr[i] is not None else None for i in range(len(high))]
+
+        # Trend Yönü (RSI veya MFI Kullanımı)
+        if use_volume and volume is not None:
+            mfi = IndikatorTest.MFI(high, low, close, volume, length=period)
+            trend_indicator = [mfi[i] >= 50 if mfi[i] is not None else None for i in range(len(mfi))]
+        else:
+            rsi = IndikatorTest.RSI(close, length=period)
+            trend_indicator = [rsi[i] >= 50 if rsi[i] is not None else None for i in range(len(rsi))]
+
+            # AlphaTrend Hesaplama
+        alpha_trend = [None] * len(close)
+
+        # İlk periyotlar için hesaplama yapılmayacak, sonrasında ise hesaplama yapılacak
+        for i in range(len(close)):
+            # İlk geçerli veriyi bulmak için (period-1) kadar bekliyoruz
+            if i >= period - 1:
+                if trend_indicator[i] is not None:
+                    # İlk geçerli hesaplama
+                    if i == period - 1:
+                        alpha_trend[i] = upT[i] if trend_indicator[i] else downT[i]
+                    # Sonraki hesaplamalar
+                    elif i > period - 1:
+                        # Önceki alpha_trend değeri None değilse, işlemi gerçekleştirebiliriz
+                        if alpha_trend[i - 1] is not None:
+                            if trend_indicator[i]:
+                                alpha_trend[i] = max(alpha_trend[i - 1], upT[i]) if upT[i] is not None else alpha_trend[
+                                    i - 1]
+                            else:
+                                alpha_trend[i] = min(alpha_trend[i - 1], downT[i]) if downT[i] is not None else \
+                                alpha_trend[i - 1]
+
+        return alpha_trend
+
+    @staticmethod
+    def MFI(high, low, close, volume, length=14):
+        """
+        Money Flow Index (MFI) hesaplar.
+        İlk periyot boyunca eksik olan veriler 'None' olarak döner.
+        """
+        if len(close) < length:
+            return [None] * len(close)
+
+        # Typical Price (Ortalama Fiyat)
+        typical_price = (np.array(high) + np.array(low) + np.array(close)) / 3
+
+        # Money Flow (Para Akışı)
+        money_flow = typical_price * np.array(volume)
+
+        # Pozitif ve Negatif Para Akışı
+        positive_flow = np.zeros_like(money_flow)
+        negative_flow = np.zeros_like(money_flow)
+        for i in range(1, len(typical_price)):
+            if typical_price[i] > typical_price[i - 1]:
+                positive_flow[i] = money_flow[i]
+            elif typical_price[i] < typical_price[i - 1]:
+                negative_flow[i] = money_flow[i]
+
+        # Rolling Sum (Hareketli Toplam)
+        positive_mf = pd.Series(positive_flow).rolling(window=length).sum()
+        negative_mf = pd.Series(negative_flow).rolling(window=length).sum()
+
+        # Money Flow Ratio (Para Akış Oranı)
+        mfr = positive_mf / negative_mf.replace(0, np.nan)
+        mfi = 100 - (100 / (1 + mfr))
+
+        # İlk length - 1 değerini None yap
+        mfi = mfi.to_list()
+        mfi = [None if i < length - 1 else mfi[i] for i in range(len(mfi))]
+
+        return mfi
