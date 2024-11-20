@@ -88,6 +88,8 @@ class Trade:
                 # Eğer bir işlem zaten açılmışsa, satış sinyali bekle
                 if self.islem_acik:
                     self.satis_sinyali_bekle(periyot)
+                    if os.path.exists(f"Trade_Durumu/bitir_{periyot}"):
+                        exit(0)
                 else:
                     coinlist = self.binance.coin_list()
                     self.strategys = self.araclar.get_strategys()
