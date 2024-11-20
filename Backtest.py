@@ -51,8 +51,7 @@ class Backtest:
 
             # Strateji sonucu hesaplama
             strategy_result = strategy(high, low, close)
-            if strategy.__name__ in ["MA_Cross","BB_ADX","BB_RSI","TSO"]:
-                dinamik_stop=False
+            
             high_price = 0
             atr = IndikatorTest.ATR(high,low,close)
             adx = IndikatorTest.ADX(high,low,close)
