@@ -1,4 +1,6 @@
 from Indikator import Indikator
+import pandas as pd
+import numpy as np
 
 class Stratejiler:
     static_stop_lose_value = 0.025
@@ -37,6 +39,41 @@ class Stratejiler:
         if buy_price is not None and close[-1] < (buy_price * (1 - Stratejiler.static_stop_lose_value)):
             return "STOP-LOSE"
         return None
+
+    @staticmethod
+    def destek_stop_lose(buy_price, destek, direnc, close, low, window=14, tolerance=0.01):
+        # Listeyi DataFrame'e dönüştür
+        data = pd.DataFrame({'Low': low})
+        data['Support'] = np.nan
+        for i in range(window, len(data) - window):
+            local_min = data['Low'][i]
+            is_support = all(local_min <= data['Low'][i - window:i + window])
+            if is_support:
+                data.loc[i, 'Support'] = local_min
+        # Destek seviyelerini gruplayarak benzeyenleri tek bir seviyeye indir
+        support_levels = data['Support'].dropna().unique()
+        grouped_levels = []
+        for level in sorted(support_levels):
+            if not grouped_levels or abs(level - grouped_levels[-1]) > tolerance * level:
+                grouped_levels.append(level)
+
+        if destek is None:
+            for i in range(len(grouped_levels)):
+                if i == len(grouped_levels) - 1:
+                    return grouped_levels[i], None, None
+                if grouped_levels[i] < buy_price and grouped_levels[i + 1] > buy_price:
+                    return grouped_levels[i], grouped_levels[i + 1], None
+        elif direnc is not None and close[-1] > direnc:
+            for i in range(len(grouped_levels)):
+                if i == len(grouped_levels) - 1:
+                    return grouped_levels[i], None, None
+                if grouped_levels[i] < close[-1] and grouped_levels[i + 1] > close[-1]:
+                    return grouped_levels[i], grouped_levels[i + 1], None
+        elif close[-1] < destek:
+            return None, None, "STOP-LOSE"
+        else:
+            return destek, direnc, None
+
     @staticmethod
     def MACD(high, low, close):
         # Sonuçları tutmak için liste

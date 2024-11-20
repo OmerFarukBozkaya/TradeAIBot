@@ -43,6 +43,8 @@ class Trade:
         self.mum_sayisi=0
         self.strategys = Araclar.get_strategys()
         self.highest_price = None
+        self.destek=None
+        self.direnc=None
 
     def kaydet(self):
         durum = {
@@ -54,7 +56,9 @@ class Trade:
             'sell_strategy': self.sell_strategy.__name__ if self.sell_strategy else None,
             'periyot': self.periyot,
             'mum_sayisi':self.mum_sayisi,
-            'highest_price':self.highest_price
+            'highest_price':self.highest_price,
+            'destek':self.destek,
+            'direnc':self.direnc
         }
         with open(f'Trade_Durumu/trade_durumu_{self.periyot}.json', 'w') as f:
             json.dump(durum, f)
@@ -73,6 +77,8 @@ class Trade:
                 self.periyot = durum['periyot']
                 self.mum_sayisi = durum['mum_sayisi']
                 self.highest_price = durum['highest_price']
+                self.destek = durum['destek']
+                self.direnc = durum['direnc']
     def TradeEt(self, periyot, gercek,nakit):
         self.gercek = gercek  # Gerçek işlem bilgisi kaydedildi
         self.nakit=nakit
@@ -148,6 +154,9 @@ class Trade:
             return False  # İşlem açılmadı
 
     def satis_sinyali_bekle(self, periyot):
+        dinamik_stop_lose=False
+        static_stop_lose=False
+        destek_stop_lose=True
         self.araclar.mum_olusmasini_bekle(periyot)
         while self.islem_acik:
             # Veri ithali
@@ -167,13 +176,14 @@ class Trade:
             # Hesaplamalar
             try:
                 sell_strategy_result = self.sell_strategy(high[:-1], low[:-1], close[:-1])[-1]
-                if periyot in ["15m","1d"]:
-                    dinamik_stop_lose_check, self.highest_price, stop_seviyesi = Stratejiler.dinamik_stop_lose(high, low, close,self.highest_price)
-                    static_stop_lose_check = Stratejiler.static_stop_lose(close,self.alim_fiyati)
-                else:
-                    dinamik_stop_lose_check=None
-                    stop_seviyesi = -1
-                    static_stop_lose_check = Stratejiler.static_stop_lose(close,self.alim_fiyati)
+
+                if dinamik_stop_lose:
+                    dinamik_stop_lose_check, self.highest_price, stop_seviyesi = Stratejiler.dinamik_stop_lose(high, low, close, self.highest_price)
+                if static_stop_lose:
+                    static_stop_lose_check = Stratejiler.static_stop_lose(close, self.alim_fiyati)
+                if destek_stop_lose:
+                    self.destek, self.direnc, destek_stop_lose_check = Stratejiler.destek_stop_lose(self.alim_fiyati, self.destek, self.direnc, close, low)
+
                 mevcut_adedim = self.binance.mevcut_adedim(self.alinan_coin)
                 minqty = self.binance.get_coin_minQTY(self.alinan_coin)
             except Exception as e:
@@ -185,7 +195,7 @@ class Trade:
                 continue
 
             # İşlemler
-            if static_stop_lose_check == "STOP-LOSE" or dinamik_stop_lose_check == "STOP-LOSE":
+            if (static_stop_lose and  static_stop_lose_check == "STOP-LOSE") or (dinamik_stop_lose and dinamik_stop_lose_check == "STOP-LOSE") or (destek_stop_lose and destek_stop_lose_check == "STOP-LOSE"):
                 try:
                     self.stop_lose(self.alinan_coin, periyot, close, str(self.sell_strategy.__name__), self.alim_fiyati)
                     self.islem_acik = False
