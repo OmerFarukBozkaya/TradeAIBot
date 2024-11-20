@@ -20,6 +20,7 @@ class Backtest:
             high = data['high']
             low = data['low']
             close = data['close']
+            vol = data['volume_coin']
         else:
             close = open("Data/close-test.txt", "r").read().split(",")
             low = open("Data/low-test.txt", "r").read().split(",")
@@ -32,7 +33,7 @@ class Backtest:
         strategies = [StratejilerTest.MACD, StratejilerTest.VMZI, StratejilerTest.VAMA,
                       StratejilerTest.TSO, StratejilerTest.BB_RSI, StratejilerTest.FDI,
                       StratejilerTest.BB_Close, StratejilerTest.MA_Cross, StratejilerTest.DMO,
-                      StratejilerTest.BB_ADX]
+                      StratejilerTest.BB_ADX,StratejilerTest.Alpha_Trend]
 
         # Excel'e yazılacak veriler için bir liste oluştur
         excel_data = []
@@ -50,8 +51,10 @@ class Backtest:
             capital_history = [initial_capital]
 
             # Strateji sonucu hesaplama
-            strategy_result = strategy(high, low, close)
-            
+            if strategy.__name__ != "Alpha_Trend":
+                strategy_result = strategy(high, low, close)
+            else:
+                strategy_result = strategy(high, low, close,vol)
             high_price = 0
             atr = IndikatorTest.ATR(high,low,close)
             adx = IndikatorTest.ADX(high,low,close)
