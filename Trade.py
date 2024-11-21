@@ -180,7 +180,6 @@ class Trade:
 
                 if destek_stop_lose:
                     self.destek, self.direnc, destek_stop_lose_check = Stratejiler.destek_stop_lose(self.alim_fiyati, self.destek, self.direnc, close, low)
-                    stop_seviyesi=self.destek
                     if self.direnc is None:
                         dinamik_stop_lose = True
                 if dinamik_stop_lose:
@@ -258,9 +257,10 @@ class Trade:
 
             self.mum_sayisi = self.mum_sayisi + 1
             self.kaydet()
+            stop_seviyesi=round(stop_seviyesi,9)
             logging.info(
-                f"DURUM : {periyot} {self.sell_strategy.__name__} {self.alinan_coin} Islem Suresi: {self.mum_sayisi} mum. Diger strategyler {other_strategy_result} Stop-Lose: {stop_seviyesi:.7f} Kar/Zarar: {((close[-1] / self.alim_fiyati) - 1) * 100:.2f}%")
-            self.araclar.telegram_mesaj_gonder(f"🔵 DURUM : {periyot} {self.sell_strategy.__name__} {self.alinan_coin} Islem Suresi: {self.mum_sayisi} mum. Diger strategyler {other_strategy_result} Stop-Lose: {stop_seviyesi:.7f} Kar/Zarar: {((close[-1] / self.alim_fiyati) - 1) * 100:.2f}%")
+                f"DURUM : {periyot} {self.sell_strategy.__name__} {self.alinan_coin} Islem Suresi: {self.mum_sayisi} mum. Diger strategyler {other_strategy_result} Stop-Lose: {stop_seviyesi}|{self.destek} Kar/Zarar: {((close[-1] / self.alim_fiyati) - 1) * 100:.2f}%")
+            self.araclar.telegram_mesaj_gonder(f"🔵 DURUM : {periyot} {self.sell_strategy.__name__} {self.alinan_coin} Islem Suresi: {self.mum_sayisi} mum. Diger strategyler {other_strategy_result} Stop-Lose: {stop_seviyesi}|{self.destek} Kar/Zarar: {((close[-1] / self.alim_fiyati) - 1) * 100:.2f}%")
             time.sleep(10)
             self.araclar.mum_olusmasini_bekle(periyot)
 
