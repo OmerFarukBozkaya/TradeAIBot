@@ -6,6 +6,7 @@ class Stratejiler:
     static_stop_lose_value = 0.025
     atr_factor_strong_trend = 2.0
     atr_factor_weak_trend = 1.2
+    destek_stop_lose_tolerans = 0.01
 
     @staticmethod
     def dinamik_stop_lose(high, low, close, highest_price):
@@ -69,7 +70,7 @@ class Stratejiler:
                     return grouped_levels[i], None, None
                 if grouped_levels[i] < close[-1] and grouped_levels[i + 1] > close[-1]:
                     return grouped_levels[i], grouped_levels[i + 1], None
-        elif close[-1] < destek:
+        elif close[-1] < destek * (1-Stratejiler.destek_stop_lose_tolerans):
             return None, None, "STOP-LOSE"
         else:
             return destek, direnc, None
