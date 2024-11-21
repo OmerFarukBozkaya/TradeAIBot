@@ -157,6 +157,7 @@ class Trade:
         dinamik_stop_lose=False
         static_stop_lose=False
         destek_stop_lose=True
+        stop_seviyesi=-1
         self.araclar.mum_olusmasini_bekle(periyot)
         while self.islem_acik:
             # Veri ithali
@@ -183,7 +184,7 @@ class Trade:
                     static_stop_lose_check = Stratejiler.static_stop_lose(close, self.alim_fiyati)
                 if destek_stop_lose:
                     self.destek, self.direnc, destek_stop_lose_check = Stratejiler.destek_stop_lose(self.alim_fiyati, self.destek, self.direnc, close, low)
-
+                    stop_seviyesi=self.destek
                 mevcut_adedim = self.binance.mevcut_adedim(self.alinan_coin)
                 minqty = self.binance.get_coin_minQTY(self.alinan_coin)
             except Exception as e:
