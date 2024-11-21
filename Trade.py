@@ -178,15 +178,16 @@ class Trade:
             try:
                 sell_strategy_result = self.sell_strategy(high[:-1], low[:-1], close[:-1])[-1]
 
-                if dinamik_stop_lose:
-                    dinamik_stop_lose_check, self.highest_price, stop_seviyesi = Stratejiler.dinamik_stop_lose(high, low, close, self.highest_price)
-                if static_stop_lose:
-                    static_stop_lose_check = Stratejiler.static_stop_lose(close, self.alim_fiyati)
                 if destek_stop_lose:
                     self.destek, self.direnc, destek_stop_lose_check = Stratejiler.destek_stop_lose(self.alim_fiyati, self.destek, self.direnc, close, low)
                     stop_seviyesi=self.destek
                     if self.direnc is None:
                         dinamik_stop_lose = True
+                if dinamik_stop_lose:
+                    dinamik_stop_lose_check, self.highest_price, stop_seviyesi = Stratejiler.dinamik_stop_lose(high, low, close, self.highest_price)
+                if static_stop_lose:
+                    static_stop_lose_check = Stratejiler.static_stop_lose(close, self.alim_fiyati)
+
                 mevcut_adedim = self.binance.mevcut_adedim(self.alinan_coin)
                 minqty = self.binance.get_coin_minQTY(self.alinan_coin)
             except Exception as e:
