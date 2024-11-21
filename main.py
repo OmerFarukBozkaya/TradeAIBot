@@ -32,6 +32,7 @@ def main ():
     13)Strategys update olusturma
     14)Strategys.json olustur
     15)Buy veren coinler
+    16)Destek direnc seviyeleri
     """)
     com = input("Ne yapılacak :")
     if com == "0":
@@ -149,6 +150,19 @@ def main ():
         strategy=input("Strateji adi: ")
         periyot = input("Periyot: ")
         araclar.stratejinin_buy_verdikleri(strategy,periyot)
+        b=time.time()
+        print(araclar.saniye_to_hms(b-a))
+    elif com == "16":
+        a=time.time()
+        coin=input("Coin:")
+        periyot=input("Periyot:")
+        buy_price=input("Buy price:")
+        data=binance.get_coin_data(coin,periyot,1000)
+        if buy_price=="":
+            buy_price=data['close'][-1]
+        low=data['low']
+        destek,direnc,liste=indikator_test.destek_direnc_hesapla(buy_price,low)
+        print(f"Destek:{destek}\nDirenc:{direnc}\n{liste}")
         b=time.time()
         print(araclar.saniye_to_hms(b-a))
 

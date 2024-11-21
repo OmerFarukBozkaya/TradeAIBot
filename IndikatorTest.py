@@ -672,3 +672,26 @@ class IndikatorTest:
         mfi = [None if i < length - 1 else mfi[i] for i in range(len(mfi))]
 
         return mfi
+
+    @staticmethod
+    def destek_direnc_hesapla(buy_price, low, window=14, tolerance=0.01):
+        # Listeyi DataFrame'e dönüştür
+        data = pd.DataFrame({'Low': low})
+        data['Support'] = np.nan
+        for i in range(window, len(data) - window):
+            local_min = data['Low'][i]
+            is_support = all(local_min <= data['Low'][i - window:i + window])
+            if is_support:
+                data.loc[i, 'Support'] = local_min
+        # Destek seviyelerini gruplayarak benzeyenleri tek bir seviyeye indir
+        support_levels = data['Support'].dropna().unique()
+        grouped_levels = []
+        for level in sorted(support_levels):
+            if not grouped_levels or abs(level - grouped_levels[-1]) > tolerance * level:
+                grouped_levels.append(level)
+
+        for i in range(len(grouped_levels)):
+            if i == len(grouped_levels) - 1:
+                return grouped_levels[i], None,grouped_levels
+            if grouped_levels[i] < buy_price and grouped_levels[i + 1] > buy_price:
+                return grouped_levels[i], grouped_levels[i + 1],grouped_levels
