@@ -202,6 +202,9 @@ class Trade:
                     self.islem_acik = False
                     self.alinan_coin = None
                     self.alim_fiyati = None
+                    self.destek = None
+                    self.direnc = None
+                    self.highest_price = None
                     self.mum_sayisi = 0
                     self.kaydet()
                     break  # Satış yapıldı, döngüden çık
@@ -217,6 +220,9 @@ class Trade:
                     self.islem_acik = False
                     self.alinan_coin = None
                     self.alim_fiyati = None
+                    self.direnc=None
+                    self.destek=None
+                    self.highest_price=None
                     self.mum_sayisi = 0
                     self.kaydet()
                     break  # Satış yapıldı, döngüden çık
