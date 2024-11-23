@@ -7,6 +7,7 @@ class Stratejiler:
     atr_factor_strong_trend = 2.0
     atr_factor_weak_trend = 1.2
     destek_stop_lose_tolerans = 0.01
+    dinamik_stop_lose_tolerans = 0.01
 
     @staticmethod
     def dinamik_stop_lose(high, low, close, highest_price):
@@ -30,7 +31,7 @@ class Stratejiler:
         # Stop seviyesi hesaplama
         stop_seviyesi = highest_price - (atr_values[-1] * atr_factor)
 
-        if close[-1] < stop_seviyesi:
+        if close[-1] < stop_seviyesi * (1-Stratejiler.dinamik_stop_lose_tolerans):
             return "STOP-LOSE", None, -1
 
         return None, highest_price, stop_seviyesi
