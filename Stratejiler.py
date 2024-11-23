@@ -19,7 +19,7 @@ class Stratejiler:
         # Piyasa modu belirleme
         adx = adx_values[-1]
         if adx < 20:
-            return None, highest_price, None  # Yatay piyasada stop çalışmaz
+            return None, highest_price, -1  # Yatay piyasada stop çalışmaz
 
         # ATR çarpanı seçimi
         if adx > 30:
@@ -31,7 +31,7 @@ class Stratejiler:
         stop_seviyesi = highest_price - (atr_values[-1] * atr_factor)
 
         if close[-1] < stop_seviyesi:
-            return "STOP-LOSE", None, None
+            return "STOP-LOSE", None, -1
 
         return None, highest_price, stop_seviyesi
 
