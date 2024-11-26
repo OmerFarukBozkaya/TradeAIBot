@@ -178,7 +178,8 @@ class Binance:
 
         return sirali_coin_isimleri
 
-    def islem_gecmisi_analiz(self):
+    @staticmethod
+    def islem_gecmisi_analiz():
         file = open("Log/islem_gecmisi.log","r")
         gunluk_islem_sonucu={}
         strategy_islem_sonucu={}
@@ -215,13 +216,26 @@ class Binance:
                     strategy_islem_sonucu[periyot][strategy]['adet'] = 0
                     strategy_islem_sonucu[periyot][strategy]['toplam_mum'] = 0
                     strategy_islem_sonucu[periyot][strategy]['ortalama_mum'] = 0
+                    strategy_islem_sonucu[periyot][strategy]['karli_islem']= 0
+                    strategy_islem_sonucu[periyot][strategy]['karli_islem_toplam'] = 0
+                    strategy_islem_sonucu[periyot][strategy]['karli_islem_ortalama'] = 0
+                    strategy_islem_sonucu[periyot][strategy]['zararli_islem']=0
+                    strategy_islem_sonucu[periyot][strategy]['zararli_islem_toplam'] = 0
+                    strategy_islem_sonucu[periyot][strategy]['zararli_islem_ortalama'] = 0
 
                 # Kümülatif olarak yüzdelik artış işlemi
                 strategy_islem_sonucu[periyot][strategy]['sonuc'] += strategy_islem_sonucu[periyot][strategy]['sonuc'] * sonuc / 100
                 strategy_islem_sonucu[periyot][strategy]['adet'] = strategy_islem_sonucu[periyot][strategy]['adet'] + 1
                 strategy_islem_sonucu[periyot][strategy]['toplam_mum'] = strategy_islem_sonucu[periyot][strategy]['toplam_mum'] + mum_sayisi
                 strategy_islem_sonucu[periyot][strategy]['ortalama_mum'] = strategy_islem_sonucu[periyot][strategy]['toplam_mum'] / strategy_islem_sonucu[periyot][strategy]['adet']
-
+                if sonuc <0:
+                    strategy_islem_sonucu[periyot][strategy]['zararli_islem'] = strategy_islem_sonucu[periyot][strategy]['zararli_islem'] + 1
+                    strategy_islem_sonucu[periyot][strategy]['zararli_islem_toplam'] = strategy_islem_sonucu[periyot][strategy]['zararli_islem_toplam'] + sonuc
+                    strategy_islem_sonucu[periyot][strategy]['zararli_islem_ortalama'] = strategy_islem_sonucu[periyot][strategy]['zararli_islem_toplam'] / strategy_islem_sonucu[periyot][strategy]['zararli_islem']
+                else:
+                    strategy_islem_sonucu[periyot][strategy]['karli_islem'] = strategy_islem_sonucu[periyot][strategy]['karli_islem'] + 1
+                    strategy_islem_sonucu[periyot][strategy]['karli_islem_toplam'] = strategy_islem_sonucu[periyot][strategy]['karli_islem_toplam'] + sonuc
+                    strategy_islem_sonucu[periyot][strategy]['karli_islem_ortalama'] = strategy_islem_sonucu[periyot][strategy]['karli_islem_toplam'] / strategy_islem_sonucu[periyot][strategy]['karli_islem']
 
                 if periyot not in periyot_islem_sonucu:
                     periyot_islem_sonucu[periyot]={}
@@ -239,7 +253,7 @@ class Binance:
         print(f"\nStrategy islem sonucu:")
         for i in strategy_islem_sonucu.keys():
             for j in strategy_islem_sonucu[i].keys():
-                print(f"{i} {j}: {(strategy_islem_sonucu[i][j]['sonuc'])-100:.2f}% | {strategy_islem_sonucu[i][j]['adet']} adet islem | {strategy_islem_sonucu[i][j]['ortalama_mum']:.2f} ortalama mum sayisi.")
+                print(f"{i} {j}: {(strategy_islem_sonucu[i][j]['sonuc'])-100:.2f}% | {strategy_islem_sonucu[i][j]['karli_islem']} adet kar. ortalama: {strategy_islem_sonucu[i][j]['karli_islem_ortalama']:.2f}% | {strategy_islem_sonucu[i][j]['zararli_islem']} adet zarar. ortalama: {strategy_islem_sonucu[i][j]['zararli_islem_ortalama']:.2f}% | {strategy_islem_sonucu[i][j]['adet']} adet islem | {strategy_islem_sonucu[i][j]['ortalama_mum']:.2f} ortalama mum sayisi.")
         print(f"\nPeriyot islem sonucu:")
         for i in periyot_islem_sonucu.keys():
             print(f"{i}: {(periyot_islem_sonucu[i]['sonuc'])-100:.2f}% | {periyot_islem_sonucu[i]['adet']} adet islem.")
