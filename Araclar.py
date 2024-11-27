@@ -390,6 +390,8 @@ class Araclar:
     def telegram_mesaj_gonder(self,mesaj):
         while True:
             # Mesaj gönderme URL'si
+            if self.telegram_chat_id is None or self.telegram_api_token is None:
+                break
             url = f"https://api.telegram.org/bot{self.telegram_api_token}/sendMessage"
 
             # Mesaj gönderme isteği
