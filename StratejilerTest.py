@@ -37,34 +37,46 @@ class StratejilerTest:
             return "STOP-LOSE"
         return None
     @staticmethod
-    def destek_stop_lose(buy_price,destek,direnc,close,low, window=14, tolerance=0.01):
-        # Listeyi DataFrame'e dönüştür
-        data = pd.DataFrame({'Low': low})
-        data['Support'] = np.nan
-        for i in range(window, len(data) - window):
-            local_min = data['Low'][i]
-            is_support = all(local_min <= data['Low'][i - window:i + window])
-            if is_support:
-                data.loc[i, 'Support'] = local_min
-        # Destek seviyelerini gruplayarak benzeyenleri tek bir seviyeye indir
-        support_levels = data['Support'].dropna().unique()
-        grouped_levels = []
-        for level in sorted(support_levels):
-            if not grouped_levels or abs(level - grouped_levels[-1]) > tolerance * level:
-                grouped_levels.append(level)
+    def destek_stop_lose(buy_price,destek,direnc,close,low,tolerans=1.02):
+        yerel_minimum = []
+        for i in range(1, len(low) - 1):
+            if low[i - 1] > low[i] and low[i] < low[i + 1]:
+                yerel_minimum.append(low[i])
+        yerel_minimum.sort()
+
+        # Destek seviyelerini bulma
+        levels = []
+        temp = []
+        for i in range(len(yerel_minimum) - 1):
+            if len(temp) == 0:
+                temp.append(yerel_minimum[i])
+            if yerel_minimum[i] * tolerans > yerel_minimum[i + 1] and temp[0] * tolerans > yerel_minimum[i]:
+                temp.append(yerel_minimum[i])
+            else:
+                if temp:  # `temp` boş değilse
+                    toplam = sum(temp)
+                    levels.append(toplam / len(temp))  # Ortalamayı ekle
+                else:
+                    levels.append(yerel_minimum[i])
+                temp = []
+
+        # Son kalan temp verilerini ekle
+        if temp:
+            toplam = sum(temp)
+            levels.append(toplam / len(temp))
 
         if destek is None:
-            for i in range(len(grouped_levels)):
-                if i == len(grouped_levels) - 1:
-                    return grouped_levels[i],None,None
-                if grouped_levels[i] < buy_price and grouped_levels[i + 1] > buy_price:
-                    return grouped_levels[i],grouped_levels[i + 1],None
+            for i in range(len(levels)):
+                if i == len(levels) - 1:
+                    return levels[i],None,None
+                if levels[i] < buy_price and levels[i + 1] > buy_price:
+                    return levels[i],levels[i + 1],None
         elif direnc is not None and close[-1] > direnc:
-            for i in range(len(grouped_levels)):
-                if i == len(grouped_levels) - 1:
-                    return grouped_levels[i],None,None
-                if grouped_levels[i] < close[-1] and grouped_levels[i + 1] > close[-1]:
-                    return grouped_levels[i],grouped_levels[i + 1],None
+            for i in range(len(levels)):
+                if i == len(levels) - 1:
+                    return levels[i],None,None
+                if levels[i] < close[-1] and levels[i + 1] > close[-1]:
+                    return levels[i],levels[i + 1],None
         elif close[-1] < destek * (1-StratejilerTest.destek_stop_lose_tolerans):
             return None,None,"STOP-LOSE"
         else:
