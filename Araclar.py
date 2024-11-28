@@ -444,5 +444,14 @@ class Araclar:
         Backtest.backtest_islem_gecmisi_analiz(result['ISLEM GECMISI'])
         Araclar.strategy_result_analyze()
 
+    @staticmethod
+    def ondalik_basamak_sayisi(sayi):
+        # String'e çevir ve noktadan sonrasını al
+        str_sayi = str(sayi)
+        if '.' in str_sayi:
+            return len(str_sayi.split('.')[1])  # Noktadan sonrasının uzunluğu
+        else:
+            return 0  # Eğer nokta yoksa, ondalık basamak yoktur
+
 
 

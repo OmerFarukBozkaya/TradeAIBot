@@ -257,7 +257,7 @@ class Trade:
 
             self.mum_sayisi = self.mum_sayisi + 1
             self.kaydet()
-            stop_seviyesi=round(stop_seviyesi,9)
+            stop_seviyesi=round(stop_seviyesi,self.araclar.ondalik_basamak_sayisi(close[-1]))
             logging.info(
                 f"DURUM : {periyot} {self.sell_strategy.__name__} {self.alinan_coin} Islem Suresi: {self.mum_sayisi} mum. Diger strategyler {other_strategy_result} Stop-Lose: {stop_seviyesi}|{self.destek} Kar/Zarar: {((close[-1] / self.alim_fiyati) - 1) * 100:.2f}%")
             self.araclar.telegram_mesaj_gonder(f"🔵 DURUM : {periyot} {self.sell_strategy.__name__} {self.alinan_coin} Islem Suresi: {self.mum_sayisi} mum. Diger strategyler {other_strategy_result} Stop-Lose: {stop_seviyesi}|{self.destek} Kar/Zarar: {((close[-1] / self.alim_fiyati) - 1) * 100:.2f}%")
