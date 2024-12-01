@@ -140,7 +140,12 @@ class Trade:
                     succes = False
                     while not succes:
                         try:
-                            if not self.islem_acik and strategy_result[-1] == "BUY" and "BUY" not in strategy_result[-6:-1]:
+                            son_sell_index = 0
+                            for i in range(len(strategy_result) - 1, -1, -1):
+                                if strategy_result[i] == 'SELL':
+                                    son_sell_index = i
+                                    break
+                            if not self.islem_acik and strategy_result[-1] == "BUY" and "BUY" not in strategy_result[son_sell_index:-1]:
                                 sonislem, self.adet = self.buy(coin, periyot, str(strategy.__name__), close, nakit)
                                 self.alinan_coin = coin  # Alınan coin'i kaydet
                                 self.alim_fiyati = close[-1]  # Alım fiyatını kaydet
@@ -158,6 +163,7 @@ class Trade:
         static_stop_lose=False
         destek_stop_lose=True
         stop_seviyesi=-1
+        basamak_sayisi=self.araclar.ondalik_basamak_sayisi(self.alim_fiyati)
         self.araclar.mum_olusmasini_bekle(periyot)
         while self.islem_acik:
             # Veri ithali
@@ -257,8 +263,8 @@ class Trade:
 
             self.mum_sayisi = self.mum_sayisi + 1
             self.kaydet()
-            stop_seviyesi=round(stop_seviyesi,self.araclar.ondalik_basamak_sayisi(close[-1]))
-            yuvarlanmis_destek=round(self.destek,self.araclar.ondalik_basamak_sayisi(close[-1]))
+            stop_seviyesi=round(stop_seviyesi,basamak_sayisi)
+            yuvarlanmis_destek=round(self.destek,basamak_sayisi)
             logging.info(
                 f"DURUM : {periyot} {self.sell_strategy.__name__} {self.alinan_coin} Islem Suresi: {self.mum_sayisi} mum. Diger strategyler {other_strategy_result} Stop-Lose: {stop_seviyesi}|{yuvarlanmis_destek} Kar/Zarar: {((close[-1] / self.alim_fiyati) - 1) * 100:.2f}%")
             self.araclar.telegram_mesaj_gonder(f"🔵 DURUM : {periyot} {self.sell_strategy.__name__} {self.alinan_coin} Islem Suresi: {self.mum_sayisi} mum. Diger strategyler {other_strategy_result} Stop-Lose: {stop_seviyesi}|{yuvarlanmis_destek} Kar/Zarar: {((close[-1] / self.alim_fiyati) - 1) * 100:.2f}%")
