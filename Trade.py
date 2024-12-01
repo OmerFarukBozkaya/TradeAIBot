@@ -145,7 +145,8 @@ class Trade:
                                 if strategy_result[i] == 'SELL':
                                     son_sell_index = i
                                     break
-                            if not self.islem_acik and strategy_result[-1] == "BUY" and "BUY" not in strategy_result[son_sell_index:-1]:
+                            destek,direnc,signal=Stratejiler.destek_stop_lose(close[-1],None,None,close,low)
+                            if not self.islem_acik and strategy_result[-1] == "BUY" and "BUY" not in strategy_result[son_sell_index:-1] and direnc is not None:
                                 sonislem, self.adet = self.buy(coin, periyot, str(strategy.__name__), close, nakit)
                                 self.alinan_coin = coin  # Alınan coin'i kaydet
                                 self.alim_fiyati = close[-1]  # Alım fiyatını kaydet
