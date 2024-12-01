@@ -4,18 +4,16 @@
 SESSION_NAME="Trade"
 # Python script'in tam yolu
 SCRIPT_PATH="./main.py"  # Kendi script dosyanızın yolunu yazın
+# gercek.json dosyasının yolu
+JSON_FILE="gercek.json"
 
 # Tarama ve Trade işlemleri için periyot listeleri
 PERIODS=("15m" "1h" "1d")
 
-# Gerçek dosyasının var olup olmadığını kontrol et
-if [ ! -f gercek.txt ]; then
-    # Dosya yoksa, oluştur ve içine 'False' yaz
-    echo "False" > gercek.txt
+# Gercek.json dosyasının var olup olmadığını kontrol et
+if [ ! -f $JSON_FILE ]; then
+    echo '{"15m":false,"1h":false,"1d":false}' > $JSON_FILE
 fi
-
-# gercek.txt dosyasını okuyarak True/False değerini değişkene atama
-REAL_VALUE=$(cat gercek.txt)
 
 # Yeni bir tmux oturumu başlatın, ilk pencere otomatik olarak atanacak
 tmux new-session -d -s $SESSION_NAME
@@ -24,6 +22,9 @@ tmux new-session -d -s $SESSION_NAME
 for i in "${!PERIODS[@]}"; do
     period="${PERIODS[$i]}"
     window_name="Trade_$period"
+
+    # Periyoda göre gercek.json dosyasından değer çekme
+    REAL_VALUE=$(jq -r --arg period "$period" '.[$period]' $JSON_FILE)
 
     # Yeni bir pencere aç ve Python script'ini çalıştır, girdileri doğrudan <<EOF ile ver
     tmux new-window -t $SESSION_NAME:$((i+1)) -n "$window_name" "python3 $SCRIPT_PATH <<EOF
