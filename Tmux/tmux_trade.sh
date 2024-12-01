@@ -12,7 +12,7 @@ PERIODS=("15m" "1h" "1d")
 
 # Gercek.json dosyasının var olup olmadığını kontrol et
 if [ ! -f $JSON_FILE ]; then
-    echo '{"15m":false,"1h":false,"1d":false}' > $JSON_FILE
+    echo '{"15m":"False","1h":"False","1d":"False"}' > $JSON_FILE
 fi
 
 # Yeni bir tmux oturumu başlatın, ilk pencere otomatik olarak atanacak
