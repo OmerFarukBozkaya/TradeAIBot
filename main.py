@@ -146,6 +146,7 @@ def main ():
         functions = [func for func in dir(Stratejiler) if callable(getattr(Stratejiler, func)) and not func.startswith("__")]
         functions.remove("dinamik_stop_lose")
         functions.remove("static_stop_lose")
+        functions.remove("destek_stop_lose")
         print(functions)
         strategy=input("Strateji adi: ")
         periyot = input("Periyot: ")
