@@ -129,6 +129,7 @@ class Trade:
                 low = data['low']
                 close = data['close']
                 open = data['open']
+                vol = data['volume_usdt']
             except Exception as e:
                 logging.error(f"Veri ithalinde hata oluştu: {e} \n [{periyot}] [{coin}]")
                 continue
@@ -138,7 +139,10 @@ class Trade:
 
             for strategy in strategys[periyot]:
                 with self.global_lock:  # Global kilit kullanarak sadece bir strateji kontrol et
-                    strategy_result = strategy(high[:-1], low[:-1], close[:-1])
+                    if strategy.__name__ == "Alpha_Trend":
+                        strategy_result = strategy(high[:-1], low[:-1], close[:-1], vol[:-1])
+                    else:
+                        strategy_result = strategy(high[:-1], low[:-1], close[:-1])
                     succes = False
                     while not succes:
                         try:
