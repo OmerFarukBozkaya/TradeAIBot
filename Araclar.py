@@ -14,6 +14,8 @@ import json
 import threading
 from Backtest import Backtest
 
+if not os.path.exists('Data'):
+    os.makedirs('Data')
 
 class Araclar:
     def __init__(self , to_email=None):
