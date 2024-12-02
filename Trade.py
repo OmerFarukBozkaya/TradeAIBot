@@ -95,6 +95,8 @@ class Trade:
                 if self.islem_acik:
                     self.satis_sinyali_bekle(periyot)
                     if os.path.exists(f"Trade_Durumu/bitir_{periyot}"):
+                        self.araclar.mail_gonder(f"Trade {periyot} durduruldu","Son işlem kapatıldı ve trade durduruldu")
+                        self.araclar.telegram_mesaj_gonder(f"❌ Trade {periyot} son işlem kapatıldı ve trade durduruldu")
                         exit(0)
                 else:
                     coinlist = self.binance.coin_list()
