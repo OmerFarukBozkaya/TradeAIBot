@@ -290,3 +290,18 @@ class Stratejiler:
             else:
                 signals.append(False)
         return signals
+
+    @staticmethod
+    def Alpha_Trend(high, low, close, vol):
+        signals = []
+        alpha_trend = Indikator.Alpha_Trend(high, low, close, vol, use_volume=True)
+        for i in range(len(close)):
+            if alpha_trend[i] is None or alpha_trend[i - 1] is None or alpha_trend[i - 2] is None:
+                signals.append(None)
+            elif alpha_trend[i] > alpha_trend[i - 2]:
+                signals.append("BUY")
+            elif alpha_trend[i] < alpha_trend[i - 2]:
+                signals.append("SELL")
+            else:
+                signals.append(False)
+        return signals
