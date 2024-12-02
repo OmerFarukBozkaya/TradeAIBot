@@ -179,6 +179,7 @@ class Trade:
                 high = data['high']
                 low = data['low']
                 close = data['close']
+                vol = data['volume_usdt']
             except Exception as e:
                 logging.error(
                     f"Veri ithali sırasında hata: {e} \n [{periyot}] [{self.alinan_coin}] [{self.sell_strategy.__name__}]")
@@ -189,7 +190,10 @@ class Trade:
 
             # Hesaplamalar
             try:
-                sell_strategy_result = self.sell_strategy(high[:-1], low[:-1], close[:-1])[-1]
+                if self.sell_strategy.__name__ == "Alpha_Trend":
+                    sell_strategy_result = self.sell_strategy(high[:-1], low[:-1], close[:-1],vol[:-1])[-1]
+                else:
+                    sell_strategy_result = self.sell_strategy(high[:-1], low[:-1], close[:-1])[-1]
 
                 if destek_stop_lose:
                     self.destek, self.direnc, destek_stop_lose_check = Stratejiler.destek_stop_lose(self.alim_fiyati, self.destek, self.direnc, close, low)
