@@ -44,15 +44,6 @@ Bu proje, kripto paralar ve hisse senetleri üzerinde analiz yaparak otomatik al
 ### 12) Hacime Göre Coinlist Sıralama
 - Belirli periyotlarda hacme göre coinleri sıralar ve yeni bir coin listesi oluşturur.
 
-### 13)Strategys update olusturma
-- Belirli periyotlarda stratejilerin performanslarını analiz eder ve her periyot için 3'er tane seçerek strategys.json oluşturur.
-
-### 14)Strategys.json olustur
-- Elde edilmiş analiz sonuçlarına göre Strategys.json oluşturur.
-
-### 15)Buy veren coinler
-- Seçili periyotta ve strateji de bulunulan mum için buy sinyali veren coinleri listeler.
-
 ## İşlevler
 
 ### a) Trade
@@ -60,16 +51,15 @@ Bu proje, kripto paralar ve hisse senetleri üzerinde analiz yaparak otomatik al
 2. İşlem geçmişini ve periyodik durumlarını loglar.
 3. Kapatılıp açıldığında kaldığı yerden devam eder.
 4. Test amaçlı gerçek dışı işlemler yapabilir.
-5. Alım ve satımları e-posta ve telegram ile bildirir.
+5. Alım ve satımları e-posta ile bildirir.
 6. Hata ile karşılaştığında bildirir ve işlemlere devam eder.
 7. Satış beklerken diğer stratejileri de kontrol eder ve sinyalleri gösterir.
-8. Statik, dinamik ve destek stop-loss ile korunur.
+8. Statik bir stop-loss ile korunur.
 9. Manuel satışlara adapte olur.
 10. İşlemin açık kalma süresini kaydeder.
 11. Kar/Zarar hesaplaması yapar.
 12. Başlangıç bakiyesi üzerinden devam eder.
 13. Yalnızca botun aldığı coinler üzerinde işlem yapar.
-14. Satış sonrası kendini kapatabilir.
 
 ### b) Tarama
 1. Tüm coinleri tarar.
