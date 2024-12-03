@@ -384,10 +384,12 @@ class Araclar:
     @staticmethod
     def coinlist_sira_duzenle(periyot):
         binance = Binance()
-        Araclar.mum_olusmasini_bekle(periyot)
-        coinlist=binance.coin_list()
-        sirali_liste = binance.coins_sorted_by_volume(coinlist,periyot)
-        binance.create_coin_list(sirali_liste)
+        while True:
+            Araclar.mum_olusmasini_bekle(periyot)
+            coinlist=binance.coin_list()
+            sirali_liste = binance.coins_sorted_by_volume(coinlist,periyot)
+            binance.create_coin_list(sirali_liste)
+            time.sleep(10)
 
     def telegram_mesaj_gonder(self,mesaj):
         while True:
