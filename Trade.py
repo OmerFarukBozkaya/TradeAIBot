@@ -258,7 +258,10 @@ class Trade:
             other_strategy_result = []
             try:
                 for strategy in other_strategy:
-                    result = strategy(high[:-1], low[:-1], close[:-1])[-1]
+                    if strategy.__name__ == "Alpha_Trend":
+                        result = strategy(high[:-1], low[:-1], close[:-1], vol[:-1])[-1]
+                    else:
+                        result = strategy(high[:-1], low[:-1], close[:-1])[-1]
                     if result == "BUY":
                         other_strategy_result.append(1)
                     elif result == "SELL":
