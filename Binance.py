@@ -2,35 +2,20 @@ from binance.client import Client       #   pip install python-binance
 import requests
 from requests.adapters import HTTPAdapter
 import concurrent.futures
+import math
+import json
 class Binance:
-    def __init__(self, api_key=None, api_secret=None):
-        """
-        Binance sınıfının yapıcısı. API anahtarı ve gizli anahtarı ile Binance istemcisi başlatır.
-        Eğer anahtarlar None ise settings.txt dosyasından yükler.
-        """
-        if api_key and api_secret:
-            self.key = api_key
-            self.secret = api_secret
-        else:
-            self.key, self.secret = self.load_settings()
-
+    def __init__(self):
+        with open("settings.json","r") as file:
+            data=json.load(file)
+        self.key = data['BINANCE_API_KEY']
+        self.secret = data['BINANCE_API_SECRET']
         self.client = Client(self.key, self.secret)
         self.base_url = "https://api.binance.com"
         self.session = requests.Session()
         adapter = requests.adapters.HTTPAdapter(pool_connections=100, pool_maxsize=300)
         self.session.mount('https://', adapter)
-    def load_settings(self):
-        """
-        API anahtarlarını 'settings.txt' dosyasından okur.
-        Dosyanın her satırı 'key: value' formatında olmalıdır.
-        """
-        setting = []
-        with open("settings.txt", "r") as settings_file:
-            for line in settings_file:
-                line = line.strip().split(":")
-                setting.append(line[1].strip())
 
-        return setting[0], setting[1]
     def sahip_olduklarim(self):
         sahip_olduklarim = {}
         for i in self.client.get_account()["balances"]:
@@ -95,86 +80,18 @@ class Binance:
             del file_coinlist[-1]
         file.close()
         return file_coinlist
-    def minimum_hareket(self,basamak):
-        if (basamak == 1):
-            return 0
-        if (basamak == 0.1):
-            return 1
-        if (basamak == 0.01):
-            return 2
-        if (basamak == 0.001):
-            return 3
-        if (basamak == 0.0001):
-            return 4
-        if (basamak == 0.00001):
-            return 5
-        if (basamak == 0.000001):
-            return 6
+
+    @staticmethod
+    def miktar_duzelt(quantity, min_qty):
+        precision = int(round(-math.log10(min_qty), 0))
+        return math.floor(quantity * (10 ** precision)) / (10 ** precision)
+
     def secili_list(self):
         return ['BTCUSDT','ETHUSDT','BNBUSDT','SOLUSDT','XRPUSDT','DOGEUSDT','TRXUSDT','ADAUSDT',
                 'AVAXUSDT','SHIBUSDT','LINKUSDT','BCHUSDT','DOTUSDT','NEARUSDT','LTCUSDT','UNIUSDT',
                 'ICPUSDT','FETUSDT','ETCUSDT','XLMUSDT','STXUSDT','IMXUSDT','AAVEUSDT','FILUSDT',
                 'HBARUSDT','INJUSDT','VETUSDT','ATOMUSDT','FTMUSDT','RUNEUSDT','GRTUSDT','MINAUSDT',
                 'MANAUSDT','IOTAUSDT','QTUMUSDT','CVCUSDT']
-    def data(self,ad, adet, zaman, mod):
-        """
-        :param ad: Coin Adi (str)
-        :param adet: Cekilecek veri adedi (int)
-        :param zaman: Mum periyodu (str)
-        :param mod: 0=Anlik fiyat 1=Mum kapanisi (int)
-        :return: 0=Acılıs Zamani
-                 1=Acilis
-                 2=En yuksek
-                 3=En dusuk
-                 4=Kapanis
-                 5=Burut Hacim
-                 6=Kapanis Zamani
-                 7=Varlik Hacmi Teklifi
-                 8=Trader Sayisi
-                 9=Alis Hacmi
-                 10=Satis Hacmi
-                 11=Göz Ardi Edilebilir
-        """
-        klines = self.client.get_klines(symbol=ad, limit=adet, interval=zaman)
-
-        opentime = [float(entry[0]) for entry in klines]
-        open = [float(entry[1]) for entry in klines]
-        high = [float(entry[2]) for entry in klines]
-        low = [float(entry[3]) for entry in klines]
-        close = [float(entry[4]) for entry in klines]
-        burutvolume = [float(entry[5]) for entry in klines]
-        closetime = [float(entry[6]) for entry in klines]
-        varlikhacmiteklifi = [float(entry[7]) for entry in klines]
-        tuccarsayisi = [float(entry[8]) for entry in klines]
-        alishacmi = [float(entry[9]) for entry in klines]
-        satishacmi = [float(entry[10]) for entry in klines]
-        gozardiedilebilir = [float(entry[11]) for entry in klines]
-
-        if (mod == 0):
-            return opentime
-        elif (mod == 1):
-            return open
-        elif (mod == 2):
-            return high
-        elif (mod == 3):
-            return low
-        elif (mod == 4):
-            return close
-        elif (mod == 5):
-            return burutvolume
-        elif (mod == 6):
-            return closetime
-        elif (mod == 7):
-            return varlikhacmiteklifi
-        elif (mod == 8):
-            return tuccarsayisi
-        elif (mod == 9):
-            return alishacmi
-        elif (mod == 10):
-            return satishacmi
-        elif (mod == 11):
-            return gozardiedilebilir
-
     def trade_edilebilir_coinler(self):
         url = "https://api.binance.com/api/v3/exchangeInfo"
         response = requests.get(url)
@@ -192,7 +109,7 @@ class Binance:
         else:
             print("İstek başarısız oldu:", response.status_code)
 
-        return result_usdt
+        return {'USDT':result_usdt,'BTC':result_btc}
 
     def get_coin_data(self,coin,periyot,adet):
         data_url = f"/api/v3/klines?symbol={coin}&interval={periyot}&limit={adet}"
@@ -261,8 +178,9 @@ class Binance:
 
         return sirali_coin_isimleri
 
-    def islem_gecmisi_analiz(self):
-        file = open("islem_gecmisi.log","r")
+    @staticmethod
+    def islem_gecmisi_analiz():
+        file = open("Log/islem_gecmisi.log","r")
         gunluk_islem_sonucu={}
         strategy_islem_sonucu={}
         periyot_islem_sonucu={}
@@ -298,13 +216,26 @@ class Binance:
                     strategy_islem_sonucu[periyot][strategy]['adet'] = 0
                     strategy_islem_sonucu[periyot][strategy]['toplam_mum'] = 0
                     strategy_islem_sonucu[periyot][strategy]['ortalama_mum'] = 0
+                    strategy_islem_sonucu[periyot][strategy]['karli_islem']= 0
+                    strategy_islem_sonucu[periyot][strategy]['karli_islem_toplam'] = 0
+                    strategy_islem_sonucu[periyot][strategy]['karli_islem_ortalama'] = 0
+                    strategy_islem_sonucu[periyot][strategy]['zararli_islem']=0
+                    strategy_islem_sonucu[periyot][strategy]['zararli_islem_toplam'] = 0
+                    strategy_islem_sonucu[periyot][strategy]['zararli_islem_ortalama'] = 0
 
                 # Kümülatif olarak yüzdelik artış işlemi
                 strategy_islem_sonucu[periyot][strategy]['sonuc'] += strategy_islem_sonucu[periyot][strategy]['sonuc'] * sonuc / 100
                 strategy_islem_sonucu[periyot][strategy]['adet'] = strategy_islem_sonucu[periyot][strategy]['adet'] + 1
                 strategy_islem_sonucu[periyot][strategy]['toplam_mum'] = strategy_islem_sonucu[periyot][strategy]['toplam_mum'] + mum_sayisi
                 strategy_islem_sonucu[periyot][strategy]['ortalama_mum'] = strategy_islem_sonucu[periyot][strategy]['toplam_mum'] / strategy_islem_sonucu[periyot][strategy]['adet']
-
+                if sonuc <0:
+                    strategy_islem_sonucu[periyot][strategy]['zararli_islem'] = strategy_islem_sonucu[periyot][strategy]['zararli_islem'] + 1
+                    strategy_islem_sonucu[periyot][strategy]['zararli_islem_toplam'] = strategy_islem_sonucu[periyot][strategy]['zararli_islem_toplam'] + sonuc
+                    strategy_islem_sonucu[periyot][strategy]['zararli_islem_ortalama'] = strategy_islem_sonucu[periyot][strategy]['zararli_islem_toplam'] / strategy_islem_sonucu[periyot][strategy]['zararli_islem']
+                else:
+                    strategy_islem_sonucu[periyot][strategy]['karli_islem'] = strategy_islem_sonucu[periyot][strategy]['karli_islem'] + 1
+                    strategy_islem_sonucu[periyot][strategy]['karli_islem_toplam'] = strategy_islem_sonucu[periyot][strategy]['karli_islem_toplam'] + sonuc
+                    strategy_islem_sonucu[periyot][strategy]['karli_islem_ortalama'] = strategy_islem_sonucu[periyot][strategy]['karli_islem_toplam'] / strategy_islem_sonucu[periyot][strategy]['karli_islem']
 
                 if periyot not in periyot_islem_sonucu:
                     periyot_islem_sonucu[periyot]={}
@@ -322,7 +253,7 @@ class Binance:
         print(f"\nStrategy islem sonucu:")
         for i in strategy_islem_sonucu.keys():
             for j in strategy_islem_sonucu[i].keys():
-                print(f"{i} {j}: {(strategy_islem_sonucu[i][j]['sonuc'])-100:.2f}% | {strategy_islem_sonucu[i][j]['adet']} adet islem | {strategy_islem_sonucu[i][j]['ortalama_mum']:.2f} ortalama mum sayisi.")
+                print(f"{i} {j}: {(strategy_islem_sonucu[i][j]['sonuc'])-100:.2f}% | {strategy_islem_sonucu[i][j]['karli_islem']} adet kar. ortalama: {strategy_islem_sonucu[i][j]['karli_islem_ortalama']:.2f}% | {strategy_islem_sonucu[i][j]['zararli_islem']} adet zarar. ortalama: {strategy_islem_sonucu[i][j]['zararli_islem_ortalama']:.2f}% | {strategy_islem_sonucu[i][j]['adet']} adet islem | {strategy_islem_sonucu[i][j]['ortalama_mum']:.2f} ortalama mum sayisi.")
         print(f"\nPeriyot islem sonucu:")
         for i in periyot_islem_sonucu.keys():
             print(f"{i}: {(periyot_islem_sonucu[i]['sonuc'])-100:.2f}% | {periyot_islem_sonucu[i]['adet']} adet islem.")

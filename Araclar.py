@@ -9,32 +9,37 @@ from Indikator import Indikator
 from Stratejiler import Stratejiler
 import pandas as pd
 import os
+import requests
+import json
+import threading
+from Backtest import Backtest
+
+if not os.path.exists('Data'):
+    os.makedirs('Data')
 
 class Araclar:
-    def __init__(self, from_email=None, to_email=None, email_password=None):
-        if from_email and to_email and email_password :
-            self.from_email = from_email  # Nesnenin from_email değeri
-            self.to_email = to_email  # Nesnenin to_email değeri
-            self.email_password = email_password  # Nesnenin şifresi
-        elif(to_email is not None):
+    def __init__(self , to_email=None):
+        with open("settings.json","r") as file:
+            data=json.load(file)
+        self.from_email=data['GONDERICI_EMAIL']
+        self.to_email=data['ALICI_EMAIL']
+        self.email_password=data['GONDERICI_EMAIL_SIFRE']
+        self.telegram_api_token=data['TELEGRAM_API_TOKEN']
+        self.telegram_chat_id=data['TELEGRAM_CHAT_ID']
+        if(to_email is not None):
             self.to_email = to_email
-            self.from_email,self.email_password,self.default_to_email = self.load_settings()
-        else:
-            self.from_email,self.email_password, self.to_email= self.load_settings()
 
-    def load_settings(self):
-        """
-        API anahtarlarını 'settings.txt' dosyasından okur.
-        Dosyanın her satırı 'key: value' formatında olmalıdır.
-        """
-        setting = []
-        with open("settings.txt", "r") as settings_file:
-            for line in settings_file:
-                line = line.strip().split(":")
-                setting.append(line[1].strip())
-
-        return setting[2], setting[3], setting[4]
-
+    @staticmethod
+    def internet_var_mi():
+        try:
+            # Google'a bir istek göndererek internet bağlantısını kontrol ediyoruz
+            response = requests.get("https://www.google.com", timeout=5)
+            # Eğer durum kodu 200 ise bağlantı başarılı
+            if response.status_code == 200:
+                return True
+        except (requests.ConnectionError, requests.Timeout):
+            return False
+        return False
     @staticmethod
     def data_test_olustur(coin,periyot):
         binance = Binance()
@@ -61,29 +66,33 @@ class Araclar:
             for i in low:
                 file.write(f"{i},")
 
-    def mail_gonder(self, baslik, mesaj, bekle=300, smtp_server="smtp.gmail.com", smtp_port=587):
-        try:
-            # E-posta gövdesini oluşturma
-            message = MIMEMultipart()
-            message['From'] = self.from_email  # Nesneye ait from_email kullanılıyor
-            message['To'] = self.to_email  # Nesneye ait to_email kullanılıyor
-            message['Subject'] = baslik
-            message.attach(MIMEText(mesaj, 'plain'))
+    def mail_gonder(self, baslik, mesaj, smtp_server="smtp.gmail.com", smtp_port=587):
+        while True:
+            if not Araclar.internet_var_mi():
+                time.sleep(5)
+                continue
 
-            # SMTP sunucusuna bağlanma
-            server = smtplib.SMTP(smtp_server, smtp_port)
-            server.starttls()  # TLS bağlantısı başlatma
-            server.login(self.from_email, self.email_password)  # Nesneye ait şifre kullanılıyor
+            try:
+                # E-posta gövdesini oluşturma
+                message = MIMEMultipart()
+                message['From'] = self.from_email  # Nesneye ait from_email kullanılıyor
+                message['To'] = self.to_email  # Nesneye ait to_email kullanılıyor
+                message['Subject'] = baslik
+                message.attach(MIMEText(mesaj, 'plain'))
 
-            # E-posta gönderme
-            server.sendmail(self.from_email, self.to_email, message.as_string())
-            server.quit()
-        except Exception as e:
-            # Hata durumunda e-posta gönderimi tekrar denenir
-            hata = traceback.format_exc()
-            print("E-posta gönderilirken bir hata oluştu:", hata)
-            time.sleep(bekle)
-            self.mail_gonder(baslik, mesaj, bekle, smtp_server, smtp_port)  # Recursive olarak tekrar dene
+                # SMTP sunucusuna bağlanma
+                server = smtplib.SMTP(smtp_server, smtp_port)
+                server.starttls()  # TLS bağlantısı başlatma
+                server.login(self.from_email, self.email_password)  # Nesneye ait şifre kullanılıyor
+
+                # E-posta gönderme
+                server.sendmail(self.from_email, self.to_email, message.as_string())
+                server.quit()
+                break
+            except:
+                hata = traceback.format_exc()
+                print("E-posta gönderilirken bir hata oluştu:", hata)
+                continue
 
     @staticmethod
     def saniye_to_hms(seconds):
@@ -179,7 +188,6 @@ class Araclar:
         if time.time() % zaman_dilimleri[periyot] > 10:
             time.sleep(zaman_dilimleri[periyot] - (time.time() % zaman_dilimleri[periyot]))
 
-    @staticmethod
     def strategy_result_analyze(input="Data/strategy_results.xlsx", output_file='Data/strategy_results_analyze.xlsx'):
         # Excel dosyasını oku
         df = pd.read_excel(input)
@@ -189,7 +197,7 @@ class Araclar:
             karlilik_ortalamasi=pd.NamedAgg(column='kümülatif kar zarar (%)', aggfunc='mean'),
             toplam_karli_islem=pd.NamedAgg(column='karlı işlemler', aggfunc='sum'),
             toplam_zararli_islem=pd.NamedAgg(column='zararlı işlemler', aggfunc='sum'),
-            ortalama_islem_sonucu = pd.NamedAgg(column='ortalama işlem sonucu', aggfunc='mean')
+            ortalama_islem_sonucu=pd.NamedAgg(column='ortalama işlem sonucu', aggfunc='mean')
         ).reset_index()
 
         # (Karlı işlemler / Zararlı işlemler) oranını hesapla ve başarılı stratejilere '*' ekle
@@ -199,13 +207,16 @@ class Araclar:
 
         # Her periyot için ayrı pivot tablolar oluştur ve sıralama işlemi yap
         pivot_tables = []
+        result_dict = {}
+
         for period in grouped['periyot'].unique():
             period_group = grouped[grouped['periyot'] == period]
             period_group_sorted = period_group.sort_values('karlilik_ortalamasi', ascending=False)
 
             # Sadece strategy_summary, karlilik_ortalamasi, toplam karlı ve toplam zararlı işlemleri al
             period_summary = period_group_sorted[['strategy_summary', 'karlilik_ortalamasi',
-                                                  'toplam_karli_islem', 'toplam_zararli_islem','ortalama_islem_sonucu']]
+                                                  'toplam_karli_islem', 'toplam_zararli_islem',
+                                                  'ortalama_islem_sonucu']]
             period_summary.index = range(len(period_summary))  # Satırları sıfırdan numaralandır
             period_summary.columns = [f'{period} Strategy', f'{period} Karlilik Ortalaması',
                                       f'{period} Karlı İşlemler',
@@ -213,13 +224,77 @@ class Araclar:
                                       f'{period} Ortalama İşlem Sonucu']  # Sütun adlarını değiştir
             pivot_tables.append(period_summary)
 
+            # JSON için veriyi hazırlama
+            result_dict[period] = period_summary.to_dict(orient='records')
+
         # Tüm pivot tabloları birleştir (eksik değerleri doldurmayacak şekilde)
         final_table = pd.concat(pivot_tables, axis=1, ignore_index=False)
 
-        # Sonucu bir Excel dosyasına yaz
+        # Excel dosyasına kaydet
         final_table.to_excel(output_file, index=False)
 
-        print(f"Sonuçlar {output_file} dosyasına başarıyla kaydedildi.")
+        # JSON dosyasına kaydet
+        json_output_file = output_file.replace(".xlsx", ".json")
+        with open(json_output_file, 'w', encoding='utf-8') as f:
+            json.dump(result_dict, f, indent=4, ensure_ascii=False)
+
+        print(f"Sonuçlar {output_file} ve {json_output_file} dosyalarına başarıyla kaydedildi.")
+
+    @staticmethod
+    def strategy_analyze_save():
+        # Dosya var mı kontrolü
+        if os.path.exists('Data/strategy_results_analyze.json'):
+            with open('Data/strategy_results_analyze.json', 'r') as f:
+                result = json.load(f)  # JSON dosyasını yükle
+                strategys = {}
+
+                # JSON içindeki periyotlara göre işlem
+                for period, data in result.items():
+                    strategies_list = []
+                    # Periyoda göre strateji sayısını belirle
+                    if period == '15m':
+                        num_strategies = 3
+                    elif period == '1h':
+                        num_strategies = 3
+                    elif period == '4h':
+                        num_strategies = 3
+                    elif period == '1d':
+                        num_strategies = 3
+                    else:
+                        num_strategies = 0  # Eğer belirli bir periyot yoksa 0 strateji al
+
+                    # Stratejileri listeye ekle, yalnızca belirli sayıda strateji al
+                    strategies_list = [
+                        strategy[f"{period} Strategy"].replace("*", "")
+                        for strategy in data[:num_strategies]
+                    ]
+
+                    # Stratejileri kaydet
+                    strategys[period] = strategies_list
+
+                # Sonuçları yeni JSON dosyasına yaz
+                with open('Data/strategys.json', 'w') as f:
+                    json.dump(strategys, f, indent=4)
+
+            print("Strateji analizi başarıyla tamamlandı ve stratejiler kaydedildi.")
+        else:
+            print("Hata: 'strategy_results_analyze.json' dosyası bulunamadı.")
+
+    @staticmethod
+    def get_strategys():
+        with open(f'Data/strategys.json', 'r') as f:
+            result = json.load(f)
+            strategys = {}
+            for period in result.keys():
+                function_list = []
+                # Fonksiyon isimlerini globals() ile eşleştir ve diziye ekle
+                for name in result[period]:
+                    if hasattr(Stratejiler, name):  # functions modülünde bu isimde bir fonksiyon var mı?
+                        function_list.append(getattr(Stratejiler, name))
+                    else:
+                        print(f"Fonksiyon tanımlı değil: {name}")
+                strategys[period] = function_list
+        return strategys
 
     @staticmethod
     def listeden_sahip_olduklarimi_cikar(coinlist):
@@ -309,7 +384,78 @@ class Araclar:
     @staticmethod
     def coinlist_sira_duzenle(periyot):
         binance = Binance()
-        Araclar.mum_olusmasini_bekle(periyot)
-        coinlist=binance.coin_list()
-        sirali_liste = binance.coins_sorted_by_volume(coinlist,periyot)
-        binance.create_coin_list(sirali_liste)
+        while True:
+            Araclar.mum_olusmasini_bekle(periyot)
+            coinlist=binance.coin_list()
+            sirali_liste = binance.coins_sorted_by_volume(coinlist,periyot)
+            binance.create_coin_list(sirali_liste)
+            time.sleep(10)
+
+    def telegram_mesaj_gonder(self,mesaj):
+        while True:
+            # Mesaj gönderme URL'si
+            if self.telegram_chat_id is None or self.telegram_api_token is None:
+                break
+            url = f"https://api.telegram.org/bot{self.telegram_api_token}/sendMessage"
+
+            # Mesaj gönderme isteği
+            payload = {
+                "chat_id": self.telegram_chat_id,
+                "text": mesaj
+            }
+            response = requests.post(url, data=payload)
+
+            if response.status_code == 200:
+                break
+            else:
+                print("Mesaj gönderilemedi:", response.text)
+                time.sleep(5)
+                continue
+
+    @staticmethod
+    def update_strategys(periyod):
+        backtest=Backtest()
+        while True:
+            Araclar.mum_olusmasini_bekle(periyod)
+            # Hesaplamalar Yapılıyor
+            backtest.paralel_hesaplama()
+            # Analiz yapılıyor
+            Araclar.strategy_result_analyze()
+            # strategy.json hazırlanıyor
+            Araclar.strategy_analyze_save()
+
+    @staticmethod
+    def stratejinin_buy_verdikleri(strategy_name,periyot):
+        binance = Binance()
+        coinlist = binance.coin_list()
+        strategy = getattr(Stratejiler,strategy_name)
+        sonuc=[]
+        for coin in coinlist:
+            data=binance.get_coin_data(coin,periyot,1000)
+            high=data['high']
+            low=data['low']
+            close=data['close']
+            signal = strategy(high[:-1],low[:-1],close[:-1])
+            if signal[-1]=="BUY" and "BUY" not in signal[-6:-1]:
+                sonuc.append(coin)
+        print(sonuc)
+        return sonuc
+
+    @staticmethod
+    def tekli_analiz(coin, periyot,stop=True,canli_veri=True):
+        result = Backtest.Hesapla(coin, periyot, stop=stop,canli_veri=canli_veri)
+        Backtest.Kayit_Et([result['EXCEL DATA']])
+        Backtest.backtest_islem_gecmisi_analiz(result['ISLEM GECMISI'])
+        Araclar.strategy_result_analyze()
+
+    @staticmethod
+    def ondalik_basamak_sayisi(sayi):
+        # String'e çevir ve noktadan sonrasını al
+        str_sayi = str(sayi)
+        if '.' in str_sayi:
+            return len(str_sayi.split('.')[1])  # Noktadan sonrasının uzunluğu
+        else:
+            return 0  # Eğer nokta yoksa, ondalık basamak yoktur
+
+
+

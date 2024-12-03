@@ -1,13 +1,93 @@
 from Indikator import Indikator
+import pandas as pd
+import numpy as np
 
 class Stratejiler:
-    stop_lose = 0.025
+    static_stop_lose_value = 0.025
+    atr_factor_strong_trend = 2.0
+    atr_factor_weak_trend = 1.2
+    destek_stop_lose_tolerans = 0.01
+    dinamik_stop_lose_tolerans = 0.01
+
     @staticmethod
-    def check_stop_lose(close, buy_price):
-        # Eğer alım fiyatı mevcutsa ve kapanış fiyatı stop-lose sınırının altındaysa "STOP-LOSE" döndür.
-        if buy_price is not None and close[-1] < (buy_price * (1 - Stratejiler.stop_lose)):
+    def dinamik_stop_lose(high, low, close, highest_price):
+        if highest_price is None or close[-1] > highest_price:
+            highest_price = close[-1]
+
+        atr_values = Indikator.ATR(high, low, close)
+        adx_values = Indikator.ADX(high, low, close)
+
+        # Piyasa modu belirleme
+        adx = adx_values[-1]
+        if adx < 20:
+            return None, highest_price, -1  # Yatay piyasada stop çalışmaz
+
+        # ATR çarpanı seçimi
+        if adx > 30:
+            atr_factor = Stratejiler.atr_factor_strong_trend
+        else:
+            atr_factor = Stratejiler.atr_factor_weak_trend
+
+        # Stop seviyesi hesaplama
+        stop_seviyesi = highest_price - (atr_values[-1] * atr_factor)
+
+        if close[-1] < stop_seviyesi * (1-Stratejiler.dinamik_stop_lose_tolerans):
+            return "STOP-LOSE", None, -1
+
+        return None, highest_price, stop_seviyesi
+
+    @staticmethod
+    def static_stop_lose(close, buy_price):
+        if buy_price is not None and close[-1] < (buy_price * (1 - Stratejiler.static_stop_lose_value)):
             return "STOP-LOSE"
         return None
+
+    @staticmethod
+    def destek_stop_lose(buy_price, destek, direnc, close, low, tolerans=1.02):
+        yerel_minimum = []
+        for i in range(1, len(low) - 1):
+            if low[i - 1] > low[i] and low[i] < low[i + 1]:
+                yerel_minimum.append(low[i])
+        yerel_minimum.sort()
+
+        # Destek seviyelerini bulma
+        levels = []
+        temp = []
+        for i in range(len(yerel_minimum) - 1):
+            if len(temp) == 0:
+                temp.append(yerel_minimum[i])
+            if yerel_minimum[i] * tolerans > yerel_minimum[i + 1] and temp[0] * tolerans > yerel_minimum[i]:
+                temp.append(yerel_minimum[i])
+            else:
+                if temp:  # `temp` boş değilse
+                    toplam = sum(temp)
+                    levels.append(toplam / len(temp))  # Ortalamayı ekle
+                else:
+                    levels.append(yerel_minimum[i])
+                temp = []
+
+        # Son kalan temp verilerini ekle
+        if temp:
+            toplam = sum(temp)
+            levels.append(toplam / len(temp))
+
+        if destek is None:
+            for i in range(len(levels)):
+                if i == len(levels) - 1:
+                    return levels[i], None, None
+                if levels[i] < buy_price and levels[i + 1] > buy_price:
+                    return levels[i], levels[i + 1], None
+        elif direnc is not None and close[-1] > direnc:
+            for i in range(len(levels)):
+                if i == len(levels) - 1:
+                    return levels[i], None, None
+                if levels[i] < close[-1] and levels[i + 1] > close[-1]:
+                    return levels[i], levels[i + 1], None
+        elif close[-1] < destek * (1 - Stratejiler.destek_stop_lose_tolerans):
+            return None, None, "STOP-LOSE"
+        else:
+            return destek, direnc, None
+
     @staticmethod
     def MACD(high, low, close):
         # Sonuçları tutmak için liste
@@ -206,6 +286,21 @@ class Stratejiler:
             elif bb_down[i] < close[i] and adx[i] > 30:
                 signals.append("BUY")
             elif bb_up[i-1] < close[i-1] and bb_up[i]>close[i]:
+                signals.append("SELL")
+            else:
+                signals.append(False)
+        return signals
+
+    @staticmethod
+    def Alpha_Trend(high, low, close, vol):
+        signals = []
+        alpha_trend = Indikator.Alpha_Trend(high, low, close, vol, use_volume=True)
+        for i in range(len(close)):
+            if alpha_trend[i] is None or alpha_trend[i - 1] is None or alpha_trend[i - 2] is None:
+                signals.append(None)
+            elif alpha_trend[i] > alpha_trend[i - 2]:
+                signals.append("BUY")
+            elif alpha_trend[i] < alpha_trend[i - 2]:
                 signals.append("SELL")
             else:
                 signals.append(False)
