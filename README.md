@@ -5,7 +5,7 @@ Bu proje, kripto paralar ve hisse senetleri üzerinde analiz yaparak otomatik al
 ## Nasıl Kurulur
 
 1. Projeyi yerel dizine çek ``git clone git@github.com:IcedFire34/TradeAIBot.git``
-2. settings.json dosyasını düzenle.
+2. .env dosyasını oluştur ve gerekli bilgileri gir.
 3. Coinlist oluştur. Bunu ``python main.py`` komutunu çalıştırdıktan sonra ``10``. seçenek ile bunu oluşturabilirsin.
 4. Strategylerin güncel analizini yap. Bunu ``python main.py`` komutunu çalıştırdıktan sonra ``1``. seçenek ile bunu yapabilirsin.
 5. Analiz sonuçlarınından strategys.json oluştur. Bunu ``python main.py`` komutunu çalıştırdıktan sonra ``14``. seçenek ile bunu oluşturabilirsin.
