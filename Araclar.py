@@ -11,21 +11,20 @@ import pandas as pd
 import os
 import requests
 import json
-import threading
 from Backtest import Backtest
+from dotenv import load_dotenv
 
 if not os.path.exists('Data'):
     os.makedirs('Data')
 
 class Araclar:
     def __init__(self , to_email=None):
-        with open("settings.json","r") as file:
-            data=json.load(file)
-        self.from_email=data['GONDERICI_EMAIL']
-        self.to_email=data['ALICI_EMAIL']
-        self.email_password=data['GONDERICI_EMAIL_SIFRE']
-        self.telegram_api_token=data['TELEGRAM_API_TOKEN']
-        self.telegram_chat_id=data['TELEGRAM_CHAT_ID']
+        load_dotenv()
+        self.from_email=os.getenv('GONDERICI_EMAIL')
+        self.to_email=os.getenv('ALICI_EMAIL')
+        self.email_password=os.getenv('GONDERICI_EMAIL_SIFRE')
+        self.telegram_api_token=os.getenv('TELEGRAM_API_TOKEN')
+        self.telegram_chat_id=os.getenv('TELEGRAM_CHAT_ID')
         if(to_email is not None):
             self.to_email = to_email
 

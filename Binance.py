@@ -3,13 +3,14 @@ import requests
 from requests.adapters import HTTPAdapter
 import concurrent.futures
 import math
-import json
+from dotenv import load_dotenv
+import os
+
 class Binance:
     def __init__(self):
-        with open("settings.json","r") as file:
-            data=json.load(file)
-        self.key = data['BINANCE_API_KEY']
-        self.secret = data['BINANCE_API_SECRET']
+        load_dotenv()
+        self.key = os.getenv('BINANCE_API_KEY')
+        self.secret = os.getenv('BINANCE_API_SECRET')
         self.client = Client(self.key, self.secret)
         self.base_url = "https://api.binance.com"
         self.session = requests.Session()
