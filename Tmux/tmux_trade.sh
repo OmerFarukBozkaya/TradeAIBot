@@ -37,14 +37,14 @@ EOF
 done
 
 # Yeni bir pencere oluştur, Strategys
-tmux new-window -t $SESSION_NAME:$((i+1)) -n "Strategys" "python3 $SCRIPT_PATH <<EOF
+tmux new-window -t $SESSION_NAME:$((i+2)) -n "Strategys" "python3 $SCRIPT_PATH <<EOF
 13
 1w
 EOF
     bash"
 
 # Yeni bir pencere oluştur, Coinlist
-tmux new-window -t $SESSION_NAME:$((i+1)) -n "Coinlist" "python3 $SCRIPT_PATH <<EOF
+tmux new-window -t $SESSION_NAME:$((i+3)) -n "Coinlist" "python3 $SCRIPT_PATH <<EOF
 12
 1w
 EOF
