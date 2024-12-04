@@ -5,7 +5,7 @@ Bu proje, kripto paralar ve hisse senetleri üzerinde analiz yaparak otomatik al
 ## Nasıl Kurulur
 
 1. Projeyi yerel dizine çek ``git clone git@github.com:IcedFire34/TradeAIBot.git``
-2. Projenin gereksinimlerini yükle ``pip install -r .\requirements.txt``
+2. Projenin gereksinimlerini yükle ``pip install -r .\requirements.txt`` ``sudo apt-get install jq``
 3. .env dosyasını oluştur ve gerekli bilgileri gir.
 
 ````.env
