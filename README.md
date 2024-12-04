@@ -5,7 +5,8 @@ Bu proje, kripto paralar ve hisse senetleri üzerinde analiz yaparak otomatik al
 ## Nasıl Kurulur
 
 1. Projeyi yerel dizine çek ``git clone git@github.com:IcedFire34/TradeAIBot.git``
-2. .env dosyasını oluştur ve gerekli bilgileri gir.
+2. Projenin gereksinimlerini yükle ``pip install -r .\requirements.txt``
+3. .env dosyasını oluştur ve gerekli bilgileri gir.
 
 ````.env
 BINANCE_API_KEY="<API_KEY>"
@@ -18,10 +19,10 @@ TELEGRAM_API_TOKEN="<TELEGRAM_API_TOKEN>"
 TELEGRAM_CHAT_ID="<TELEGRAM_CHAT_ID>" 
 ````
 
-3. Coinlist oluştur. Bunu ``python main.py`` komutunu çalıştırdıktan sonra ``10``. seçenek ile bunu oluşturabilirsin.
-4. Strategylerin güncel analizini yap. Bunu ``python main.py`` komutunu çalıştırdıktan sonra ``1``. seçenek ile bunu yapabilirsin.
-5. Analiz sonuçlarınından strategys.json oluştur. Bunu ``python main.py`` komutunu çalıştırdıktan sonra ``14``. seçenek ile bunu oluşturabilirsin.
-6. Bu adımların sonunda tüm fonksiyonel özellikleri sorunsuz bir şekilde çalışacaktır.
+4. Coinlist oluştur. Bunu ``python main.py`` komutunu çalıştırdıktan sonra ``10``. seçenek ile bunu oluşturabilirsin.
+5. Strategylerin güncel analizini yap. Bunu ``python main.py`` komutunu çalıştırdıktan sonra ``1``. seçenek ile bunu yapabilirsin.
+6. Analiz sonuçlarınından strategys.json oluştur. Bunu ``python main.py`` komutunu çalıştırdıktan sonra ``14``. seçenek ile bunu oluşturabilirsin.
+7. Bu adımların sonunda tüm fonksiyonel özellikleri sorunsuz bir şekilde çalışacaktır.
 
 ## Menüler
 
