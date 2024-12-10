@@ -30,7 +30,7 @@ def get_ip():
     return None
 
 # IP değiştiğinde mail gönder ve dosyaya yaz
-def kontrol_ve_mail_gonder():
+def kontrol_ve_mesaj_gonder():
     try:
         # Geçerli IP'yi al
         current_ip = get_ip()
@@ -55,7 +55,7 @@ def kontrol_ve_mail_gonder():
                 return
 
             # IP değişmişse mail gönder
-            araclar.mail_gonder("IP Değişti", f"Yeni IP: {current_ip}")
+            araclar.telegram_mesaj_gonder(f"🌐 IP Değişti Yeni IP: {current_ip}")
 
             # Dosyayı güncelle
             with open(path, "w") as dosya_yaz:
@@ -67,7 +67,7 @@ def kontrol_ve_mail_gonder():
 
 def main():
     while True:
-        kontrol_ve_mail_gonder()
+        kontrol_ve_mesaj_gonder()
         time.sleep(60)  # 60 saniye bekle
 
 # Uygulamayı çalıştır
