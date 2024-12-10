@@ -33,6 +33,8 @@ def main ():
     14)Strategys.json olustur
     15)Buy veren coinler
     16)Destek direnc seviyeleri
+    17)Tum pozisyonlari kapat
+    18)Full nakite gec
     """)
     com = input("Ne yapılacak :")
     if com == "0":
@@ -164,6 +166,16 @@ def main ():
         low=data['low']
         destek,direnc,liste=indikator_test.destek_direnc_hesapla(buy_price,low)
         print(f"Destek:{destek}\nDirenc:{direnc}\n{liste}")
+        b=time.time()
+        print(araclar.saniye_to_hms(b-a))
+    elif com == "17":
+        a=time.time()
+        binance.tum_pozisyonlari_kapat()
+        b=time.time()
+        print(araclar.saniye_to_hms(b-a))
+    elif com == "18":
+        a=time.time()
+        binance.full_nakite_gec()
         b=time.time()
         print(araclar.saniye_to_hms(b-a))
 

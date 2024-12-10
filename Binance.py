@@ -1,3 +1,5 @@
+import json
+import traceback
 from binance.client import Client       #   pip install python-binance
 import requests
 from requests.adapters import HTTPAdapter
@@ -20,9 +22,11 @@ class Binance:
     def sahip_olduklarim(self):
         sahip_olduklarim = {}
         for i in self.client.get_account()["balances"]:
-            if ((float(i["free"]) == 0 and float(i["locked"]) == 0) or i["asset"]=="NFT" or i["asset"] == "BUSD" or (
+            if ((float(i["free"]) == 0 and float(i["locked"]) == 0) or i["asset"]=="NFT" or i["asset"] == "BUSD"  or (
                     i["asset"] == "BNB" and (
                     ((float(i["free"]) + float(i["locked"])) * self.get_coin_data("BNBUSDT","4h",1)['close'][-1]) <= 10))):
+                continue
+            elif ((i["asset"] != "USDT" and i["asset"] != "TRY") and (self.get_coin_data(i["asset"]+"USDT","15m",1)["close"][-1] * float(i["free"]) <= 5)):
                 continue
             else:
                 sahip_olduklarim[i["asset"] + "USDT"] = float(i["free"])
@@ -258,3 +262,30 @@ class Binance:
         print(f"\nPeriyot islem sonucu:")
         for i in periyot_islem_sonucu.keys():
             print(f"{i}: {(periyot_islem_sonucu[i]['sonuc'])-100:.2f}% | {periyot_islem_sonucu[i]['adet']} adet islem.")
+
+    def tum_pozisyonlari_kapat(self):
+        klasor="Trade_Durumu"
+        for dosya in os.listdir(klasor):
+            if dosya.endswith(".json"):
+                dosya_yolu=os.path.join(klasor,dosya)
+                try:
+                    with open(dosya_yolu,"w",encoding="utf-8") as json_dosya:
+                        veri=json.load(json_dosya)
+                        if veri["islem_acik"]:
+                            coin=veri["alinan_coin"]
+                            mevcut_adedim = self.sahip_olduklarim()[coin]
+                            minQty = self.get_coin_minQTY(coin)
+                            adet = self.miktar_duzelt(mevcut_adedim, minQty)
+                            self.sat(coin,adet)
+                except:
+                    hata = traceback.format_exc()
+                    print(f"HATA {dosya_yolu} dosyasinda hata {hata}")
+
+    def full_nakite_gec(self):
+        for coin in self.sahip_olduklarim():
+            if coin == "USDTUSDT" or coin == "TRYUSDT":
+                continue
+            mevcut_adedim = self.sahip_olduklarim()[coin]
+            minQty = self.get_coin_minQTY(coin)
+            adet = self.miktar_duzelt(mevcut_adedim, minQty)
+            self.sat(coin, adet)
