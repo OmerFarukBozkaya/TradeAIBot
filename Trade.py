@@ -117,7 +117,6 @@ class Trade:
                             self.araclar.telegram_mesaj_gonder(f"❗ HATA | Trade {periyot} \n {hata}")
                             time.sleep(5)
                 # Mum oluşmasını bekler
-                self.kaydet()
                 if not self.islem_acik:
                     self.araclar.mum_olusmasini_bekle(periyot)
                     time.sleep(10)
@@ -154,11 +153,19 @@ class Trade:
                                     break
                             destek,direnc,signal=Stratejiler.destek_stop_lose(close[-1],None,None,close,low)
                             if not self.islem_acik and strategy_result[-1] == "BUY" and "BUY" not in strategy_result[son_sell_index:-1] and direnc is not None:
-                                sonislem, self.adet = self.buy(coin, periyot, str(strategy.__name__), close, nakit)
+                                strateji_adi = str(strategy.__name__)
+                                self.adet = self.buy(coin, periyot, strateji_adi, close, nakit)
                                 self.alinan_coin = coin  # Alınan coin'i kaydet
                                 self.alim_fiyati = close[-1]  # Alım fiyatını kaydet
                                 self.islem_acik = True  # İşlem açıldı
                                 self.sell_strategy = strategy  # Kullanılan strateji
+                                self.kaydet()
+                                logging.info(f"AL | {coin} alındı, Adet: {self.adet}, Fiyat: {close[-1]}")
+                                islemgecmisi.info(
+                                    f"{strateji_adi} {periyot} AL | {coin} alındı, Adet: {self.adet}, Fiyat: {close[-1]}")
+                                print(f"{strateji_adi} {periyot} AL | {coin} alındı, Adet: {self.adet}, Fiyat: {close[-1]}")
+                                # self.araclar.mail_gonder(f"AL | {strateji_adi} {periyot}",f"{coin} alındı, Adet: {adet}, Maliyet: {close[-1]} USDT")
+                                self.araclar.telegram_mesaj_gonder(f"🟢 AL | {strateji_adi} {periyot}\n{coin} alındı, Adet: {self.adet}, Maliyet: {close[-1]} USDT")
                                 return True  # İşlem açıldı, döngüden çık
                             succes = True
                         except Exception as e:
@@ -258,6 +265,8 @@ class Trade:
                     self.araclar.telegram_mesaj_gonder(f"❗ HATA | Trade {periyot} \n {hata}")
                     continue
 
+            self.mum_sayisi = self.mum_sayisi + 1
+            self.kaydet()
             other_strategy = self.strategys[periyot].copy()
             other_strategy.remove(self.sell_strategy)
             other_strategy_result = []
@@ -281,8 +290,6 @@ class Trade:
                 self.araclar.telegram_mesaj_gonder(f"❗ HATA | Trade {periyot} \n {hata}")
                 continue
 
-            self.mum_sayisi = self.mum_sayisi + 1
-            self.kaydet()
             stop_seviyesi=round(stop_seviyesi,basamak_sayisi)
             yuvarlanmis_destek=round(self.destek,basamak_sayisi)
             logging.info(
@@ -305,13 +312,7 @@ class Trade:
                 #self.araclar.mail_gonder(f"AL(!) | {strateji_adi} {periyot} ",f"Yeterli miktarda nakit yok. Mevcut nakit : {nakit}")
                 self.araclar.telegram_mesaj_gonder(f"❗ AL(!) | Trade {strateji_adi} {periyot} Yeterli miktarda nakit yok. Mevcut nakit :  {nakit}")
 
-        logging.info(f"AL | {coin} alındı, Adet: {adet}, Fiyat: {close[-1]}")
-        islemgecmisi.info(f"{strateji_adi} {periyot} AL | {coin} alındı, Adet: {adet}, Fiyat: {close[-1]}")
-        print(f"{strateji_adi} {periyot} AL | {coin} alındı, Adet: {adet}, Fiyat: {close[-1]}")
-
-        #self.araclar.mail_gonder(f"AL | {strateji_adi} {periyot}",f"{coin} alındı, Adet: {adet}, Maliyet: {close[-1]} USDT")
-        self.araclar.telegram_mesaj_gonder(f"🟢 AL | {strateji_adi} {periyot}\n{coin} alındı, Adet: {adet}, Maliyet: {close[-1]} USDT")
-        return "AL", adet
+        return adet
 
     def sell(self, coin, periyot, close, strateji_adi, buy_price):
         kar_zarar = ((close[-1] / buy_price) - 1) * 100
