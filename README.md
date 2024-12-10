@@ -66,6 +66,24 @@ TELEGRAM_CHAT_ID="<TELEGRAM_CHAT_ID>"
 ### 12) Hacime Göre Coinlist Sıralama
 - Belirli periyotlarda hacme göre coinleri sıralar ve yeni bir coin listesi oluşturur.
 
+### 13) Strategys update olusturma
+- Belirli periyotlarda strategys.json dosyasını analiz ederek günceller.
+
+### 14) Strategys.json olusturma
+- Yapılmış olan analize göre strategys.json dosyası oluşturulur.
+
+### 15) Buy veren coinler
+- İstenilen strategy için bulunulan mum için buy sinyali veren coinleri listeler.
+
+### 16) Destek direnc seviyeleri
+- İstenilen coin için destek ve direnç seviyelerini listeler.
+
+### 17) Tum pozisyonlari kapat
+- TradeAIBot'un açtığı tüm pozisyonları kapatır.
+
+### 18) Full nakite gec
+- Tum coinleri anında satar ve full nakite geçer.
+
 ## İşlevler
 
 ### a) Trade
@@ -73,10 +91,10 @@ TELEGRAM_CHAT_ID="<TELEGRAM_CHAT_ID>"
 2. İşlem geçmişini ve periyodik durumlarını loglar.
 3. Kapatılıp açıldığında kaldığı yerden devam eder.
 4. Test amaçlı gerçek dışı işlemler yapabilir.
-5. Alım ve satımları e-posta ile bildirir.
+5. Alım ve satımları e-posta ve telegramdan bildirir.
 6. Hata ile karşılaştığında bildirir ve işlemlere devam eder.
 7. Satış beklerken diğer stratejileri de kontrol eder ve sinyalleri gösterir.
-8. Statik bir stop-loss ile korunur.
+8. Dinamik bir stop-loss ile korunur.
 9. Manuel satışlara adapte olur.
 10. İşlemin açık kalma süresini kaydeder.
 11. Kar/Zarar hesaplaması yapar.
