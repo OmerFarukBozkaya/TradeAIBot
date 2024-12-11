@@ -8,6 +8,7 @@ import logging
 import threading
 import json
 import os
+from dotenv import load_dotenv
 
 if not os.path.exists('Log'):
     os.makedirs('Log')
@@ -30,6 +31,7 @@ islemgecmisi.propagate = False
 
 class Trade:
     def __init__(self):
+        load_dotenv()
         self.binance = Binance()
         self.araclar = Araclar()
         self.islem_acik = False  # İşlem durumu
@@ -45,6 +47,9 @@ class Trade:
         self.highest_price = None
         self.destek=None
         self.direnc=None
+        self.mail_gonder=os.getenv('MAIL_GONDER')
+        self.telegram_mesaj_gonder=os.getenv('TELEGRAM_MESAJ_GONDER')
+
 
     def kaydet(self):
         durum = {
@@ -95,8 +100,10 @@ class Trade:
                 if self.islem_acik:
                     self.satis_sinyali_bekle(periyot)
                     if os.path.exists(f"Trade_Durumu/bitir_{periyot}"):
-                        #self.araclar.mail_gonder(f"Trade {periyot} durduruldu","Son işlem kapatıldı ve trade durduruldu")
-                        self.araclar.telegram_mesaj_gonder(f"❌ Trade {periyot} son işlem kapatıldı ve trade durduruldu")
+                        if self.mail_gonder=="True":
+                            self.araclar.mail_gonder(f"Trade {periyot} durduruldu","Son işlem kapatıldı ve trade durduruldu")
+                        if self.telegram_mesaj_gonder=="True":
+                            self.araclar.telegram_mesaj_gonder(f"❌ Trade {periyot} son işlem kapatıldı ve trade durduruldu")
                         exit(0)
                 else:
                     coinlist = self.binance.coin_list()
@@ -113,8 +120,10 @@ class Trade:
                         except Exception:
                             hata = traceback.format_exc()
                             logging.error(f"Bir hata olustu: {hata}")
-                            #self.araclar.mail_gonder(f"HATA | Trade {periyot}", f"{hata}")
-                            self.araclar.telegram_mesaj_gonder(f"❗ HATA | Trade {periyot} \n {hata}")
+                            if self.mail_gonder=="True":
+                                self.araclar.mail_gonder(f"HATA | Trade {periyot}", f"{hata}")
+                            if self.telegram_mesaj_gonder=="True":
+                                self.araclar.telegram_mesaj_gonder(f"❗ HATA | Trade {periyot} \n {hata}")
                             time.sleep(5)
                 # Mum oluşmasını bekler
                 if not self.islem_acik:
@@ -164,8 +173,10 @@ class Trade:
                                 islemgecmisi.info(
                                     f"{strateji_adi} {periyot} AL | {coin} alındı, Adet: {self.adet}, Fiyat: {close[-1]}")
                                 print(f"{strateji_adi} {periyot} AL | {coin} alındı, Adet: {self.adet}, Fiyat: {close[-1]}")
-                                # self.araclar.mail_gonder(f"AL | {strateji_adi} {periyot}",f"{coin} alındı, Adet: {adet}, Maliyet: {close[-1]} USDT")
-                                self.araclar.telegram_mesaj_gonder(f"🟢 AL | {strateji_adi} {periyot}\n{coin} alındı, Adet: {self.adet}, Maliyet: {close[-1]} USDT")
+                                if self.mail_gonder=="True":
+                                    self.araclar.mail_gonder(f"AL | {strateji_adi} {periyot}",f"{coin} alındı, Adet: {self.adet}, Maliyet: {close[-1]} USDT")
+                                if self.telegram_mesaj_gonder=="True":
+                                    self.araclar.telegram_mesaj_gonder(f"🟢 AL | {strateji_adi} {periyot}\n{coin} alındı, Adet: {self.adet}, Maliyet: {close[-1]} USDT")
                                 return True  # İşlem açıldı, döngüden çık
                             succes = True
                         except Exception as e:
@@ -193,8 +204,10 @@ class Trade:
                     f"Veri ithali sırasında hata: {e} \n [{periyot}] [{self.alinan_coin}] [{self.sell_strategy.__name__}]")
                 time.sleep(5)
                 hata = traceback.format_exc()
-                #self.araclar.mail_gonder(f"HATA | Trade {periyot}", f"{hata}")
-                self.araclar.telegram_mesaj_gonder(f"❗ HATA | Trade {periyot} \n {hata}")
+                if self.mail_gonder=="True":
+                    self.araclar.mail_gonder(f"HATA | Trade {periyot}", f"{hata}")
+                if self.telegram_mesaj_gonder=="True":
+                    self.araclar.telegram_mesaj_gonder(f"❗ HATA | Trade {periyot} \n {hata}")
                 continue
 
             # Hesaplamalar
@@ -220,8 +233,10 @@ class Trade:
                     f"Satış hesaplama sırasında hata: {e} \n [{periyot}] [{self.alinan_coin}] [{self.sell_strategy.__name__}]")
                 time.sleep(5)
                 hata = traceback.format_exc()
-                #self.araclar.mail_gonder(f"HATA | Trade {periyot}", f"{hata}")
-                self.araclar.telegram_mesaj_gonder(f"❗ HATA | Trade {periyot} \n {hata}")
+                if self.mail_gonder=="True":
+                    self.araclar.mail_gonder(f"HATA | Trade {periyot}", f"{hata}")
+                if self.telegram_mesaj_gonder=="True":
+                    self.araclar.telegram_mesaj_gonder(f"❗ HATA | Trade {periyot} \n {hata}")
                 continue
 
             # İşlemler
@@ -241,8 +256,10 @@ class Trade:
                     logging.error(f"STOP-LOSE işleminde hata: {e} \n [{periyot}] [{self.alinan_coin}]")
                     time.sleep(5)
                     hata = traceback.format_exc()
-                    #self.araclar.mail_gonder(f"HATA | Trade {periyot}", f"{hata}")
-                    self.araclar.telegram_mesaj_gonder(f"❗ HATA | Trade {periyot} \n {hata}")
+                    if self.mail_gonder=="True":
+                        self.araclar.mail_gonder(f"HATA | Trade {periyot}", f"{hata}")
+                    if self.telegram_mesaj_gonder=="True":
+                        self.araclar.telegram_mesaj_gonder(f"❗ HATA | Trade {periyot} \n {hata}")
                     continue
             elif sell_strategy_result == "SELL" or (self.gercek and mevcut_adedim <= minqty):
                 try:
@@ -261,8 +278,10 @@ class Trade:
                         f"Hedef Satış işleminde hata: {e} \n [{periyot}] [{self.alinan_coin}] [{self.sell_strategy.__name__}]")
                     time.sleep(5)
                     hata = traceback.format_exc()
-                    #self.araclar.mail_gonder(f"HATA | Trade {periyot}", f"{hata}")
-                    self.araclar.telegram_mesaj_gonder(f"❗ HATA | Trade {periyot} \n {hata}")
+                    if self.mail_gonder=="True":
+                        self.araclar.mail_gonder(f"HATA | Trade {periyot}", f"{hata}")
+                    if self.telegram_mesaj_gonder=="True":
+                        self.araclar.telegram_mesaj_gonder(f"❗ HATA | Trade {periyot} \n {hata}")
                     continue
 
             self.mum_sayisi = self.mum_sayisi + 1
@@ -286,8 +305,10 @@ class Trade:
                 logging.error(f"Diger stratejilerin sonuclarini hesaplamada hata : {e} ")
                 time.sleep(5)
                 hata = traceback.format_exc()
-                #self.araclar.mail_gonder(f"HATA | Trade {periyot}", f"{hata}")
-                self.araclar.telegram_mesaj_gonder(f"❗ HATA | Trade {periyot} \n {hata}")
+                if self.mail_gonder=="True":
+                    self.araclar.mail_gonder(f"HATA | Trade {periyot}", f"{hata}")
+                if self.telegram_mesaj_gonder=="True":
+                    self.araclar.telegram_mesaj_gonder(f"❗ HATA | Trade {periyot} \n {hata}")
                 continue
 
             stop_seviyesi=round(stop_seviyesi,basamak_sayisi)
@@ -309,8 +330,10 @@ class Trade:
                 self.nakit = round(self.nakit-(adet * close[-1]),2)
             else:
                 print("Yeterli miktarda nakit yok !")
-                #self.araclar.mail_gonder(f"AL(!) | {strateji_adi} {periyot} ",f"Yeterli miktarda nakit yok. Mevcut nakit : {nakit}")
-                self.araclar.telegram_mesaj_gonder(f"❗ AL(!) | Trade {strateji_adi} {periyot} Yeterli miktarda nakit yok. Mevcut nakit :  {nakit}")
+                if self.mail_gonder=="True":
+                    self.araclar.mail_gonder(f"AL(!) | {strateji_adi} {periyot} ",f"Yeterli miktarda nakit yok. Mevcut nakit : {nakit}")
+                if self.telegram_mesaj_gonder=="True":
+                    self.araclar.telegram_mesaj_gonder(f"❗ AL(!) | Trade {strateji_adi} {periyot} Yeterli miktarda nakit yok. Mevcut nakit :  {nakit}")
 
         return adet
 
@@ -331,8 +354,10 @@ class Trade:
             adet = self.binance.miktar_duzelt(mevcut_adedim,minQty)
             self.nakit = round(self.nakit + ((close[-1] * adet)*0.999),2)
             self.binance.sat(coin, adet)
-        #self.araclar.mail_gonder(f"SAT | {strateji_adi} {periyot}",f"{coin} satıldı, Adet: {self.adet}, Fiyat: {close[-1]} Kar/Zarar:{((close[-1] / buy_price) - 1) * 100:.2f}%")
-        self.araclar.telegram_mesaj_gonder(f"🔴 SAT | {strateji_adi} {periyot} \n{coin} satıldı, Adet: {self.adet}, Fiyat: {close[-1]} Kar/Zarar:{((close[-1] / buy_price) - 1) * 100:.2f}%")
+        if self.mail_gonder=="True":
+            self.araclar.mail_gonder(f"SAT | {strateji_adi} {periyot}",f"{coin} satıldı, Adet: {self.adet}, Fiyat: {close[-1]} Kar/Zarar:{((close[-1] / buy_price) - 1) * 100:.2f}%")
+        if self.telegram_mesaj_gonder=="True":
+            self.araclar.telegram_mesaj_gonder(f"🔴 SAT | {strateji_adi} {periyot} \n{coin} satıldı, Adet: {self.adet}, Fiyat: {close[-1]} Kar/Zarar:{((close[-1] / buy_price) - 1) * 100:.2f}%")
         return "SAT"
 
     def stop_lose(self, coin, periyot, close, strateji_adi, buy_price):
@@ -352,6 +377,8 @@ class Trade:
             adet = self.binance.miktar_duzelt(mevcut_adedim,minQty)
             self.nakit = round(self.nakit + ((close[-1] * adet) * 0.999),2)
             self.binance.sat(coin, adet)
-        #self.araclar.mail_gonder(f"SAT [STOP-LOSE] | {strateji_adi} {periyot}",f"{coin} satıldı, Adet: {self.adet}, Fiyat: {close[-1]} Kar/Zarar:{((close[-1] / buy_price) - 1) * 100:.2f}%")
-        self.araclar.telegram_mesaj_gonder(f"🛑 SAT [STOP-LOSE] | {strateji_adi} {periyot} \n{coin} satıldı, Adet: {self.adet}, Fiyat: {close[-1]} Kar/Zarar:{((close[-1] / buy_price) - 1) * 100:.2f}%")
+        if self.mail_gonder=="True":
+            self.araclar.mail_gonder(f"SAT [STOP-LOSE] | {strateji_adi} {periyot}",f"{coin} satıldı, Adet: {self.adet}, Fiyat: {close[-1]} Kar/Zarar:{((close[-1] / buy_price) - 1) * 100:.2f}%")
+        if self.telegram_mesaj_gonder=="True":
+            self.araclar.telegram_mesaj_gonder(f"🛑 SAT [STOP-LOSE] | {strateji_adi} {periyot} \n{coin} satıldı, Adet: {self.adet}, Fiyat: {close[-1]} Kar/Zarar:{((close[-1] / buy_price) - 1) * 100:.2f}%")
         return "SAT"

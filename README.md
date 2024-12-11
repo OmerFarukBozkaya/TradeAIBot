@@ -16,7 +16,9 @@ GONDERICI_EMAIL_SIFRE="<FROM_MAIL_PASS>"
 ALICI_EMAIL="<TO_MAIL>"
 CRYPTOPANIC_TOKEN="<TOKEN>"
 TELEGRAM_API_TOKEN="<TELEGRAM_API_TOKEN>"
-TELEGRAM_CHAT_ID="<TELEGRAM_CHAT_ID>" 
+TELEGRAM_CHAT_ID="<TELEGRAM_CHAT_ID>"
+MAIL_GONDER="True"
+TELEGRAM_MESAJ_GONDER="True"
 ````
 
 4. Coinlist oluştur. Bunu ``python main.py`` komutunu çalıştırdıktan sonra ``10``. seçenek ile bunu oluşturabilirsin.
