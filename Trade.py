@@ -84,11 +84,12 @@ class Trade:
                 self.highest_price = durum['highest_price']
                 self.destek = durum['destek']
                 self.direnc = durum['direnc']
-    def TradeEt(self, periyot, gercek,nakit):
+    def TradeEt(self, periyot, gercek,nakit,temp_trade=False):
         self.gercek = gercek  # Gerçek işlem bilgisi kaydedildi
         self.nakit=nakit
         self.periyot=periyot
-        self.yukle()
+        if not temp_trade:
+            self.yukle()
         logging.info(f"Trade {periyot} Calisiyor ... {gercek}")
         print(f"Trade {periyot} Calisiyor ... {gercek}", time.ctime())
         coinlist=self.binance.coin_list()
@@ -98,7 +99,7 @@ class Trade:
             while True:
                 # Eğer bir işlem zaten açılmışsa, satış sinyali bekle
                 if self.islem_acik:
-                    self.satis_sinyali_bekle(periyot)
+                    self.satis_sinyali_bekle(periyot,temp_trade)
                     if os.path.exists(f"Trade_Durumu/bitir_{periyot}"):
                         if self.mail_gonder=="True":
                             self.araclar.mail_gonder(f"Trade {periyot} durduruldu","Son işlem kapatıldı ve trade durduruldu")
@@ -110,7 +111,7 @@ class Trade:
                     self.strategys = self.araclar.get_strategys()
                     # Sahip olunan coinleri hariç tutarak işlem yapılacak coin listesini güncelle
                     coinlist = self.araclar.listeden_sahip_olduklarimi_cikar(coinlist)
-                    future_to_coin = {executor.submit(self.alim_sinyali_kontrol, coin, periyot, self.strategys,self.nakit): coin
+                    future_to_coin = {executor.submit(self.alim_sinyali_kontrol, coin, periyot, self.strategys,self.nakit,temp_trade): coin
                                       for coin in coinlist}
                     for future in as_completed(future_to_coin):
                         try:
@@ -130,7 +131,7 @@ class Trade:
                     self.araclar.mum_olusmasini_bekle(periyot)
                     time.sleep(10)
 
-    def alim_sinyali_kontrol(self, coin, periyot, strategys,nakit):
+    def alim_sinyali_kontrol(self, coin, periyot, strategys,nakit,temp_trade=False):
         while True:
             try:
                 data = self.binance.get_coin_data(coin, periyot, 1000)
@@ -168,7 +169,8 @@ class Trade:
                                 self.alim_fiyati = close[-1]  # Alım fiyatını kaydet
                                 self.islem_acik = True  # İşlem açıldı
                                 self.sell_strategy = strategy  # Kullanılan strateji
-                                self.kaydet()
+                                if not temp_trade:
+                                    self.kaydet()
                                 logging.info(f"AL | {coin} alındı, Adet: {self.adet}, Fiyat: {close[-1]}")
                                 islemgecmisi.info(
                                     f"{strateji_adi} {periyot} AL | {coin} alındı, Adet: {self.adet}, Fiyat: {close[-1]}")
@@ -184,7 +186,7 @@ class Trade:
                             time.sleep(2)
             return False  # İşlem açılmadı
 
-    def satis_sinyali_bekle(self, periyot):
+    def satis_sinyali_bekle(self, periyot,temp_trade=False):
         dinamik_stop_lose=False
         static_stop_lose=False
         destek_stop_lose=True
@@ -250,7 +252,8 @@ class Trade:
                     self.direnc = None
                     self.highest_price = None
                     self.mum_sayisi = 0
-                    self.kaydet()
+                    if not temp_trade:
+                        self.kaydet()
                     break  # Satış yapıldı, döngüden çık
                 except Exception as e:
                     logging.error(f"STOP-LOSE işleminde hata: {e} \n [{periyot}] [{self.alinan_coin}]")
@@ -271,7 +274,8 @@ class Trade:
                     self.destek=None
                     self.highest_price=None
                     self.mum_sayisi = 0
-                    self.kaydet()
+                    if not temp_trade:
+                        self.kaydet()
                     break  # Satış yapıldı, döngüden çık
                 except Exception as e:
                     logging.error(
@@ -285,7 +289,8 @@ class Trade:
                     continue
 
             self.mum_sayisi = self.mum_sayisi + 1
-            self.kaydet()
+            if not temp_trade:
+                self.kaydet()
             other_strategy = self.strategys[periyot].copy()
             other_strategy.remove(self.sell_strategy)
             other_strategy_result = []

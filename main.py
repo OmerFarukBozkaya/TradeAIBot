@@ -76,8 +76,9 @@ def main ():
         periyot = input("Periyot (15m,1h,4h,1d):")
         gercek = input("Gercek:") == "True"
         nakit = float(input("Nakit:").replace(",", "."))
+        temp_trade = input("Temp Trade:") == "True"
         a = time.time()
-        trade.TradeEt(periyot, gercek, nakit)
+        trade.TradeEt(periyot, gercek, nakit,temp_trade)
         b = time.time()
         print(araclar.saniye_to_hms(b - a))
     elif com == "6":

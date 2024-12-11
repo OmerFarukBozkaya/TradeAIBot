@@ -32,6 +32,7 @@ for i in "${!PERIODS[@]}"; do
 $period
 $REAL_VALUE
 100
+False
 EOF
     bash"
 done
