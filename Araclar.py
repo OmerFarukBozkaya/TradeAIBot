@@ -404,10 +404,12 @@ class Araclar:
     def telegram_mesaj_gonder(self,mesaj):
         while True:
             if not Araclar.internet_var_mi():
+                print("Internet yok. mesaj gonderilemedi !")
                 time.sleep(5)
                 continue
             # Mesaj gönderme URL'si
             if self.telegram_chat_id == "" or self.telegram_api_token == "":
+                print("Gerekli bilgiler eksik")
                 break
             url = f"https://api.telegram.org/bot{self.telegram_api_token}/sendMessage"
 
