@@ -242,29 +242,7 @@ class Trade:
                 continue
 
             # İşlemler
-            if (static_stop_lose and  static_stop_lose_check == "STOP-LOSE") or (dinamik_stop_lose and dinamik_stop_lose_check == "STOP-LOSE") or (destek_stop_lose and destek_stop_lose_check == "STOP-LOSE"):
-                try:
-                    self.stop_lose(self.alinan_coin, periyot, close, str(self.sell_strategy.__name__), self.alim_fiyati)
-                    self.islem_acik = False
-                    self.alinan_coin = None
-                    self.alim_fiyati = None
-                    self.destek = None
-                    self.direnc = None
-                    self.highest_price = None
-                    self.mum_sayisi = 0
-                    if not temp_trade:
-                        self.kaydet()
-                    break  # Satış yapıldı, döngüden çık
-                except Exception as e:
-                    logging.error(f"STOP-LOSE işleminde hata: {e} \n [{periyot}] [{self.alinan_coin}]")
-                    time.sleep(5)
-                    hata = traceback.format_exc()
-                    if self.mail_gonder=="True":
-                        self.araclar.mail_gonder(f"HATA | Trade {periyot}", f"{hata}")
-                    if self.telegram_mesaj_gonder=="True":
-                        self.araclar.telegram_mesaj_gonder(f"❗ HATA | Trade {periyot} \n {e}")
-                    continue
-            elif sell_strategy_result == "SELL" or (self.gercek and mevcut_adedim <= minqty):
+            if sell_strategy_result == "SELL" or (self.gercek and mevcut_adedim <= minqty):
                 try:
                     self.sell(self.alinan_coin, periyot, close, str(self.sell_strategy.__name__), self.alim_fiyati)
                     self.islem_acik = False
@@ -287,7 +265,29 @@ class Trade:
                     if self.telegram_mesaj_gonder=="True":
                         self.araclar.telegram_mesaj_gonder(f"❗ HATA | Trade {periyot} \n {e}")
                     continue
-
+            elif (static_stop_lose and  static_stop_lose_check == "STOP-LOSE") or (dinamik_stop_lose and dinamik_stop_lose_check == "STOP-LOSE") or (destek_stop_lose and destek_stop_lose_check == "STOP-LOSE"):
+                try:
+                    self.stop_lose(self.alinan_coin, periyot, close, str(self.sell_strategy.__name__), self.alim_fiyati)
+                    self.islem_acik = False
+                    self.alinan_coin = None
+                    self.alim_fiyati = None
+                    self.destek = None
+                    self.direnc = None
+                    self.highest_price = None
+                    self.mum_sayisi = 0
+                    if not temp_trade:
+                        self.kaydet()
+                    break  # Satış yapıldı, döngüden çık
+                except Exception as e:
+                    logging.error(f"STOP-LOSE işleminde hata: {e} \n [{periyot}] [{self.alinan_coin}]")
+                    time.sleep(5)
+                    hata = traceback.format_exc()
+                    if self.mail_gonder=="True":
+                        self.araclar.mail_gonder(f"HATA | Trade {periyot}", f"{hata}")
+                    if self.telegram_mesaj_gonder=="True":
+                        self.araclar.telegram_mesaj_gonder(f"❗ HATA | Trade {periyot} \n {e}")
+                    continue
+            
             self.mum_sayisi = self.mum_sayisi + 1
             if not temp_trade:
                 self.kaydet()
