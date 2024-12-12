@@ -118,13 +118,13 @@ class Trade:
                             result = future.result()
                             if result:  # Eğer bir işlem açılmışsa, döngüden çık
                                 break
-                        except Exception:
+                        except Exception as e:
                             hata = traceback.format_exc()
                             logging.error(f"Bir hata olustu: {hata}")
                             if self.mail_gonder=="True":
                                 self.araclar.mail_gonder(f"HATA | Trade {periyot}", f"{hata}")
                             if self.telegram_mesaj_gonder=="True":
-                                self.araclar.telegram_mesaj_gonder(f"❗ HATA | Trade {periyot} \n {hata}")
+                                self.araclar.telegram_mesaj_gonder(f"❗ HATA | Trade {periyot} \n {e}")
                             time.sleep(5)
                 # Mum oluşmasını bekler
                 if not self.islem_acik:
@@ -209,7 +209,7 @@ class Trade:
                 if self.mail_gonder=="True":
                     self.araclar.mail_gonder(f"HATA | Trade {periyot}", f"{hata}")
                 if self.telegram_mesaj_gonder=="True":
-                    self.araclar.telegram_mesaj_gonder(f"❗ HATA | Trade {periyot} \n {hata}")
+                    self.araclar.telegram_mesaj_gonder(f"❗ HATA | Trade {periyot} \n {e}")
                 continue
 
             # Hesaplamalar
@@ -238,7 +238,7 @@ class Trade:
                 if self.mail_gonder=="True":
                     self.araclar.mail_gonder(f"HATA | Trade {periyot}", f"{hata}")
                 if self.telegram_mesaj_gonder=="True":
-                    self.araclar.telegram_mesaj_gonder(f"❗ HATA | Trade {periyot} \n {hata}")
+                    self.araclar.telegram_mesaj_gonder(f"❗ HATA | Trade {periyot} \n {e}")
                 continue
 
             # İşlemler
@@ -262,7 +262,7 @@ class Trade:
                     if self.mail_gonder=="True":
                         self.araclar.mail_gonder(f"HATA | Trade {periyot}", f"{hata}")
                     if self.telegram_mesaj_gonder=="True":
-                        self.araclar.telegram_mesaj_gonder(f"❗ HATA | Trade {periyot} \n {hata}")
+                        self.araclar.telegram_mesaj_gonder(f"❗ HATA | Trade {periyot} \n {e}")
                     continue
             elif sell_strategy_result == "SELL" or (self.gercek and mevcut_adedim <= minqty):
                 try:
@@ -285,7 +285,7 @@ class Trade:
                     if self.mail_gonder=="True":
                         self.araclar.mail_gonder(f"HATA | Trade {periyot}", f"{hata}")
                     if self.telegram_mesaj_gonder=="True":
-                        self.araclar.telegram_mesaj_gonder(f"❗ HATA | Trade {periyot} \n {hata}")
+                        self.araclar.telegram_mesaj_gonder(f"❗ HATA | Trade {periyot} \n {e}")
                     continue
 
             self.mum_sayisi = self.mum_sayisi + 1
@@ -313,7 +313,7 @@ class Trade:
                 if self.mail_gonder=="True":
                     self.araclar.mail_gonder(f"HATA | Trade {periyot}", f"{hata}")
                 if self.telegram_mesaj_gonder=="True":
-                    self.araclar.telegram_mesaj_gonder(f"❗ HATA | Trade {periyot} \n {hata}")
+                    self.araclar.telegram_mesaj_gonder(f"❗ HATA | Trade {periyot} \n {e}")
                 continue
 
             stop_seviyesi=round(stop_seviyesi,basamak_sayisi)
