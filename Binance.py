@@ -269,9 +269,12 @@ class Binance:
             if dosya.endswith(".json"):
                 dosya_yolu=os.path.join(klasor,dosya)
                 try:
-                    with open(dosya_yolu,"w",encoding="utf-8") as json_dosya:
+                    with open(dosya_yolu,"r",encoding="utf-8") as json_dosya:
                         veri=json.load(json_dosya)
                         if veri["islem_acik"]:
+                            # Yeni bir dosya oluştur
+                            with open(f"Trade_Durumu/bitir_{veri['periyot']}", "w") as dosya:
+                                pass  # Şimdilik hiçbir şey yapma, sadece dosyayı oluştur
                             coin=veri["alinan_coin"]
                             mevcut_adedim = self.sahip_olduklarim()[coin]
                             minQty = self.get_coin_minQTY(coin)
