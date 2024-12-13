@@ -425,7 +425,7 @@ class Araclar:
                 response = requests.post(url, data=payload)
 
                 if response.status_code == 200:
-                    print("Mesaj gönderildi.")
+                    pass
                 else:
                     print("Mesaj gönderilemedi:", response.text)
                     time.sleep(5)
