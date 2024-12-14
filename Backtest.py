@@ -6,6 +6,7 @@ import os
 import pandas as pd
 from Binance import Binance
 from StratejilerTest import StratejilerTest
+from Stratejiler import Stratejiler
 from concurrent.futures import ProcessPoolExecutor
 
 class Backtest:
@@ -30,10 +31,12 @@ class Backtest:
                 low[i] = float(low[i])
                 high[i] = float(high[i])
         # Strateji listesi
-        strategies = [StratejilerTest.MACD, StratejilerTest.VMZI, StratejilerTest.VAMA,
-                      StratejilerTest.TSO, StratejilerTest.BB_RSI, StratejilerTest.FDI,
-                      StratejilerTest.BB_Close, StratejilerTest.MA_Cross, StratejilerTest.DMO,
-                      StratejilerTest.BB_ADX,StratejilerTest.Alpha_Trend]
+
+        strategies = [getattr(StratejilerTest, func) for func in dir(Stratejiler)
+                      if callable(getattr(Stratejiler, func))
+                      and not func.startswith("__")
+                      and not getattr(StratejilerTest, func).__name__ in ["dinamik_stop_lose", "static_stop_lose",
+                                                                          "destek_stop_lose"]]
 
         # Excel'e yazılacak veriler için bir liste oluştur
         excel_data = []
@@ -132,8 +135,9 @@ class Backtest:
 
         # Veriyi sıfırdan dosyaya yaz (önceki veriler silinir)
         new_data_df.to_excel(output_file, index=False, engine='openpyxl')
+
     @staticmethod
-    def Grafik_Ciz(coin,periyot,selected_strategy_name=None):
+    def Grafik_Ciz(coin, periyot, selected_strategy_name=None):
         # Veri ithali
         binance = Binance()
         data = binance.get_coin_data(coin, periyot, 1000)
@@ -142,11 +146,11 @@ class Backtest:
         close = data['close']
 
         # Strateji listesi
-        strategies = [StratejilerTest.MACD, StratejilerTest.VMZI, StratejilerTest.VAMA,
-                      StratejilerTest.TSO, StratejilerTest.BB_RSI, StratejilerTest.FDI,
-                      StratejilerTest.BB_Close, StratejilerTest.MA_Cross, StratejilerTest.DMO,
-                      StratejilerTest.BB_ADX
-                      ]
+        strategies = [getattr(StratejilerTest, func) for func in dir(StratejilerTest)
+                      if callable(getattr(StratejilerTest, func))
+                      and not func.startswith("__")
+                      and not getattr(StratejilerTest, func).__name__ in ["dinamik_stop_lose", "static_stop_lose",
+                                                                          "destek_stop_lose", "Alpha_Trend"]]
 
         fig = plt.figure(figsize=(16, 30))
         gs = gridspec.GridSpec(len(strategies) + 1, 2, height_ratios=[2] + [1] * len(strategies))
@@ -264,8 +268,11 @@ class Backtest:
             for sell_point in sell_points:
                 ax1.plot(sell_point, close[sell_point], 'ro', label="Satım Noktası")  # Kırmızı yuvarlak
 
+                # Grafiği PNG olarak kaydet
         plt.tight_layout()
-        plt.show()
+        plt.savefig(f"./Data/{coin}_{periyot}_{selected_strategy_name if selected_strategy_name else 'TümStratejiler'}.png",
+                    dpi=300, bbox_inches='tight')
+        #plt.show()
     @staticmethod
     def hesapla_wrapper(args):
         coin, periyot = args
