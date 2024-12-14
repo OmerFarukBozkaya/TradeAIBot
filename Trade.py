@@ -132,6 +132,7 @@ class Trade:
                     time.sleep(10)
 
     def alim_sinyali_kontrol(self, coin, periyot, strategys,nakit,temp_trade=False):
+        limit=5
         while True:
             try:
                 data = self.binance.get_coin_data(coin, periyot, 1000)
@@ -184,6 +185,13 @@ class Trade:
                         except Exception as e:
                             logging.error(f"Alim sinyali kontrolünde hata oluştu: {e} \n [{strategy.__name__}] [{periyot}] [{coin}]")
                             time.sleep(2)
+                            if limit==0:
+                                logging.error(
+                                    f"Alim sinyali kontrolünde hata oluştu: Deneme limiti asildi cikis yapiliyot {e} \n [{strategy.__name__}] [{periyot}] [{coin}]")
+                                return False
+                            else:
+                                limit=limit-1
+
             return False  # İşlem açılmadı
 
     def satis_sinyali_bekle(self, periyot,temp_trade=False):
