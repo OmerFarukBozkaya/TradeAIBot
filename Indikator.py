@@ -604,7 +604,7 @@ class Indikator:
         grouped_levels = []
         for level in sorted(support_levels):
             if not grouped_levels or abs(level - grouped_levels[-1]) > tolerance * level:
-                grouped_levels.append(level)
+                grouped_levels.append(float(level))
 
         for i in range(len(grouped_levels)):
             if i == len(grouped_levels) - 1:
