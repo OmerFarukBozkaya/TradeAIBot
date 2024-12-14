@@ -5,7 +5,8 @@ Bu proje, kripto paralar ve hisse senetleri üzerinde analiz yaparak otomatik al
 ## Nasıl Kurulur
 
 1. Projeyi yerel dizine çek ``git clone git@github.com:IcedFire34/TradeAIBot.git``
-2. .env dosyasını oluştur ve gerekli bilgileri gir.
+2. Projenin gereksinimlerini yükle ``pip install -r .\requirements.txt`` ``sudo apt-get install jq``
+3. .env dosyasını oluştur ve gerekli bilgileri gir.
 
 ````.env
 BINANCE_API_KEY="<API_KEY>"
@@ -15,13 +16,15 @@ GONDERICI_EMAIL_SIFRE="<FROM_MAIL_PASS>"
 ALICI_EMAIL="<TO_MAIL>"
 CRYPTOPANIC_TOKEN="<TOKEN>"
 TELEGRAM_API_TOKEN="<TELEGRAM_API_TOKEN>"
-TELEGRAM_CHAT_ID="<TELEGRAM_CHAT_ID>" 
+TELEGRAM_CHAT_ID="<TELEGRAM_CHAT_ID>"
+MAIL_GONDER="True"
+TELEGRAM_MESAJ_GONDER="True"
 ````
 
-3. Coinlist oluştur. Bunu ``python main.py`` komutunu çalıştırdıktan sonra ``10``. seçenek ile bunu oluşturabilirsin.
-4. Strategylerin güncel analizini yap. Bunu ``python main.py`` komutunu çalıştırdıktan sonra ``1``. seçenek ile bunu yapabilirsin.
-5. Analiz sonuçlarınından strategys.json oluştur. Bunu ``python main.py`` komutunu çalıştırdıktan sonra ``14``. seçenek ile bunu oluşturabilirsin.
-6. Bu adımların sonunda tüm fonksiyonel özellikleri sorunsuz bir şekilde çalışacaktır.
+4. Coinlist oluştur. Bunu ``python main.py`` komutunu çalıştırdıktan sonra ``10``. seçenek ile bunu oluşturabilirsin.
+5. Strategylerin güncel analizini yap. Bunu ``python main.py`` komutunu çalıştırdıktan sonra ``1``. seçenek ile bunu yapabilirsin.
+6. Analiz sonuçlarınından strategys.json oluştur. Bunu ``python main.py`` komutunu çalıştırdıktan sonra ``14``. seçenek ile bunu oluşturabilirsin.
+7. Bu adımların sonunda tüm fonksiyonel özellikleri sorunsuz bir şekilde çalışacaktır.
 
 ## Menüler
 
@@ -65,6 +68,24 @@ TELEGRAM_CHAT_ID="<TELEGRAM_CHAT_ID>"
 ### 12) Hacime Göre Coinlist Sıralama
 - Belirli periyotlarda hacme göre coinleri sıralar ve yeni bir coin listesi oluşturur.
 
+### 13) Strategys update olusturma
+- Belirli periyotlarda strategys.json dosyasını analiz ederek günceller.
+
+### 14) Strategys.json olusturma
+- Yapılmış olan analize göre strategys.json dosyası oluşturulur.
+
+### 15) Buy veren coinler
+- İstenilen strategy için bulunulan mum için buy sinyali veren coinleri listeler.
+
+### 16) Destek direnc seviyeleri
+- İstenilen coin için destek ve direnç seviyelerini listeler.
+
+### 17) Tum pozisyonlari kapat
+- TradeAIBot'un açtığı tüm pozisyonları kapatır.
+
+### 18) Full nakite gec
+- Tum coinleri anında satar ve full nakite geçer.
+
 ## İşlevler
 
 ### a) Trade
@@ -72,10 +93,10 @@ TELEGRAM_CHAT_ID="<TELEGRAM_CHAT_ID>"
 2. İşlem geçmişini ve periyodik durumlarını loglar.
 3. Kapatılıp açıldığında kaldığı yerden devam eder.
 4. Test amaçlı gerçek dışı işlemler yapabilir.
-5. Alım ve satımları e-posta ile bildirir.
+5. Alım ve satımları e-posta ve telegramdan bildirir.
 6. Hata ile karşılaştığında bildirir ve işlemlere devam eder.
 7. Satış beklerken diğer stratejileri de kontrol eder ve sinyalleri gösterir.
-8. Statik bir stop-loss ile korunur.
+8. Dinamik bir stop-loss ile korunur.
 9. Manuel satışlara adapte olur.
 10. İşlemin açık kalma süresini kaydeder.
 11. Kar/Zarar hesaplaması yapar.

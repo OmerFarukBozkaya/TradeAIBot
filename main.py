@@ -33,6 +33,8 @@ def main ():
     14)Strategys.json olustur
     15)Buy veren coinler
     16)Destek direnc seviyeleri
+    17)Tum pozisyonlari kapat
+    18)Full nakite gec
     """)
     com = input("Ne yapılacak :")
     if com == "0":
@@ -74,8 +76,9 @@ def main ():
         periyot = input("Periyot (15m,1h,4h,1d):")
         gercek = input("Gercek:") == "True"
         nakit = float(input("Nakit:").replace(",", "."))
+        temp_trade = input("Temp Trade:") == "True"
         a = time.time()
-        trade.TradeEt(periyot, gercek, nakit)
+        trade.TradeEt(periyot, gercek, nakit,temp_trade)
         b = time.time()
         print(araclar.saniye_to_hms(b - a))
     elif com == "6":
@@ -164,6 +167,16 @@ def main ():
         low=data['low']
         destek,direnc,liste=indikator_test.destek_direnc_hesapla(buy_price,low)
         print(f"Destek:{destek}\nDirenc:{direnc}\n{liste}")
+        b=time.time()
+        print(araclar.saniye_to_hms(b-a))
+    elif com == "17":
+        a=time.time()
+        binance.tum_pozisyonlari_kapat()
+        b=time.time()
+        print(araclar.saniye_to_hms(b-a))
+    elif com == "18":
+        a=time.time()
+        binance.full_nakite_gec()
         b=time.time()
         print(araclar.saniye_to_hms(b-a))
 

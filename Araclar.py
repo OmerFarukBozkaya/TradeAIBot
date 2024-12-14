@@ -401,26 +401,38 @@ class Araclar:
             binance.create_coin_list(sirali_liste)
             time.sleep(10)
 
-    def telegram_mesaj_gonder(self,mesaj):
+    def telegram_mesaj_gonder(self, mesaj):
+        max_length = 4096  # Telegram'ın maksimum mesaj uzunluğu sınırı
         while True:
-            # Mesaj gönderme URL'si
-            if self.telegram_chat_id is None or self.telegram_api_token is None:
-                break
-            url = f"https://api.telegram.org/bot{self.telegram_api_token}/sendMessage"
-
-            # Mesaj gönderme isteği
-            payload = {
-                "chat_id": self.telegram_chat_id,
-                "text": mesaj
-            }
-            response = requests.post(url, data=payload)
-
-            if response.status_code == 200:
-                break
-            else:
-                print("Mesaj gönderilemedi:", response.text)
+            if not self.internet_var_mi():
+                print("Internet yok. Mesaj gönderilemedi!")
                 time.sleep(5)
                 continue
+
+            if self.telegram_chat_id == "" or self.telegram_api_token == "":
+                print("Gerekli bilgiler eksik")
+                break
+
+            # Mesajı parçalar halinde gönderme
+            for i in range(0, len(mesaj), max_length):
+                chunk = mesaj[i:i + max_length]
+                url = f"https://api.telegram.org/bot{self.telegram_api_token}/sendMessage"
+                payload = {
+                    "chat_id": self.telegram_chat_id,
+                    "text": chunk
+                }
+
+                response = requests.post(url, data=payload)
+
+                if response.status_code == 200:
+                    pass
+                else:
+                    print("Mesaj gönderilemedi:", response.text)
+                    time.sleep(5)
+                    continue
+
+            # Tüm parçalar gönderildikten sonra döngüden çık
+            break
 
     @staticmethod
     def update_strategys(periyod):
