@@ -151,9 +151,9 @@ class Trade:
             for strategy in strategys[periyot]:
                 with self.global_lock:  # Global kilit kullanarak sadece bir strateji kontrol et
                     if strategy.__name__ == "Alpha_Trend":
-                        strategy_result = strategy(high[:-1], low[:-1], close[:-1], vol[:-1])
+                        strategy_result = strategy(high, low, close, vol)
                     else:
-                        strategy_result = strategy(high[:-1], low[:-1], close[:-1])
+                        strategy_result = strategy(high, low, close)
                     succes = False
                     while not succes:
                         try:
@@ -163,7 +163,7 @@ class Trade:
                                     son_sell_index = i
                                     break
                             destek,direnc,signal=Stratejiler.destek_stop_lose(close[-1],None,None,close,low)
-                            if not self.islem_acik and strategy_result[-1] == "BUY" and "BUY" not in strategy_result[son_sell_index:-1] and direnc is not None:
+                            if (not self.islem_acik) and (strategy_result[-2] == "BUY") and ("BUY" not in strategy_result[son_sell_index:-2]) and (direnc is not None):
                                 strateji_adi = str(strategy.__name__)
                                 self.adet = self.buy(coin, periyot, strateji_adi, close, nakit)
                                 self.alinan_coin = coin  # Alınan coin'i kaydet
@@ -223,9 +223,9 @@ class Trade:
             # Hesaplamalar
             try:
                 if self.sell_strategy.__name__ == "Alpha_Trend":
-                    sell_strategy_result = self.sell_strategy(high[:-1], low[:-1], close[:-1],vol[:-1])[-1]
+                    sell_strategy_result = self.sell_strategy(high, low, close,vol)[-2]
                 else:
-                    sell_strategy_result = self.sell_strategy(high[:-1], low[:-1], close[:-1])[-1]
+                    sell_strategy_result = self.sell_strategy(high, low, close)[-2]
 
                 if destek_stop_lose:
                     self.destek, self.direnc, destek_stop_lose_check = Stratejiler.destek_stop_lose(self.alim_fiyati, self.destek, self.direnc, close, low)
