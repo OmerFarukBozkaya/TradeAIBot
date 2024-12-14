@@ -6,7 +6,9 @@ from Araclar import Araclar
 from Trade import Trade
 import time
 from raspi_status import raspi_status
+from Indikator import Indikator
 from Stratejiler import Stratejiler
+from StratejilerTest import StratejilerTest
 
 def main ():
     binance = Binance()
@@ -58,11 +60,17 @@ def main ():
     elif com == "3":
         periyot = input("Periyot (15m,1h,4h,1d):")
         coin = input("Coin:")
+        functions = [func for func in dir(StratejilerTest) if
+                     callable(getattr(Stratejiler, func)) and not func.startswith("__")]
+        functions.remove("dinamik_stop_lose")
+        functions.remove("static_stop_lose")
+        functions.remove("destek_stop_lose")
+        print(functions)
         select_strategy = input("Gösterilecek strategy:")
         a = time.time()
         if select_strategy == "":
             select_strategy = None
-        backtest.Test(canli_veriler=True, periyot=periyot, coin=coin, selected_strategy_name=select_strategy)
+        backtest.Grafik_Ciz(coin=coin, periyot=periyot,selected_strategy_name=select_strategy)
         b = time.time()
         print(araclar.saniye_to_hms(b - a))
     elif com == "4":
@@ -160,12 +168,12 @@ def main ():
         a=time.time()
         coin=input("Coin:")
         periyot=input("Periyot:")
-        buy_price=input("Buy price:")
+        buy_price=float(input("Buy price:"))
         data=binance.get_coin_data(coin,periyot,1000)
         if buy_price=="":
             buy_price=data['close'][-1]
         low=data['low']
-        destek,direnc,liste=indikator_test.destek_direnc_hesapla(buy_price,low)
+        destek,direnc,liste=Indikator.destek_direnc_hesapla(buy_price,low)
         print(f"Destek:{destek}\nDirenc:{direnc}\n{liste}")
         b=time.time()
         print(araclar.saniye_to_hms(b-a))
