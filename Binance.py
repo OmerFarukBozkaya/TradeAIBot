@@ -7,10 +7,18 @@ import concurrent.futures
 import math
 from dotenv import load_dotenv
 import os
+from glob import glob
 
 class Binance:
     def __init__(self):
-        load_dotenv()
+        env_files = glob(".env*")
+        if env_files:
+            # İlk bulunan dosyayı seç
+            selected_env_file = env_files[0]
+            # Seçilen dosyayı yükle
+            load_dotenv(selected_env_file)
+        else:
+            print(".env ile başlayan bir dosya bulunamadı.")
         self.key = os.getenv('BINANCE_API_KEY')
         self.secret = os.getenv('BINANCE_API_SECRET')
         self.client = Client(self.key, self.secret)

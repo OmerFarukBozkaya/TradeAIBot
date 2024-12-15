@@ -13,13 +13,21 @@ import requests
 import json
 from Backtest import Backtest
 from dotenv import load_dotenv
+from glob import glob
 
 if not os.path.exists('Data'):
     os.makedirs('Data')
 
 class Araclar:
     def __init__(self , to_email=None):
-        load_dotenv()
+        env_files = glob(".env*")
+        if env_files:
+            # İlk bulunan dosyayı seç
+            selected_env_file = env_files[0]
+            # Seçilen dosyayı yükle
+            load_dotenv(selected_env_file)
+        else:
+            print(".env ile başlayan bir dosya bulunamadı.")
         self.from_email=os.getenv('GONDERICI_EMAIL')
         self.to_email=os.getenv('ALICI_EMAIL')
         self.email_password=os.getenv('GONDERICI_EMAIL_SIFRE')
