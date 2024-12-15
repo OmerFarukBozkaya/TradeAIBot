@@ -253,20 +253,23 @@ class Araclar:
                     # Periyoda göre strateji sayısını belirle
                     if period == '15m':
                         num_strategies = 3
+                        limit=7
                     elif period == '1h':
                         num_strategies = 3
+                        limit=15
                     elif period == '4h':
                         num_strategies = 3
+                        limit=15
                     elif period == '1d':
                         num_strategies = 3
+                        limit=70
                     else:
                         num_strategies = 0  # Eğer belirli bir periyot yoksa 0 strateji al
 
                     # Stratejileri listeye ekle, yalnızca belirli sayıda strateji al
-                    strategies_list = [
-                        strategy[f"{period} Strategy"].replace("*", "")
-                        for strategy in data[:num_strategies]
-                    ]
+                    for strategy in data[:num_strategies]:
+                        if strategy[f"{period} Karlilik Ortalaması"] > limit:
+                            strategies_list.append(strategy[f"{period} Strategy"].replace("*", ""))
 
                     # Stratejileri kaydet
                     strategys[period] = strategies_list
@@ -478,6 +481,21 @@ class Araclar:
             return len(str_sayi.split('.')[1])  # Noktadan sonrasının uzunluğu
         else:
             return 0  # Eğer nokta yoksa, ondalık basamak yoktur
+
+    @staticmethod
+    def strategys_update_check(periyod,limit):
+        if os.path.exists('Data/strategy_results_analyze.json'):
+            with open('Data/strategy_results_analyze.json', 'r',encoding="utf-8") as f:
+                result = json.load(f)  # JSON dosyasını yükle
+                # JSON içindeki periyotlara göre işlem
+                for period, data in result.items():
+                    # Periyoda göre strateji sayısını belirle
+                    if period == periyod:
+                        for strategy in data[:3]:
+                            if strategy[f"{period} Karlilik Ortalaması"] < limit:
+                                return False
+                        return True
+        return None
 
 
 
