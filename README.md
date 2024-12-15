@@ -25,7 +25,27 @@ TELEGRAM_MESAJ_GONDER="True"
 5. Strategylerin güncel analizini yap. Bunu ``python main.py`` komutunu çalıştırdıktan sonra ``1``. seçenek ile bunu yapabilirsin.
 6. Analiz sonuçlarınından strategys.json oluştur. Bunu ``python main.py`` komutunu çalıştırdıktan sonra ``14``. seçenek ile bunu oluşturabilirsin.
 7. Bu adımların sonunda tüm fonksiyonel özellikleri sorunsuz bir şekilde çalışacaktır.
+8. Servis oluşturmak için aşağıdaki kodlari ``nano /etc/systemd/system/trade.service`` bu konumdaki dosyaya yaz.
 
+````.service
+[Unit]
+Description=Trade false icin tmux baslatan script
+After=multi-user.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+User=nihat
+ExecStart=/bin/bash -c 'tmux new-session -d -s Trade "/bin/bash /home/nihat/Trade>
+WorkingDirectory=/home/nihat/TradeAIBot
+
+[Install]
+WantedBy=multi-user.target
+````
+9. Tmux'un çalışabilmesi için ``chmod +x Tmux/tmux_trade.sh`` komutunu çalıştır.
+10. ``sudo systemctl daemon-reload`` daha sonrasında bu komutu çalıştır.
+11. Servisi entkinleştirmek için ``sudo systemctl enable trade.service`` bu komutu çalıştır.
+12. Servisi başlatmak için ``sudo systemctl start trade.service`` bu komutu çalıştır.
 ## Menüler
 
 ### 0) Veri Seti Oluştur
