@@ -257,7 +257,19 @@ class Trade:
                 continue
 
             # İşlemler
-            if sell_strategy_result == "SELL" or (self.gercek and mevcut_adedim <= minqty):
+            if self.gercek and mevcut_adedim <= minqty:
+                self.manul_sell(self.alinan_coin, periyot, close, str(self.sell_strategy.__name__), self.alim_fiyati)
+                self.islem_acik = False
+                self.alinan_coin = None
+                self.alim_fiyati = None
+                self.direnc = None
+                self.destek = None
+                self.highest_price = None
+                self.mum_sayisi = 0
+                if not temp_trade:
+                    self.kaydet()
+                break  # Satış yapıldı, döngüden çık
+            elif sell_strategy_result == "SELL":
                 try:
                     self.sell(self.alinan_coin, periyot, close, str(self.sell_strategy.__name__), self.alim_fiyati)
                     self.islem_acik = False
@@ -401,4 +413,24 @@ class Trade:
             self.araclar.mail_gonder(f"SAT [STOP-LOSE] | {strateji_adi} {periyot}",f"{coin} satıldı, Adet: {self.adet}, Fiyat: {close[-1]} Kar/Zarar:{((close[-1] / buy_price) - 1) * 100:.2f}%")
         if self.telegram_mesaj_gonder=="True":
             self.araclar.telegram_mesaj_gonder(f"🛑 SAT [STOP-LOSE] | {strateji_adi} {periyot} \n{coin} satıldı, Adet: {self.adet}, Fiyat: {close[-1]} Kar/Zarar:{((close[-1] / buy_price) - 1) * 100:.2f}%")
+        return "SAT"
+
+    def manul_sell(self, coin, periyot, close, strateji_adi, buy_price):
+        kar_zarar = ((close[-1] / buy_price) - 1) * 100
+        self.mum_sayisi = self.mum_sayisi + 1
+        logging.info(f"SAT [MANUEL] {strateji_adi} {periyot}| {coin} satıldı, Adet: {self.adet}, Fiyat: {close[-1]}")
+        islemgecmisi.info(
+            f"{strateji_adi} {periyot} SAT [MANUEL] | {coin} satıldı, Mum sayisi : {self.mum_sayisi} Adet: {self.adet}, Fiyat: {close[-1]} Kar/Zarar: {kar_zarar:.2f}%"
+        )
+        print(
+            f"{strateji_adi} {periyot} SAT [MANUEL] | {coin} satıldı, Mum sayisi : {self.mum_sayisi} Adet: {self.adet}, Fiyat: {close[-1]} Kar/Zarar: {kar_zarar:.2f}%"
+        )
+
+        if self.mail_gonder == "True":
+            self.araclar.mail_gonder(f"SAT [MANUEL] | {strateji_adi} {periyot}",
+                                     f"{coin} satıldı, Adet: {self.adet}, Fiyat: {close[-1]} Kar/Zarar:{((close[-1] / buy_price) - 1) * 100:.2f}%")
+        if self.telegram_mesaj_gonder == "True":
+            self.araclar.telegram_mesaj_gonder(
+                f"🛑 SAT [MANUEL] | {strateji_adi} {periyot} \n{coin} satıldı, Adet: {self.adet}, Fiyat: {close[-1]} Kar/Zarar:{((close[-1] / buy_price) - 1) * 100:.2f}%")
+
         return "SAT"
