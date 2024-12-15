@@ -109,27 +109,32 @@ class Trade:
                 else:
                     coinlist = self.binance.coin_list()
                     self.strategys = self.araclar.get_strategys()
-                    # Sahip olunan coinleri hariç tutarak işlem yapılacak coin listesini güncelle
-                    coinlist = self.araclar.listeden_sahip_olduklarimi_cikar(coinlist)
-                    future_to_coin = {executor.submit(self.alim_sinyali_kontrol, coin, periyot, self.strategys,self.nakit,temp_trade): coin
-                                      for coin in coinlist}
-                    for future in as_completed(future_to_coin):
-                        try:
-                            result = future.result()
-                            if result:  # Eğer bir işlem açılmışsa, döngüden çık
-                                break
-                        except Exception as e:
-                            hata = traceback.format_exc()
-                            logging.error(f"Bir hata olustu: {hata}")
-                            if self.mail_gonder=="True":
-                                self.araclar.mail_gonder(f"HATA | Trade {periyot}", f"{hata}")
-                            if self.telegram_mesaj_gonder=="True":
-                                self.araclar.telegram_mesaj_gonder(f"❗ HATA | Trade {periyot} \n {e}")
-                            time.sleep(5)
+                    if len(self.strategys)>0:
+                        # Sahip olunan coinleri hariç tutarak işlem yapılacak coin listesini güncelle
+                        coinlist = self.araclar.listeden_sahip_olduklarimi_cikar(coinlist)
+                        future_to_coin = {
+                            executor.submit(self.alim_sinyali_kontrol, coin, periyot, self.strategys, self.nakit,
+                                            temp_trade): coin
+                            for coin in coinlist}
+                        for future in as_completed(future_to_coin):
+                            try:
+                                result = future.result()
+                                if result:  # Eğer bir işlem açılmışsa, döngüden çık
+                                    break
+                            except Exception as e:
+                                hata = traceback.format_exc()
+                                logging.error(f"Bir hata olustu: {hata}")
+                                if self.mail_gonder == "True":
+                                    self.araclar.mail_gonder(f"HATA | Trade {periyot}", f"{hata}")
+                                if self.telegram_mesaj_gonder == "True":
+                                    self.araclar.telegram_mesaj_gonder(f"❗ HATA | Trade {periyot} \n {e}")
+                                time.sleep(5)
+                    
                 # Mum oluşmasını bekler
                 if not self.islem_acik:
-                    self.araclar.mum_olusmasini_bekle(periyot)
                     time.sleep(10)
+                    self.araclar.mum_olusmasini_bekle(periyot)
+
 
     def alim_sinyali_kontrol(self, coin, periyot, strategys,nakit,temp_trade=False):
         limit=5
