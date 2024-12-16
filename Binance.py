@@ -1,4 +1,5 @@
 import json
+import time
 import traceback
 from binance.client import Client       #   pip install python-binance
 import requests
@@ -8,6 +9,7 @@ import math
 from dotenv import load_dotenv
 import os
 from glob import glob
+
 
 class Binance:
     def __init__(self):
@@ -21,7 +23,11 @@ class Binance:
             print(".env ile başlayan bir dosya bulunamadı.")
         self.key = os.getenv('BINANCE_API_KEY')
         self.secret = os.getenv('BINANCE_API_SECRET')
-        self.client = Client(self.key, self.secret)
+        while True:
+            if Binance.internet_var_mi():
+                self.client = Client(self.key, self.secret)
+                break
+            time.sleep(10)
         self.base_url = "https://api.binance.com"
         self.session = requests.Session()
         adapter = requests.adapters.HTTPAdapter(pool_connections=100, pool_maxsize=300)
@@ -39,6 +45,18 @@ class Binance:
             else:
                 sahip_olduklarim[i["asset"] + "USDT"] = float(i["free"])
         return sahip_olduklarim
+
+    @staticmethod
+    def internet_var_mi():
+        try:
+            # Google'a bir istek göndererek internet bağlantısını kontrol ediyoruz
+            response = requests.get("https://www.google.com", timeout=5)
+            # Eğer durum kodu 200 ise bağlantı başarılı
+            if response.status_code == 200:
+                return True
+        except (requests.ConnectionError, requests.Timeout):
+            return False
+        return False
     def al(self, coin, adet):
         order = self.client.order_market_buy(symbol=coin, quantity=adet)
     def sat(self, coin, adet):
