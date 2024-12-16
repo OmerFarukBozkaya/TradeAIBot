@@ -10,6 +10,7 @@ import json
 import os
 from dotenv import load_dotenv
 from Indikator import Indikator
+from glob import glob
 
 if not os.path.exists('Log'):
     os.makedirs('Log')
@@ -32,7 +33,14 @@ islemgecmisi.propagate = False
 
 class Trade:
     def __init__(self):
-        load_dotenv()
+        env_files = glob(".env*")
+        if env_files:
+            # İlk bulunan dosyayı seç
+            selected_env_file = env_files[0]
+            # Seçilen dosyayı yükle
+            load_dotenv(selected_env_file)
+        else:
+            print(".env ile başlayan bir dosya bulunamadı.")
         self.binance = Binance()
         self.araclar = Araclar()
         self.islem_acik = False  # İşlem durumu
