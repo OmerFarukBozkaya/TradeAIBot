@@ -172,13 +172,14 @@ class Trade:
                     while not succes:
                         try:
                             ma_50 = Indikator.SMA(close,50)
+                            bb_down,bb_mid,bb_up = Indikator.BB(close)
                             son_sell_index = 0
                             for i in range(len(strategy_result) - 1, -1, -1):
                                 if strategy_result[i] == 'SELL':
                                     son_sell_index = i
                                     break
                             destek,direnc,signal=Stratejiler.destek_stop_lose(close[-1],None,None,close,low)
-                            if (not self.islem_acik) and (strategy_result[-2] == "BUY") and ("BUY" not in strategy_result[son_sell_index:-2]) and (direnc is not None) and (ma_50[-1] is not None and close[-1] > ma_50[-1]):
+                            if (not self.islem_acik) and (strategy_result[-2] == "BUY") and ("BUY" not in strategy_result[son_sell_index:-2]) and (direnc is not None) and (ma_50[-1] is not None and close[-1] > ma_50[-1]) and (bb_mid[-1] is not None and close[-1]<bb_mid[-1]):
                                 strateji_adi = str(strategy.__name__)
                                 self.adet = self.buy(coin, periyot, strateji_adi, close, nakit)
                                 self.alinan_coin = coin  # Alınan coin'i kaydet
