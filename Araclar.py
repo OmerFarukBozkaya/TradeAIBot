@@ -251,7 +251,7 @@ class Araclar:
     def strategy_analyze_save():
         # Dosya var mı kontrolü
         if os.path.exists('Data/strategy_results_analyze.json'):
-            with open('Data/strategy_results_analyze.json', 'r') as f:
+            with open('Data/strategy_results_analyze.json', 'r',encoding="utf-8") as f:
                 result = json.load(f)  # JSON dosyasını yükle
                 strategys = {}
 
