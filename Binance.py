@@ -228,16 +228,31 @@ class Binance:
                 mum_sayisi = float(line[-7])
                 if tarih not in gunluk_islem_sonucu:
                     gunluk_islem_sonucu[tarih]={}
-                    gunluk_islem_sonucu[tarih]['sonuc'] = 100  # Başlangıç değeri ekliyoruz
-                    gunluk_islem_sonucu[tarih]['adet'] = 0
-                    gunluk_islem_sonucu[tarih]['stop_adet'] = 0
+                if periyot not in gunluk_islem_sonucu[tarih]:
+                    gunluk_islem_sonucu[tarih][periyot] = {}
+                if strategy not in gunluk_islem_sonucu[tarih][periyot]:
+                    gunluk_islem_sonucu[tarih][periyot][strategy]= {}
+                    gunluk_islem_sonucu[tarih][periyot][strategy]['sonuc'] = 100
+                    gunluk_islem_sonucu[tarih][periyot][strategy]['adet'] = 0
+                    gunluk_islem_sonucu[tarih][periyot][strategy]['toplam_mum'] = 0
+                    gunluk_islem_sonucu[tarih][periyot][strategy]['ortalama_mum'] = 0
+                    gunluk_islem_sonucu[tarih][periyot][strategy]['karli_islem'] = 0
+                    gunluk_islem_sonucu[tarih][periyot][strategy]['karli_islem_toplam'] = 0
+                    gunluk_islem_sonucu[tarih][periyot][strategy]['karli_islem_ortalama'] = 0
+                    gunluk_islem_sonucu[tarih][periyot][strategy]['zararli_islem'] = 0
+                    gunluk_islem_sonucu[tarih][periyot][strategy]['zararli_islem_toplam'] = 0
+                    gunluk_islem_sonucu[tarih][periyot][strategy]['zararli_islem_ortalama'] = 0
+                    gunluk_islem_sonucu[tarih][periyot][strategy]['stop_adet']=0
                 # Kümülatif olarak yüzdelik artış işlemi
-                gunluk_islem_sonucu[tarih]['sonuc'] += gunluk_islem_sonucu[tarih]['sonuc'] * sonuc / 100
-                gunluk_islem_sonucu[tarih]['adet'] = gunluk_islem_sonucu[tarih]['adet'] + 1
+                gunluk_islem_sonucu[tarih][periyot][strategy]['sonuc'] += gunluk_islem_sonucu[tarih][periyot][strategy]['sonuc'] * sonuc / 100
+                gunluk_islem_sonucu[tarih][periyot][strategy]['adet'] = gunluk_islem_sonucu[tarih][periyot][strategy]['adet'] + 1
+                gunluk_islem_sonucu[tarih][periyot][strategy]['toplam_mum'] = gunluk_islem_sonucu[tarih][periyot][strategy]['toplam_mum'] + mum_sayisi
+                gunluk_islem_sonucu[tarih][periyot][strategy]['ortalama_mum'] = gunluk_islem_sonucu[tarih][periyot][strategy]['toplam_mum'] / gunluk_islem_sonucu[tarih][periyot][strategy]['adet']
+
 
                 if line[8] == "[STOP-LOSE]":
                     # Kümülatif olarak yüzdelik artış işlemi
-                    gunluk_islem_sonucu[tarih]['stop_adet'] = gunluk_islem_sonucu[tarih]['stop_adet'] + 1
+                    gunluk_islem_sonucu[tarih][periyot][strategy]['stop_adet'] = gunluk_islem_sonucu[tarih][periyot][strategy]['stop_adet'] + 1
 
                 if periyot not in strategy_islem_sonucu:
                     strategy_islem_sonucu[periyot]={}
@@ -263,10 +278,19 @@ class Binance:
                     strategy_islem_sonucu[periyot][strategy]['zararli_islem'] = strategy_islem_sonucu[periyot][strategy]['zararli_islem'] + 1
                     strategy_islem_sonucu[periyot][strategy]['zararli_islem_toplam'] = strategy_islem_sonucu[periyot][strategy]['zararli_islem_toplam'] + sonuc
                     strategy_islem_sonucu[periyot][strategy]['zararli_islem_ortalama'] = strategy_islem_sonucu[periyot][strategy]['zararli_islem_toplam'] / strategy_islem_sonucu[periyot][strategy]['zararli_islem']
+
+                    gunluk_islem_sonucu[tarih][periyot][strategy]['zararli_islem'] = gunluk_islem_sonucu[tarih][periyot][strategy]['zararli_islem'] + 1
+                    gunluk_islem_sonucu[tarih][periyot][strategy]['zararli_islem_toplam'] = gunluk_islem_sonucu[tarih][periyot][strategy]['zararli_islem_toplam'] + sonuc
+                    gunluk_islem_sonucu[tarih][periyot][strategy]['zararli_islem_ortalama'] = gunluk_islem_sonucu[tarih][periyot][strategy]['zararli_islem_toplam'] / gunluk_islem_sonucu[tarih][periyot][strategy]['zararli_islem']
                 else:
                     strategy_islem_sonucu[periyot][strategy]['karli_islem'] = strategy_islem_sonucu[periyot][strategy]['karli_islem'] + 1
                     strategy_islem_sonucu[periyot][strategy]['karli_islem_toplam'] = strategy_islem_sonucu[periyot][strategy]['karli_islem_toplam'] + sonuc
                     strategy_islem_sonucu[periyot][strategy]['karli_islem_ortalama'] = strategy_islem_sonucu[periyot][strategy]['karli_islem_toplam'] / strategy_islem_sonucu[periyot][strategy]['karli_islem']
+
+                    gunluk_islem_sonucu[tarih][periyot][strategy]['karli_islem'] = gunluk_islem_sonucu[tarih][periyot][strategy]['karli_islem'] + 1
+                    gunluk_islem_sonucu[tarih][periyot][strategy]['karli_islem_toplam'] = gunluk_islem_sonucu[tarih][periyot][strategy]['karli_islem_toplam'] + sonuc
+                    gunluk_islem_sonucu[tarih][periyot][strategy]['karli_islem_ortalama'] = gunluk_islem_sonucu[tarih][periyot][strategy]['karli_islem_toplam'] / gunluk_islem_sonucu[tarih][periyot][strategy]['karli_islem']
+
 
                 if periyot not in periyot_islem_sonucu:
                     periyot_islem_sonucu[periyot]={}
@@ -280,7 +304,10 @@ class Binance:
 
         print(f"Gunluk islem sonucu:")
         for i in gunluk_islem_sonucu.keys():
-            print(f"{i}: {(gunluk_islem_sonucu[i]['sonuc'])-100:.2f}% | {gunluk_islem_sonucu[i]['adet']} adet islem | {gunluk_islem_sonucu[i]['stop_adet']} adet stop.")
+            for j in gunluk_islem_sonucu[i].keys():
+                for k in gunluk_islem_sonucu[i][j].keys():
+                    print(f"{i} {j} {k}: {(gunluk_islem_sonucu[i][j][k]['sonuc']) - 100:.2f}% | {gunluk_islem_sonucu[i][j][k]['karli_islem']} adet kar. ortalama: {gunluk_islem_sonucu[i][j][k]['karli_islem_ortalama']:.2f}% | {gunluk_islem_sonucu[i][j][k]['zararli_islem']} adet zarar. ortalama: {gunluk_islem_sonucu[i][j][k]['zararli_islem_ortalama']:.2f}% | {gunluk_islem_sonucu[i][j][k]['adet']} adet islem | {gunluk_islem_sonucu[i][j][k]['ortalama_mum']:.2f} ortalama mum sayisi | {gunluk_islem_sonucu[i][j][k]['stop_adet']} adet stop oldu.")
+            print("--------------------GUN SONU--------------------")
         print(f"\nStrategy islem sonucu:")
         for i in strategy_islem_sonucu.keys():
             for j in strategy_islem_sonucu[i].keys():
