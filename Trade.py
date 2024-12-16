@@ -356,7 +356,8 @@ class Trade:
             yuvarlanmis_destek=round(self.destek,basamak_sayisi)
             logging.info(
                 f"DURUM : {periyot} {self.sell_strategy.__name__} {self.alinan_coin} Islem Suresi: {self.mum_sayisi} mum. Diger strategyler {other_strategy_result} Stop-Lose: {stop_seviyesi}|{yuvarlanmis_destek} Kar/Zarar: {((close[-1] / self.alim_fiyati) - 1) * 100:.2f}%")
-            self.araclar.telegram_mesaj_gonder(f"🔵 DURUM : {periyot} {self.sell_strategy.__name__} {self.alinan_coin} Islem Suresi: {self.mum_sayisi} mum. Diger strategyler {other_strategy_result} Stop-Lose: {stop_seviyesi}|{yuvarlanmis_destek} Kar/Zarar: {((close[-1] / self.alim_fiyati) - 1) * 100:.2f}%")
+            if self.telegram_mesaj_gonder=="True":
+                self.araclar.telegram_mesaj_gonder(f"🔵 DURUM : {periyot} {self.sell_strategy.__name__} {self.alinan_coin} Islem Suresi: {self.mum_sayisi} mum. Diger strategyler {other_strategy_result} Stop-Lose: {stop_seviyesi}|{yuvarlanmis_destek} Kar/Zarar: {((close[-1] / self.alim_fiyati) - 1) * 100:.2f}%")
             time.sleep(10)
             self.araclar.mum_olusmasini_bekle(periyot)
 
