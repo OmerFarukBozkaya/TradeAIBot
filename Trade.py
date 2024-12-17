@@ -31,14 +31,13 @@ islemgecmisi.addHandler(handler)
 islemgecmisi.propagate = False
 
 # hesaplama sonuçları için ayrı bir logger oluştur
-buy_result = logging.getLogger('buy_resault')
-handler = logging.FileHandler('Log/buy_resault.log')
+buy_result = logging.getLogger('buy_result')
+handler = logging.FileHandler('Log/buy_result.log')
 handler.setLevel(logging.INFO)
 formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
 handler.setFormatter(formatter)
 buy_result.addHandler(handler)
 buy_result.propagate = False
-
 
 class Trade:
     def __init__(self):
@@ -67,8 +66,6 @@ class Trade:
         self.direnc=None
         self.mail_gonder=os.getenv('MAIL_GONDER')
         self.telegram_mesaj_gonder=os.getenv('TELEGRAM_MESAJ_GONDER')
-
-
     def kaydet(self):
         durum = {
             'islem_acik': self.islem_acik,
@@ -85,7 +82,6 @@ class Trade:
         }
         with open(f'Trade_Durumu/trade_durumu_{self.periyot}.json', 'w') as f:
             json.dump(durum, f)
-
     # Durumu yükleyen fonksiyon
     def yukle(self):
         if os.path.exists(f'Trade_Durumu/trade_durumu_{self.periyot}.json'):
@@ -152,8 +148,6 @@ class Trade:
                 if not self.islem_acik:
                     time.sleep(10)
                     self.araclar.mum_olusmasini_bekle(periyot)
-
-
     def alim_sinyali_kontrol(self, coin, periyot, strategys,nakit,temp_trade=False):
         limit=5
         while True:
@@ -223,7 +217,6 @@ class Trade:
                                 limit=limit-1
 
             return False  # İşlem açılmadı
-
     def satis_sinyali_bekle(self, periyot,temp_trade=False):
         dinamik_stop_lose=False
         static_stop_lose=False
@@ -374,7 +367,6 @@ class Trade:
                 self.araclar.telegram_mesaj_gonder(f"🔵 DURUM : {periyot} {self.sell_strategy.__name__} {self.alinan_coin} Islem Suresi: {self.mum_sayisi} mum. Diger strategyler {other_strategy_result} Stop-Lose: {stop_seviyesi}|{yuvarlanmis_destek} Kar/Zarar: {((close[-1] / self.alim_fiyati) - 1) * 100:.2f}%")
             time.sleep(10)
             self.araclar.mum_olusmasini_bekle(periyot)
-
     def buy(self, coin, periyot, strateji_adi, close,nakit):
         # Adet hesapla
         minQty = self.binance.get_coin_minQTY(coin)
@@ -392,7 +384,6 @@ class Trade:
                     self.araclar.telegram_mesaj_gonder(f"❗ AL(!) | Trade {strateji_adi} {periyot} Yeterli miktarda nakit yok. Mevcut nakit :  {nakit}")
 
         return adet
-
     def sell(self, coin, periyot, close, strateji_adi, buy_price):
         kar_zarar = ((close[-1] / buy_price) - 1) * 100
         self.mum_sayisi = self.mum_sayisi + 1
@@ -415,7 +406,6 @@ class Trade:
         if self.telegram_mesaj_gonder=="True":
             self.araclar.telegram_mesaj_gonder(f"🔴 SAT | {strateji_adi} {periyot} \n{coin} satıldı, Adet: {self.adet}, Fiyat: {close[-1]} Kar/Zarar:{((close[-1] / buy_price) - 1) * 100:.2f}%")
         return "SAT"
-
     def stop_lose(self, coin, periyot, close, strateji_adi, buy_price):
         kar_zarar = ((close[-1] / buy_price) - 1) * 100
         self.mum_sayisi = self.mum_sayisi + 1
@@ -438,7 +428,6 @@ class Trade:
         if self.telegram_mesaj_gonder=="True":
             self.araclar.telegram_mesaj_gonder(f"🛑 SAT [STOP-LOSE] | {strateji_adi} {periyot} \n{coin} satıldı, Adet: {self.adet}, Fiyat: {close[-1]} Kar/Zarar:{((close[-1] / buy_price) - 1) * 100:.2f}%")
         return "SAT"
-
     def manul_sell(self, coin, periyot, close, strateji_adi, buy_price):
         kar_zarar = ((close[-1] / buy_price) - 1) * 100
         self.mum_sayisi = self.mum_sayisi + 1
