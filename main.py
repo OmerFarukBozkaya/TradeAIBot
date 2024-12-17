@@ -37,6 +37,7 @@ def main ():
     16)Destek direnc seviyeleri
     17)Tum pozisyonlari kapat
     18)Full nakite gec
+    19)Buy result analizi
     """)
     com = input("Ne yapılacak :")
     if com == "0":
@@ -185,6 +186,11 @@ def main ():
     elif com == "18":
         a=time.time()
         binance.full_nakite_gec()
+        b=time.time()
+        print(araclar.saniye_to_hms(b-a))
+    elif com == "19":
+        a=time.time()
+        binance.buy_result_analyze()
         b=time.time()
         print(araclar.saniye_to_hms(b-a))
 
