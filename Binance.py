@@ -345,3 +345,53 @@ class Binance:
             minQty = self.get_coin_minQTY(coin)
             adet = self.miktar_duzelt(mevcut_adedim, minQty)
             self.sat(coin, adet)
+
+    @staticmethod
+    def buy_result_analyze():
+        file = open("Log/buy_result.log", "r")
+
+        periyodik_sonuclar={}
+
+        for line in file.readlines():
+            line = line.split(" ")
+            tarih = line[0]
+            saat = line[1]
+            periyod=line[5]
+            strategy=line[6]
+            coin=line[7]
+            buy_control=line[8]=="True"
+            direnc_control=line[9]=="True"
+            ma_control=line[10]=="True"
+            bb_control=line[11].replace("\n","")=="True"
+
+            if tarih not in periyodik_sonuclar:
+                periyodik_sonuclar[f"{tarih}"]={}
+            if periyod not in periyodik_sonuclar[f"{tarih}"]:
+                periyodik_sonuclar[f"{tarih}"][periyod] = {}
+            if strategy not in periyodik_sonuclar[f"{tarih}"][periyod]:
+                periyodik_sonuclar[f"{tarih}"][periyod][strategy]={}
+                periyodik_sonuclar[f"{tarih}"][periyod][strategy]['buy_sayisi'] = 0           # Buy sinyali verenlerin sayisi
+                periyodik_sonuclar[f"{tarih}"][periyod][strategy]['buy_full_false'] = 0       # Tüm ek şartlar false
+                periyodik_sonuclar[f"{tarih}"][periyod][strategy]['buy_direnc_true'] = 0      # Sadece buy ve direnc true
+                periyodik_sonuclar[f"{tarih}"][periyod][strategy]['buy_direnc_ma_true'] = 0   # Sadece buy, direnc ve ma true
+                periyodik_sonuclar[f"{tarih}"][periyod][strategy]['buy_direnc_bb_true'] = 0   # Sadece buy, direnc ve bb true
+                periyodik_sonuclar[f"{tarih}"][periyod][strategy]['buy_full_true'] = 0        # Tüm şartlar true
+
+            if buy_control:
+                periyodik_sonuclar[f"{tarih}"][periyod][strategy]['buy_sayisi']=periyodik_sonuclar[f"{tarih}"][periyod][strategy]['buy_sayisi']+1
+            if buy_control and not direnc_control and not ma_control and not bb_control:
+                periyodik_sonuclar[f"{tarih}"][periyod][strategy]['buy_full_false']=periyodik_sonuclar[f"{tarih}"][periyod][strategy]['buy_full_false']+1
+            if buy_control and direnc_control and not ma_control and not bb_control:
+                periyodik_sonuclar[f"{tarih}"][periyod][strategy]['buy_direnc_true']=periyodik_sonuclar[f"{tarih}"][periyod][strategy]['buy_direnc_true']+1
+            if buy_control and direnc_control and ma_control and not bb_control:
+                periyodik_sonuclar[f"{tarih}"][periyod][strategy]['buy_direnc_ma_true']=periyodik_sonuclar[f"{tarih}"][periyod][strategy]['buy_direnc_ma_true']+1
+            if buy_control and direnc_control and not ma_control and bb_control:
+                periyodik_sonuclar[f"{tarih}"][periyod][strategy]['buy_direnc_bb_true']=periyodik_sonuclar[f"{tarih}"][periyod][strategy]['buy_direnc_bb_true']+1
+            if buy_control and direnc_control and ma_control and bb_control:
+                periyodik_sonuclar[f"{tarih}"][periyod][strategy]['buy_full_true']=periyodik_sonuclar[f"{tarih}"][periyod][strategy]['buy_full_true']+1
+
+        for i in periyodik_sonuclar.keys():
+            for j in periyodik_sonuclar[i].keys():
+                for k in periyodik_sonuclar[i][j].keys():
+                    print(f"{i} {j} {k} | Topalm BUY sinyal sayisi: {periyodik_sonuclar[i][j][k]['buy_sayisi']} | Sadece BUY verenler: {periyodik_sonuclar[i][j][k]['buy_full_false']} | Ek sartlar saglanmadi: {periyodik_sonuclar[i][j][k]['buy_direnc_true']} | Direnc ve MA saglandi: {periyodik_sonuclar[i][j][k]['buy_direnc_ma_true']} | Direnç ve BB saglandi: {periyodik_sonuclar[i][j][k]['buy_direnc_bb_true']} | Tum sartlar saglandi: {periyodik_sonuclar[i][j][k]['buy_full_true']}")
+
