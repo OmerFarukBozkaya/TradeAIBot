@@ -66,6 +66,8 @@ class Trade:
         self.direnc=None
         self.mail_gonder=os.getenv('MAIL_GONDER')
         self.telegram_mesaj_gonder=os.getenv('TELEGRAM_MESAJ_GONDER')
+        self.buy_ma_control = os.getenv('BUY_MA_CONTROL')
+        self.buy_bb_control = os.getenv('BUY_BB_CONTROL')
     def kaydet(self):
         durum = {
             'islem_acik': self.islem_acik,
@@ -184,8 +186,8 @@ class Trade:
                             destek,direnc,signal=Stratejiler.destek_stop_lose(close[-1],None,None,close,low)
                             buy_control = (strategy_result[-2] == "BUY") and ("BUY" not in strategy_result[son_sell_index:-2])
                             direnc_control = (direnc is not None)
-                            ma_control = (ma_50[-1] is not None and close[-1] > ma_50[-1])
-                            bb_control = (bb_mid[-1] is not None and close[-1]<bb_mid[-1])
+                            ma_control = (ma_50[-1] is not None and close[-1] > ma_50[-1]) or self.buy_ma_control=="False"
+                            bb_control = (bb_mid[-1] is not None and close[-1]<bb_mid[-1]) or self.buy_bb_control=="False"
                             buy_result.info(f"{periyot} {strategy.__name__} {coin} {buy_control} {direnc_control} {ma_control} {bb_control}")
                             if (not self.islem_acik) and buy_control and direnc_control and ma_control and bb_control:
                                 strateji_adi = str(strategy.__name__)
