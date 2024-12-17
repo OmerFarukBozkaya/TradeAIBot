@@ -93,12 +93,25 @@ class Tarama:
             high = np.array(data['high'])
             low = np.array(data['low'])
             close = np.array(data['close'])
+            vol=np.array(data['volume_usdt'])
 
             coin_results = {}
             for strategy in strategies:
-                calculate = strategy(high[:-1], low[:-1], close[:-1])[-1]
-                if calculate == "BUY" or calculate == "SELL":
-                    coin_results[strategy.__name__] = calculate
+                if strategy.__name__ == "Alpha_Trend":
+                    strategy_result = strategy(high, low, close, vol)
+                else:
+                    strategy_result = strategy(high, low, close)
+
+                son_sell_index = 0
+                for i in range(len(strategy_result) - 1, -1, -1):
+                    if strategy_result[i] == 'SELL':
+                        son_sell_index = i
+                        break
+
+                if (strategy_result[-2] == "BUY") and ("BUY" not in strategy_result[son_sell_index:-2]):
+                    coin_results[strategy.__name__] = "BUY"
+                elif strategy_result[-2] == "SELL":
+                    coin_results[strategy.__name__] = "SELL"
             return coin_results
         except Exception as e:
             print(f"Veri işleme hatası ({coin}): {e}")
