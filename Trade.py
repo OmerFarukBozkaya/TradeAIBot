@@ -30,6 +30,15 @@ handler.setFormatter(formatter)
 islemgecmisi.addHandler(handler)
 islemgecmisi.propagate = False
 
+# hesaplama sonuçları için ayrı bir logger oluştur
+buy_result = logging.getLogger('buy_resault')
+handler = logging.FileHandler('Log/buy_resault.log')
+handler.setLevel(logging.INFO)
+formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
+handler.setFormatter(formatter)
+buy_result.addHandler(handler)
+buy_result.propagate = False
+
 
 class Trade:
     def __init__(self):
@@ -179,7 +188,12 @@ class Trade:
                                     son_sell_index = i
                                     break
                             destek,direnc,signal=Stratejiler.destek_stop_lose(close[-1],None,None,close,low)
-                            if (not self.islem_acik) and (strategy_result[-2] == "BUY") and ("BUY" not in strategy_result[son_sell_index:-2]) and (direnc is not None) and (ma_50[-1] is not None and close[-1] > ma_50[-1]) and (bb_mid[-1] is not None and close[-1]<bb_mid[-1]):
+                            buy_control = (strategy_result[-2] == "BUY") and ("BUY" not in strategy_result[son_sell_index:-2])
+                            direnc_control = (direnc is not None)
+                            ma_control = (ma_50[-1] is not None and close[-1] > ma_50[-1])
+                            bb_control = (bb_mid[-1] is not None and close[-1]<bb_mid[-1])
+                            buy_result.info(f"{periyot} {strategy.__name__} {coin} {buy_control} {direnc_control} {ma_control} {bb_control}")
+                            if (not self.islem_acik) and buy_control and direnc_control and ma_control and bb_control:
                                 strateji_adi = str(strategy.__name__)
                                 self.adet = self.buy(coin, periyot, strateji_adi, close, nakit)
                                 self.alinan_coin = coin  # Alınan coin'i kaydet
