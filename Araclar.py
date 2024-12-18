@@ -34,6 +34,10 @@ class Araclar:
         self.email_password=os.getenv('GONDERICI_EMAIL_SIFRE')
         self.telegram_api_token=os.getenv('TELEGRAM_API_TOKEN')
         self.telegram_chat_id=os.getenv('TELEGRAM_CHAT_ID')
+        self.strategy_limit_15m=os.getenv('STRATEGY_LIMIT_15M')
+        self.strategy_limit_1h=os.getenv('STRATEGY_LIMIT_1H')
+        self.strategy_limit_4h=os.getenv('STRATEGY_LIMIT_4H')
+        self.strategy_limit_1d=os.getenv('STRATEGY_LIMIT_1D')
         if(to_email is not None):
             self.to_email = to_email
 
@@ -248,8 +252,8 @@ class Araclar:
 
         print(f"Sonuçlar {output_file} ve {json_output_file} dosyalarına başarıyla kaydedildi.")
 
-    @staticmethod
-    def strategy_analyze_save():
+
+    def strategy_analyze_save(self):
         # Dosya var mı kontrolü
         if os.path.exists('Data/strategy_results_analyze.json'):
             with open('Data/strategy_results_analyze.json', 'r',encoding="utf-8") as f:
@@ -262,16 +266,16 @@ class Araclar:
                     # Periyoda göre strateji sayısını belirle
                     if period == '15m':
                         num_strategies = 3
-                        limit=7
+                        limit=float(self.strategy_limit_15m)
                     elif period == '1h':
                         num_strategies = 3
-                        limit=15
+                        limit=float(self.strategy_limit_1h)
                     elif period == '4h':
                         num_strategies = 3
-                        limit=15
+                        limit=float(self.strategy_limit_4h)
                     elif period == '1d':
                         num_strategies = 3
-                        limit=70
+                        limit=float(self.strategy_limit_1d)
                     else:
                         num_strategies = 0  # Eğer belirli bir periyot yoksa 0 strateji al
 
