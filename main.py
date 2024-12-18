@@ -62,7 +62,7 @@ def main ():
         periyot = input("Periyot (15m,1h,4h,1d):")
         coin = input("Coin:")
         functions = [func for func in dir(StratejilerTest) if
-                     callable(getattr(Stratejiler, func)) and not func.startswith("__")]
+                     callable(getattr(StratejilerTest, func)) and not func.startswith("__")]
         functions.remove("dinamik_stop_lose")
         functions.remove("static_stop_lose")
         functions.remove("destek_stop_lose")
