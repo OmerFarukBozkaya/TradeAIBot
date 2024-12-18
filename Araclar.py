@@ -14,6 +14,7 @@ import json
 from Backtest import Backtest
 from dotenv import load_dotenv
 from glob import glob
+import numpy as np
 
 if not os.path.exists('Data'):
     os.makedirs('Data')
@@ -505,5 +506,14 @@ class Araclar:
                         return True
         return None
 
+    @staticmethod
+    def hlc3(high, low, close):
+        # NumPy dizilerine dönüştürme (performansı artırır)
+        high = np.array(high)
+        low = np.array(low)
+        close = np.array(close)
+
+        # Ortalama hesaplama
+        return ((high + low + close) / 3).tolist()
 
 
