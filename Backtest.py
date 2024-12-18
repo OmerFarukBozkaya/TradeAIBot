@@ -32,8 +32,8 @@ class Backtest:
                 high[i] = float(high[i])
         # Strateji listesi
 
-        strategies = [getattr(StratejilerTest, func) for func in dir(Stratejiler)
-                      if callable(getattr(Stratejiler, func))
+        strategies = [getattr(StratejilerTest, func) for func in dir(StratejilerTest)
+                      if callable(getattr(StratejilerTest, func))
                       and not func.startswith("__")
                       and not getattr(StratejilerTest, func).__name__ in ["dinamik_stop_lose", "static_stop_lose",
                                                                           "destek_stop_lose"]]
@@ -198,7 +198,8 @@ class Backtest:
             capital_history = [initial_capital]
 
             strategy_resault = strategy(high, low, close)
-
+            if strategy.__name__ == "Super_Trend":
+                print(strategy_resault)
             for i in range(len(close)):
                 if last_signal is None or last_signal == 'red':
                     if strategy_resault[i] == "BUY":

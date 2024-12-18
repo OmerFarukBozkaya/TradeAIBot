@@ -298,3 +298,18 @@ class StratejilerTest:
             else:
                 signals.append(False)
         return signals
+
+    @staticmethod
+    def Super_Trend(high,low,close):
+        signals = []
+        supertrend, direction = Indikator.Super_Trend(high, low, close)
+        for i in range(len(close)):
+            if direction[i] is None:
+                signals.append(None)
+            elif direction[i] == 1:
+                signals.append("BUY")
+            elif direction[i] == -1:
+                signals.append("SELL")
+            else:
+                signals.append(False)
+        return signals
