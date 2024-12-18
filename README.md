@@ -32,6 +32,10 @@ MAIL_GONDER="True"
 TELEGRAM_MESAJ_GONDER="True"
 BUY_MA_CONTROL="True"
 BUY_BB_CONTROL="True"
+STRATEGY_LIMIT_15M="7"
+STRATEGY_LIMIT_1H="15"
+STRATEGY_LIMIT_4H="15"
+STRATEGY_LIMIT_1D="70"
 ````
 
 4. Coinlist oluştur. Bunu ``python main.py`` komutunu çalıştırdıktan sonra ``10``. seçenek ile bunu oluşturabilirsin.
