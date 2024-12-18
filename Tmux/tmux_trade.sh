@@ -40,7 +40,7 @@ done
 # Yeni bir pencere oluştur, Strategys
 tmux new-window -t $SESSION_NAME:$((i+2)) -n "Strategys" "python3 $SCRIPT_PATH <<EOF
 13
-1w
+3d
 EOF
     bash"
 
