@@ -46,9 +46,9 @@ After=multi-user.target
 [Service]
 Type=oneshot
 RemainAfterExit=yes
-User=nihat
-ExecStart=/bin/bash -c 'tmux new-session -d -s Trade "/bin/bash /home/nihat/TradeAIBot/Tmux/tmux_trade.sh
-WorkingDirectory=/home/nihat/TradeAIBot
+User=<user>
+ExecStart=/bin/bash -c 'tmux new-session -d -s Trade "/bin/bash /home/<user>/TradeAIBot/Tmux/tmux_trade.sh"'
+WorkingDirectory=/home/<user>/TradeAIBot
 
 [Install]
 WantedBy=multi-user.target
@@ -57,6 +57,7 @@ WantedBy=multi-user.target
 10. ``sudo systemctl daemon-reload`` daha sonrasında bu komutu çalıştır.
 11. Servisi entkinleştirmek için ``sudo systemctl enable trade.service`` bu komutu çalıştır.
 12. Servisi başlatmak için ``sudo systemctl start trade.service`` bu komutu çalıştır.
+
 ## Menüler
 
 ### 0) Veri Seti Oluştur
@@ -116,6 +117,9 @@ WantedBy=multi-user.target
 
 ### 18) Full nakite gec
 - Tum coinleri anında satar ve full nakite geçer.
+
+### 19) Buy result analizi
+- Her alım kontrolünün sonucunun kayıt edildiği dosyayı analiz eder.
 
 ## İşlevler
 
