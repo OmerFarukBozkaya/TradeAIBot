@@ -39,41 +39,41 @@ class Tarama:
                 if mum_bekle:
                     araclar.mum_olusmasini_bekle(periyot)
 
-                # Coin verilerini paralel olarak çekme ve işleme
-                with concurrent.futures.ThreadPoolExecutor() as executor:
-                    future_to_coin = {
-                        executor.submit(Tarama.process_coin_data, binance, coin, periyot, strategys[periyot]): coin
-                        for coin in coinlist
-                    }
+                if len(strategys[periyot])>0:
+                    # Coin verilerini paralel olarak çekme ve işleme
+                    with concurrent.futures.ThreadPoolExecutor() as executor:
+                        future_to_coin = {
+                            executor.submit(Tarama.process_coin_data, binance, coin, periyot, strategys[periyot]): coin
+                            for coin in coinlist
+                        }
 
-                    # Sonuçları toplama
-                    for future in concurrent.futures.as_completed(future_to_coin):
-                        coin = future_to_coin[future]
-                        try:
-                            coin_results = future.result()
-                            for strategy_name, signal in coin_results.items():
-                                if signal == "BUY":
-                                    result[strategy_name]["BUY"].append(coin)
-                                elif signal == "SELL":
-                                    result[strategy_name]["SELL"].append(coin)
-                        except Exception as e:
-                            tarama.error(f"{coin} {strategy_name} için işlem hatası: {e}")
-                            print(f"{coin} {strategy_name} için işlem hatası: {e}")
-                            continue
+                        # Sonuçları toplama
+                        for future in concurrent.futures.as_completed(future_to_coin):
+                            coin = future_to_coin[future]
+                            try:
+                                coin_results = future.result()
+                                for strategy_name, signal in coin_results.items():
+                                    if signal == "BUY":
+                                        result[strategy_name]["BUY"].append(coin)
+                                    elif signal == "SELL":
+                                        result[strategy_name]["SELL"].append(coin)
+                            except Exception as e:
+                                tarama.error(f"{coin} {strategy_name} için işlem hatası: {e}")
+                                print(f"{coin} {strategy_name} için işlem hatası: {e}")
+                                continue
 
-                # E-posta gönderme
-                mesaj, gonder = "", False
-                for strategy in result.keys():
-                    if result[strategy]["BUY"] or result[strategy]["SELL"]:
-                        gonder = True
-                        mesaj += (f"{strategy}\n"
-                                  f"BUY:\n{result[strategy]['BUY']}\n"
-                                  f"SELL:\n{result[strategy]['SELL']}\n\n")
+                    # E-posta gönderme
+                    mesaj, gonder = "", False
+                    for strategy in result.keys():
+                        if result[strategy]["BUY"] or result[strategy]["SELL"]:
+                            gonder = True
+                            mesaj += (f"{strategy}\n"
+                                      f"BUY:\n{result[strategy]['BUY']}\n"
+                                      f"SELL:\n{result[strategy]['SELL']}\n\n")
 
-                if gonder:
-                    araclar.mail_gonder(f"Tarama | {periyot}", mesaj)
-                    tarama.info(f"{periyot} tarama mail gonderildi")
-
+                    if gonder:
+                        araclar.mail_gonder(f"Tarama | {periyot}", mesaj)
+                        tarama.info(f"{periyot} tarama mail gonderildi")
                 mum_bekle = True
                 time.sleep(10)
             except Exception:

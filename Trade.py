@@ -125,7 +125,7 @@ class Trade:
                 else:
                     coinlist = self.binance.coin_list()
                     self.strategys = self.araclar.get_strategys()
-                    if len(self.strategys)>0:
+                    if len(self.strategys[periyot])>0:
                         # Sahip olunan coinleri hariç tutarak işlem yapılacak coin listesini güncelle
                         coinlist = self.araclar.listeden_sahip_olduklarimi_cikar(coinlist)
                         future_to_coin = {
