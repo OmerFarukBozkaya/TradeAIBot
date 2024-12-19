@@ -50,7 +50,7 @@ class Binance:
     def internet_var_mi():
         try:
             # Google'a bir istek göndererek internet bağlantısını kontrol ediyoruz
-            response = requests.get("https://www.google.com", timeout=5)
+            response = requests.get("https://api.binance.com", timeout=5)
             # Eğer durum kodu 200 ise bağlantı başarılı
             if response.status_code == 200:
                 return True
