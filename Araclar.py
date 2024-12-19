@@ -392,10 +392,12 @@ class Araclar:
         low = data['low']
         close = data['close']
 
-        strategys=[Stratejiler.MACD,Stratejiler.VMZI,Stratejiler.VAMA,Stratejiler.TSO,
-                   Stratejiler.BB_RSI,Stratejiler.FDI,Stratejiler.BB_Close,Stratejiler.MA_Cross,
-                   Stratejiler.DMO,Stratejiler.BB_ADX]
-        for strategy in strategys:
+        strategies = [getattr(Stratejiler, func) for func in dir(Stratejiler)
+                      if callable(getattr(Stratejiler, func))
+                      and not func.startswith("__")
+                      and not getattr(Stratejiler, func).__name__ in ["dinamik_stop_lose", "static_stop_lose",
+                                                                          "destek_stop_lose", "Alpha_Trend"]]
+        for strategy in strategies:
             print(f"{strategy.__name__} : {strategy(high, low, close)[-adet:]}")
 
     @staticmethod
