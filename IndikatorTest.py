@@ -699,23 +699,20 @@ class IndikatorTest:
     @staticmethod
     def Super_Trend(high, low, close, atr_length=10, factor=3.0):
         """
-            Supertrend hesaplama fonksiyonu
+        Supertrend hesaplama fonksiyonu (doğru ve optimize edilmiş)
 
-            Parameters:
-                high (list): Yüksek fiyat verileri
-                low (list): Düşük fiyat verileri
-                close (list): Kapanış fiyatları
-                atr_length (int): ATR periyodu
-                factor (float): Faktör (çarpan)
+        Parameters:
+            high (list): Yüksek fiyat verileri
+            low (list): Düşük fiyat verileri
+            close (list): Kapanış fiyatları
+            atr_length (int): ATR periyodu
+            factor (float): Faktör (çarpan)
 
-            Returns:
-                tuple: Supertrend değerleri ve yönler (her ikisi de None ile doldurulmuş listeler)
-            """
-        data = pd.DataFrame({
-            'high': high,
-            'low': low,
-            'close': close
-        })
+        Returns:
+            tuple: (Supertrend değerleri, trend yönleri)
+        """
+        # Verileri DataFrame'e dönüştür
+        data = pd.DataFrame({'high': high, 'low': low, 'close': close})
 
         # Ortalama True Range (ATR) hesaplama
         data['tr1'] = data['high'] - data['low']
@@ -725,36 +722,44 @@ class IndikatorTest:
         data['atr'] = data['true_range'].rolling(atr_length).mean()
 
         # Supertrend üst ve alt bantlarının hesaplanması
-        data['upper_band'] = (data['high'] + data['low']) / 2 + factor * data['atr']
-        data['lower_band'] = (data['high'] + data['low']) / 2 - factor * data['atr']
+        hl2 = (data['high'] + data['low']) / 2
+        data['upper_band'] = hl2 + factor * data['atr']
+        data['lower_band'] = hl2 - factor * data['atr']
 
-        # Başlangıç değerleri için None ekleyin
-        data['supertrend'] = np.nan
-        data['direction'] = np.nan
+        # Supertrend ve yön hesaplama
+        supertrend = [None] * len(data)
+        direction = [None] * len(data)
 
         for i in range(len(data)):
-            if i < atr_length - 1:
+            if i < atr_length:
+                # ATR periyodu tamamlanmadan Supertrend hesaplanmaz
                 continue
-
-            if i == atr_length - 1:
-                data.loc[i, 'supertrend'] = data.loc[i, 'lower_band']
-                data.loc[i, 'direction'] = 1  # 1: Uptrend, -1: Downtrend
+            elif i == atr_length:
+                # İlk trend başlangıcı için alt bant kullanılır
+                supertrend[i] = data['lower_band'].iloc[i]
+                direction[i] = 1  # Başlangıçta Uptrend
             else:
-                prev_trend = data.loc[i - 1, 'supertrend']
-                prev_direction = data.loc[i - 1, 'direction']
+                # Önceki trend ve yön
+                prev_supertrend = supertrend[i - 1]
+                prev_direction = direction[i - 1]
 
-                if data.loc[i, 'close'] > prev_trend:
-                    data.loc[i, 'supertrend'] = data.loc[i, 'lower_band']
-                    data.loc[i, 'direction'] = 1
-                elif data.loc[i, 'close'] < prev_trend:
-                    data.loc[i, 'supertrend'] = data.loc[i, 'upper_band']
-                    data.loc[i, 'direction'] = -1
+                # Şartlara göre Supertrend hesaplama
+                if data['close'].iloc[i] > prev_supertrend:
+                    supertrend[i] = data['lower_band'].iloc[i]
+                    direction[i] = 1  # Uptrend
+                elif data['close'].iloc[i] < prev_supertrend:
+                    supertrend[i] = data['upper_band'].iloc[i]
+                    direction[i] = -1  # Downtrend
                 else:
-                    data.loc[i, 'supertrend'] = prev_trend
-                    data.loc[i, 'direction'] = prev_direction
+                    # Trend değişmezse önceki değerleri koru
+                    supertrend[i] = prev_supertrend
+                    direction[i] = prev_direction
 
-        # Supertrend ve direction listelerini None ile doldurulmuş şekilde döndür
-        supertrend_list = [None if np.isnan(x) else float(x) for x in data['supertrend']]
-        direction_list = [None if np.isnan(x) else int(x) for x in data['direction']]
+                # Üst ve alt bant güncellemesi
+                if direction[i] == 1:  # Uptrend ise üst bandı aşmamalı
+                    supertrend[i] = min(supertrend[i], data['upper_band'].iloc[i])
+                elif direction[i] == -1:  # Downtrend ise alt bandı geçmemeli
+                    supertrend[i] = max(supertrend[i], data['lower_band'].iloc[i])
+        supertrend = [float(x) if x is not None else float('nan') for x in supertrend]
+        return supertrend, direction
 
-        return supertrend_list, direction_list
