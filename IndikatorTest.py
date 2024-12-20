@@ -1,6 +1,9 @@
 import numpy as np
 import pandas as pd
 from Indikator import Indikator
+import matplotlib.pyplot as plt
+from matplotlib.widgets import Cursor
+from datetime import datetime
 class IndikatorTest:
     @staticmethod
     def Kiyasla(list1, list2):
@@ -763,3 +766,128 @@ class IndikatorTest:
         supertrend = [float(x) if x is not None else float('nan') for x in supertrend]
         return supertrend, direction
 
+    @staticmethod
+    def Grafik_Indikator(open_prices, high_prices, low_prices, close_prices, timestamps, main_indicators=None,
+                                  sub_indicators=None):
+        """
+        Mum grafiği ve indikatörlerin çizimi için bir fonksiyon.
+
+        Parameters:
+            open_prices (list): Açılış fiyatları
+            high_prices (list): En yüksek fiyatlar
+            low_prices (list): En düşük fiyatlar
+            close_prices (list): Kapanış fiyatları
+            timestamps (list): Zaman damgaları (saniye cinsinden UNIX timestamp).
+            main_indicators (dict): Ana grafikte gösterilecek indikatörler.
+            sub_indicators (dict): Alt grafikte gösterilecek indikatörler.
+
+        Returns:
+            None: Grafiği oluşturur ve gösterir.
+        """
+        # Girişlerin uzunluğunu kontrol et
+        n = len(open_prices)
+        if not all(len(lst) == n for lst in [high_prices, low_prices, close_prices, timestamps]):
+            raise ValueError("Tüm listelerin uzunluğu eşit olmalıdır.")
+
+        # Timestamp'leri doğrula ve datetime formatına çevir
+        try:
+            dates = [
+                datetime.fromtimestamp(ts / 1000.0).strftime('%Y-%m-%d %H:%M:%S') if ts > 0 else "Invalid Timestamp" for
+                ts in timestamps]
+        except Exception as e:
+            raise ValueError(f"Timestamps işleminde hata oluştu: {e}")
+
+        if "Invalid Timestamp" in dates:
+            raise ValueError(
+                "Geçersiz zaman damgaları tespit edildi. Lütfen tüm timestamp değerlerinin pozitif ve geçerli olduğundan emin olun.")
+
+        # Alt grafiklerin sayısını belirle
+        num_subplots = len(sub_indicators) if sub_indicators else 0
+
+        # Grafikleri ayır
+        fig, axes = plt.subplots(1 + num_subplots, 1, figsize=(18, 6 * (1 + num_subplots)), sharex=True,
+                                 gridspec_kw={'height_ratios': [3] + [1] * num_subplots})
+
+        # Figure başlığını ayarla
+        fig.canvas.manager.set_window_title("Mum Grafiği ve İndikatörler")
+
+
+        # Eğer tek bir ana grafik varsa, axes bir liste değil, tek bir Axes nesnesi olacaktır
+        if num_subplots == 0:
+            axes = [axes]
+        elif num_subplots == 1:
+            axes = [axes[0], axes[1]]
+
+        ax_main = axes[0]
+
+        # Ana grafikte mum grafiğini çiz
+        for i in range(n):
+            color = 'green' if close_prices[i] >= open_prices[i] else 'red'
+            ax_main.plot([i, i], [low_prices[i], high_prices[i]], color=color, linewidth=1.5)  # Fitil çizimi
+            ax_main.add_patch(plt.Rectangle((i - 0.4, min(open_prices[i], close_prices[i])), 0.8, \
+                                            abs(close_prices[i] - open_prices[i]), \
+                                            color=color, alpha=0.7))  # Mum gövdesi
+
+        # Ana indikatörlerin çizimi
+        if main_indicators:
+            colors = plt.cm.tab10(np.linspace(0, 1, len(main_indicators)))
+            for (name, values), color in zip(main_indicators.items(), colors):
+                if len(values) != n:
+                    raise ValueError(f"{name} indikatörünün uzunluğu OHLC verileriyle eşleşmiyor.")
+                filtered_values = [v if v is not None else np.nan for v in values]
+                ax_main.plot(range(n), filtered_values, label=name, color=color)
+
+        ax_main.legend()
+        ax_main.grid(True, linestyle='--', alpha=0.6)
+
+        # Alt grafiklerdeki indikatörlerin çizimi
+        if sub_indicators:
+            for idx, (ax, indicators) in enumerate(zip(axes[1:], sub_indicators)):
+                colors = plt.cm.tab10(np.linspace(0, 1, len(indicators)))
+                for (name, values), color in zip(indicators.items(), colors):
+                    if len(values) != n:
+                        raise ValueError(f"{name} alt indikatörünün uzunluğu OHLC verileriyle eşleşmiyor.")
+                    filtered_values = [v if v is not None else np.nan for v in values]
+                    ax.plot(range(n), filtered_values, label=name, color=color)
+
+                ax.legend()
+                ax.grid(True, linestyle='--', alpha=0.6)
+
+        # X-ticks'leri kaldır
+        for ax in axes[:-1]:
+            ax.set_xticks([])
+
+        # Son eksen için yalnızca X-ticks gösterilir
+        axes[-1].set_xlabel("Zaman")
+
+        # Zoom ve pan hareketlerinin eş zamanlı olması için paylaşımı ayarla
+        for ax in axes:
+            ax.sharex(axes[0])
+
+        # Mouse ile veri inceleme
+        cursor_main = Cursor(ax_main, useblit=True, color='blue', linewidth=1)
+
+        def format_coord(x, y):
+            index = int(round(x))
+            if 0 <= index < n:
+                o = open_prices[index]
+                h = high_prices[index]
+                l = low_prices[index]
+                c = close_prices[index]
+                time = dates[index]
+                indicator_values = {}
+                if main_indicators:
+                    indicator_values.update(
+                        {name: values[index] for name, values in main_indicators.items() if values[index] is not None})
+                if sub_indicators:
+                    for sub in sub_indicators:
+                        indicator_values.update(
+                            {name: values[index] for name, values in sub.items() if values[index] is not None})
+                indicator_text = ", ".join(f"{name}: {value:.2f}" for name, value in indicator_values.items())
+                return f"Time: {time}, Open: {o}, High: {h}, Low: {l}, Close: {c}, {indicator_text}"
+            return f"X: {x:.2f}, Y: {y:.2f}"
+
+        ax_main.format_coord = format_coord
+
+        plt.tight_layout()
+        plt.show()
