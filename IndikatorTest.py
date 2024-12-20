@@ -875,6 +875,13 @@ class IndikatorTest:
                 l = low_prices[index]
                 c = close_prices[index]
                 time = dates[index]
+
+                # Yüzdelik değişim hesaplama
+                if o != 0:
+                    price_change_percent = ((c - o) / o) * 100
+                else:
+                    price_change_percent = 0
+
                 indicator_values = {}
                 if main_indicators:
                     indicator_values.update(
@@ -883,8 +890,10 @@ class IndikatorTest:
                     for sub in sub_indicators:
                         indicator_values.update(
                             {name: values[index] for name, values in sub.items() if values[index] is not None})
+
+                # Fiyat değişimini ve diğer indikatörleri ekle
                 indicator_text = ", ".join(f"{name}: {value:.2f}" for name, value in indicator_values.items())
-                return f"Time: {time}, Open: {o}, High: {h}, Low: {l}, Close: {c}, {indicator_text}"
+                return f"Time: {time}, Open: {o}, High: {h}, Low: {l}, Close: {c}, Change: {price_change_percent:.2f}%, {indicator_text}"
             return f"X: {x:.2f}, Y: {y:.2f}"
 
         ax_main.format_coord = format_coord
