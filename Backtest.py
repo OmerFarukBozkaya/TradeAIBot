@@ -8,6 +8,11 @@ from Binance import Binance
 from StratejilerTest import StratejilerTest
 from Stratejiler import Stratejiler
 from concurrent.futures import ProcessPoolExecutor
+from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
+import tkinter as tk
+from tkinter import ttk
+from datetime import datetime
+from matplotlib.widgets import Cursor
 
 class Backtest:
     @staticmethod
@@ -137,143 +142,185 @@ class Backtest:
         new_data_df.to_excel(output_file, index=False, engine='openpyxl')
 
     @staticmethod
-    def Grafik_Ciz(coin, periyot, selected_strategy_name=None):
+    def Grafik_Ciz(coin, periyot,selected_strategy_name=None):
         # Veri ithali
         binance = Binance()
         data = binance.get_coin_data(coin, periyot, 1000)
+        opendate=data['opendate']
+        open=data['open']
         high = data['high']
         low = data['low']
         close = data['close']
 
         # Strateji listesi
-        strategies = [getattr(StratejilerTest, func) for func in dir(StratejilerTest)
-                      if callable(getattr(StratejilerTest, func))
-                      and not func.startswith("__")
-                      and not getattr(StratejilerTest, func).__name__ in ["dinamik_stop_lose", "static_stop_lose",
-                                                                          "destek_stop_lose", "Alpha_Trend"]]
+        if selected_strategy_name is None:
+            strategies = [getattr(StratejilerTest, func) for func in dir(StratejilerTest)
+                          if callable(getattr(StratejilerTest, func))
+                          and not func.startswith("__")
+                          and not getattr(StratejilerTest, func).__name__ in ["dinamik_stop_lose", "static_stop_lose",
+                                                                              "destek_stop_lose", "Alpha_Trend"]]
+        else:
+            strategies=[getattr(StratejilerTest,selected_strategy_name)]
 
-        fig = plt.figure(figsize=(16, 30))
-        gs = gridspec.GridSpec(len(strategies) + 1, 2, height_ratios=[2] + [1] * len(strategies))
+        # Girişlerin uzunluğunu kontrol et
+        n = len(open)
+        if not all(len(lst) == n for lst in [high, low, close, opendate]):
+            raise ValueError("Tüm listelerin uzunluğu eşit olmalıdır.")
 
-        # 1. Grafik: Fiyat
-        ax1 = fig.add_subplot(gs[0, :])
-        ax1.set_xlabel('Zaman (Periyotlar)')
-        ax1.set_ylabel('Fiyat', color='black')
-        ax1.plot(close, color='black', label='Fiyat', linewidth=1.5)
-        ax1.tick_params(axis='y', labelcolor='black')
-        ax1.set_xticks(np.arange(0, len(close), step=25))
-        ax1.set_ylim(min(close) * 0.95, max(close) * 1.05)
-        ax1.yaxis.set_major_locator(plt.MaxNLocator(10))
-        ax1.legend()
-        ax1.set_title(f"{coin} {periyot} {selected_strategy_name}")
+        # Timestamp'leri doğrula ve datetime formatına çevir
+        try:
+            dates = [
+                datetime.fromtimestamp(ts / 1000.0).strftime('%Y-%m-%d %H:%M:%S') if ts > 0 else "Invalid Timestamp" for
+                ts in opendate]
+        except Exception as e:
+            raise ValueError(f"Timestamps işleminde hata oluştu: {e}")
 
-        capital_histories = []
-        cumulative_profit_losses = []
-        total_profit_losses = []
-        profitable_trade_counts = []
-        losing_trade_counts = []
-        colors = ['orange', 'green', 'purple', 'red', 'brown', 'pink', 'gray', 'olive', 'cyan', 'blue', 'gold',
-                  'lightblue', 'lightgreen',
-                  'magenta', 'salmon', 'teal', 'violet', 'darkorange', 'darkgreen', 'darkviolet', 'deepskyblue',
-                  'dodgerblue', 'crimson',
-                  'khaki', 'chartreuse', 'lavender', 'lightcoral', 'mediumseagreen', 'orangered', 'indigo', 'slategray',
-                  'cornflowerblue',
-                  'mediumslateblue', 'lightsteelblue', 'palevioletred', 'springgreen', 'seashell', 'peru', 'steelblue',
-                  'tan', 'wheat']
+        if "Invalid Timestamp" in dates:
+            raise ValueError(
+                "Geçersiz zaman damgaları tespit edildi. Lütfen tüm timestamp değerlerinin pozitif ve geçerli olduğundan emin olun.")
 
-        # Seçilen stratejiye göre alım ve satım noktaları (yeşil ve kırmızı yuvarlaklar)
-        buy_points = []
-        sell_points = []
-
-        # Her strateji için ayrı bir subplot
-        for idx, strategy in enumerate(strategies):
+        for strategy in strategies:
             last_signal = None
-            buy_price = None
-            cumulative_profit_loss = []
-            total_profit_loss = 0
-            profitable_trades = 0
-            losing_trades = 0
+            buy_points = []
+            sell_points = []
+            strategy_resault = strategy(high, low, close)
+
+            for i in range(len(close)):
+                if last_signal is None or last_signal == 'red':
+                    if strategy_resault[i] == "BUY":
+                        last_signal = 'green'
+                        buy_points.append(i)
+                elif last_signal == 'green':
+                    if strategy_resault[i] == "SELL":
+                        last_signal = 'red'
+                        sell_points.append(i)
+
+            # Yeni pencere oluştur
+            fig = plt.figure(figsize=(16, 10))
+
+            # 1. Grafik: Fiyat ve alım-satım noktaları
+            ax1 = plt.subplot2grid((2, 2), (0, 0), colspan=2)
+            ax1.set_xlabel('Zaman (Periyotlar)')
+            ax1.set_ylabel('Fiyat', color='black')
+            ax1.set_title(f"{coin} {periyot} - {strategy.__name__}")
+            ax1.tick_params(axis='y', labelcolor='black')
+            ax1.set_xticks(np.arange(0, len(close), step=25))
+            ax1.set_ylim(min(close) * 0.95, max(close) * 1.05)
+
+            # Mum grafiği çizimi
+            for i in range(len(close)):
+                color = 'green' if close[i] >= open[i] else 'red'  # Yeşil yükseliş, kırmızı düşüş
+                ax1.plot([i, i], [low[i], high[i]], color=color, linewidth=1.5)  # Fitil çizimi
+                ax1.add_patch(plt.Rectangle((i - 0.4, min(open[i], close[i])), 0.8, abs(close[i] - open[i]),
+                                            color=color, alpha=0.7))  # Mum gövdesi
+
+            # Alım ve Satım Noktalarını ekle
+            for buy_point in buy_points:
+                ax1.plot(buy_point, low[buy_point]*0.99, 'c^', label="Alım Noktası")
+            for sell_point in sell_points:
+                ax1.plot(sell_point, high[sell_point]*1.01, 'kv', label="Satım Noktası")
+
+            # Mouse ile veri inceleme
+            cursor_main = Cursor(ax1, useblit=True, color='blue', linewidth=1)
+
+            def format_coord(x, y):
+                index = int(round(x))
+                if 0 <= index < n:
+                    o = open[index]
+                    h = high[index]
+                    l = low[index]
+                    c = close[index]
+                    time = dates[index]
+
+                    # Yüzdelik değişim hesaplama
+                    if o != 0:
+                        price_change_percent = ((c - o) / o) * 100
+                    else:
+                        price_change_percent = 0
+
+                    # Fiyat değişimini ve diğer indikatörleri ekle
+
+                    return f"Time: {time}, Open: {o}, High: {h}, Low: {l}, Close: {c}, Change: {price_change_percent:.2f}% "
+                return f"X: {x:.2f}, Y: {y:.2f}"
+
+            ax1.format_coord = format_coord
+
+            # 2. Grafik: Kapital ve kâr/zarar hesaplama
             initial_capital = 100
             current_capital = initial_capital
             capital_history = [initial_capital]
+            cumulative_profit_loss = []
 
-            strategy_resault = strategy(high, low, close)
-            if strategy.__name__ == "Super_Trend":
-                print(strategy_resault)
+            last_signal = None
+            buy_price = None
+
             for i in range(len(close)):
                 if last_signal is None or last_signal == 'red':
                     if strategy_resault[i] == "BUY":
                         last_signal = 'green'
                         buy_price = close[i]
-                        amount_purchased = current_capital / buy_price
-                        current_capital = 0
-                        if selected_strategy_name == strategy.__name__:
-                            buy_points.append(i)  # Alım noktasını kaydet
                 elif last_signal == 'green':
                     if strategy_resault[i] == "SELL":
                         last_signal = 'red'
                         sell_price = close[i]
                         profit_percentage = ((sell_price - buy_price) / buy_price) * 100
-                        current_capital = capital_history[-1] * (1 + profit_percentage / 100)
+                        current_capital *= (1 + profit_percentage / 100)
                         capital_history.append(current_capital)
-
                         cumulative_profit_loss.append(profit_percentage)
-                        total_profit_loss += profit_percentage
 
-                        if profit_percentage > 0:
-                            profitable_trades += 1
-                        else:
-                            losing_trades += 1
-
-                        if selected_strategy_name == strategy.__name__:
-                            sell_points.append(i)  # Satım noktasını kaydet
-
-                        buy_price = None
-
-            capital_histories.append(capital_history)
-            cumulative_profit_losses.append(cumulative_profit_loss)
-            total_profit_losses.append(total_profit_loss)
-            profitable_trade_counts.append(profitable_trades)
-            losing_trade_counts.append(losing_trades)
-
-            # Son kapital ve kümülatif kâr/zarar hesaplamaları
-            final_capital = capital_history[-1]
-            cumulative_total_profit_loss = ((final_capital - initial_capital) / initial_capital) * 100
-
-            # Her strateji için kapital ve kümülatif kâr/zarar grafiği
-            ax2 = fig.add_subplot(gs[idx + 1, 0])
+            ax2 = plt.subplot2grid((2, 2), (1, 0))
             ax2.plot(capital_history, marker='o', markersize=5, linewidth=2,
-                     color=colors[idx % len(colors)],
-                     label=f"{strategy.__name__} Kapital\nSon Kapital: {final_capital:.2f}\nKümülatif Kâr/Zarar: {cumulative_total_profit_loss:.2f}%")
+                     label=f"Kapital\nSon Kapital: {capital_history[-1]:.2f}")
             ax2.set_title(f"{strategy.__name__} Kapital Durumu")
             ax2.set_xlabel('İşlem Sayısı')
             ax2.set_ylabel('Kapital (TL)')
             ax2.axhline(initial_capital, color='black', linestyle='--')
             ax2.legend()
 
-            # Kârlı ve zararlı işlemler
-            ax3 = fig.add_subplot(gs[idx + 1, 1])
-            ax3.plot(cumulative_profit_loss, marker='o', markersize=5, linewidth=2,
-                     color=colors[idx % len(colors)],
-                     label=f"{strategy.__name__} Kâr/Zarar\nKârlı İşlemler: {profitable_trades}\nZararlı İşlemler: {losing_trades}")
+            # Mouse ile veri inceleme
+            cursor_main = Cursor(ax2, useblit=True, color='blue', linewidth=1)
+
+            def format_coord(x, y):
+                index = int(round(x))
+                if 0 <= index < n:
+                    kumulatif = capital_history[index]
+
+                    return f"Kumulatif deger: {kumulatif:.2f} "
+                return f"X: {x:.2f}, Y: {y:.2f}"
+
+            ax2.format_coord = format_coord
+
+            # Toplam karlı ve zararlı işlem sayıları
+            total_profit_trades = sum(1 for x in cumulative_profit_loss if x > 0)
+            total_loss_trades = sum(1 for x in cumulative_profit_loss if x < 0)
+
+            # 3. Grafik: Kümülatif kâr/zarar yüzdesi
+            ax3 = plt.subplot2grid((2, 2), (1, 1))
+            ax3.plot(cumulative_profit_loss, marker='o', markersize=5, linewidth=2, label=f"{strategy.__name__} Kâr/Zarar\nKârlı İşlemler: {total_profit_trades}\nZararlı İşlemler: {total_loss_trades}")
             ax3.set_title(f"{strategy.__name__} Kümülatif Kâr/Zarar (%)")
             ax3.set_xlabel('İşlem Sayısı')
             ax3.set_ylabel('Kâr/Zarar (%)')
             ax3.axhline(0, color='black', linestyle='--')
             ax3.legend()
 
-        # 1. grafikte alım ve satım noktalarını göster
-        if selected_strategy_name is not None:
-            for buy_point in buy_points:
-                ax1.plot(buy_point, close[buy_point], 'go', label="Alım Noktası")  # Yeşil yuvarlak
-            for sell_point in sell_points:
-                ax1.plot(sell_point, close[sell_point], 'ro', label="Satım Noktası")  # Kırmızı yuvarlak
+            a=0
+            # Mouse ile veri inceleme
+            cursor_main = Cursor(ax3, useblit=True, color='blue', linewidth=1)
 
-                # Grafiği PNG olarak kaydet
-        plt.tight_layout()
-        plt.savefig(f"./Data/{coin}_{periyot}_{selected_strategy_name if selected_strategy_name else 'TümStratejiler'}.png",
-                    dpi=300, bbox_inches='tight')
-        #plt.show()
+            def format_coord(x, y):
+                index = int(round(x))
+                if 0 <= index < n:
+                    result = cumulative_profit_loss[index]
+
+                    return f"{index}. İşlem Sonucu: {result:.2f}% "
+                return f"X: {x:.2f}, Y: {y:.2f}"
+
+            ax3.format_coord = format_coord
+
+            plt.tight_layout()
+            plt.show()
+
+
     @staticmethod
     def hesapla_wrapper(args):
         coin, periyot = args
