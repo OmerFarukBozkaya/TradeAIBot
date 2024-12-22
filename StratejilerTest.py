@@ -9,11 +9,11 @@ class StratejilerTest:
     destek_stop_lose_tolerans = 0.01
 
     @staticmethod
-    def dinamik_stop_lose(atr,adx,close, highest_price,i):
-        if highest_price is None or close[i] > highest_price:
-            highest_price = close[i]
+    def dinamik_stop_lose(atr,adx,close, highest_price):
+        if highest_price is None or close[-1] > highest_price:
+            highest_price = close[-1]
         # Piyasa modu belirleme
-        adx = adx[i]
+        adx = adx[-1]
         if adx is not None and adx < 20:
             return None, highest_price, None  # Yatay piyasada stop çalışmaz
 
@@ -24,9 +24,9 @@ class StratejilerTest:
             atr_factor = StratejilerTest.atr_factor_weak_trend
 
         # Stop seviyesi hesaplama
-        stop_seviyesi = highest_price - (atr[i] * atr_factor)
+        stop_seviyesi = highest_price - (atr[-1] * atr_factor)
 
-        if close[i] < stop_seviyesi:
+        if close[-1] < stop_seviyesi:
             return "STOP-LOSE", None, None
 
         return None, highest_price, stop_seviyesi
