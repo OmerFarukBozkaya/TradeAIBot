@@ -137,7 +137,7 @@ class Backtest:
         # Veriyi sıfırdan dosyaya yaz (önceki veriler silinir)
         new_data_df.to_excel(output_file, index=False, engine='openpyxl')
     @staticmethod
-    def Grafik_Ciz(coin, periyot,selected_strategy_name=None):
+    def Grafik_Ciz(coin, periyot,selected_strategy_name=None,stop=False):
         # Veri ithali
         binance = Binance()
         data = binance.get_coin_data(coin, periyot, 1000)
@@ -178,17 +178,38 @@ class Backtest:
             last_signal = None
             buy_points = []
             sell_points = []
+            stop_points = []
             strategy_resault = strategy(high, low, close)
-
+            destek=None
+            direnc=None
+            dinamik_stop_lose_check=False
+            higest_price=0
+            dinamik_stop_signal=None
+            atr=IndikatorTest.ATR(high, low, close)
+            adx=IndikatorTest.ADX(high, low, close)
             for i in range(len(close)):
                 if last_signal is None or last_signal == 'red':
                     if strategy_resault[i] == "BUY":
                         last_signal = 'green'
                         buy_points.append(i)
                 elif last_signal == 'green':
+                    # Stop-lose hesaplama
+                    if stop:
+                        destek, direnc, destek_stop_signal = StratejilerTest.destek_stop_lose(buy_points[-1], destek,direnc, close[:i + 1],low[:i + 1])
+                        if direnc is None:
+                            dinamik_stop_lose_check = True
+                        if dinamik_stop_lose_check:
+                            dinamik_stop_signal, higest_price, stop_level = StratejilerTest.dinamik_stop_lose(
+                                atr[:i + 1], adx[:i + 1], close[:i + 1], higest_price)
+
                     if strategy_resault[i] == "SELL":
                         last_signal = 'red'
                         sell_points.append(i)
+                    elif stop and (destek_stop_signal=="STOP-LOSE" or (dinamik_stop_lose_check and dinamik_stop_signal=="STOP-LOSE")):
+                        last_signal = 'red'
+                        dinamik_stop_lose_check=False
+                        higest_price=0
+                        stop_points.append(i)
 
             # Yeni pencere oluştur
             fig = plt.figure(figsize=(16, 10))
@@ -214,6 +235,8 @@ class Backtest:
                 ax1.plot(buy_point, low[buy_point]*0.99, 'c^', label="Alım Noktası")
             for sell_point in sell_points:
                 ax1.plot(sell_point, high[sell_point]*1.01, 'kv', label="Satım Noktası")
+            for stop_point in stop_points:
+                ax1.plot(stop_point, high[stop_point]*1.01, 'mv', label="Stop Noktası")
 
             # Mouse ile veri inceleme
             cursor_main = Cursor(ax1, useblit=True, color='blue', linewidth=1)
