@@ -457,12 +457,13 @@ class Araclar:
         backtest=Backtest()
         while True:
             Araclar.mum_olusmasini_bekle(periyod)
+            araclar=Araclar()
             # Hesaplamalar Yapılıyor
             backtest.paralel_hesaplama()
             # Analiz yapılıyor
-            Araclar.strategy_result_analyze()
+            araclar.strategy_result_analyze()
             # strategy.json hazırlanıyor
-            Araclar.strategy_analyze_save()
+            araclar.strategy_analyze_save()
 
     @staticmethod
     def stratejinin_buy_verdikleri(strategy_name,periyot):
