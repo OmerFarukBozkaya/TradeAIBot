@@ -107,10 +107,15 @@ class Tarama:
                     if strategy_result[i] == 'SELL':
                         son_sell_index = i
                         break
+                son_buy_index = 0
+                for i in range(len(strategy_result) - 1, -1, -1):
+                    if strategy_result[i] == 'BUY':
+                        son_buy_index = i
+                        break
 
                 if (strategy_result[-2] == "BUY") and ("BUY" not in strategy_result[son_sell_index:-2]):
                     coin_results[strategy.__name__] = "BUY"
-                elif strategy_result[-2] == "SELL":
+                elif strategy_result[-2] == "SELL" and ("SELL" not in strategy_result[son_buy_index:-2]):
                     coin_results[strategy.__name__] = "SELL"
             return coin_results
         except Exception as e:
