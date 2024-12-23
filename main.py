@@ -150,7 +150,8 @@ def main ():
         print(araclar.saniye_to_hms(b-a))
     elif com == "14":
         a=time.time()
-        Araclar.strategy_analyze_save()
+        araclar=Araclar()
+        araclar.strategy_analyze_save()
         b=time.time()
         print(araclar.saniye_to_hms(b-a))
     elif com == "15":
