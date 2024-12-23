@@ -194,7 +194,7 @@ class Trade:
                     succes = False
                     while not succes:
                         try:
-                            ma_50 = Indikator.SMA(close,50)
+                            ema_50 = Indikator.EMA(close,50)
                             bb_down,bb_mid,bb_up = Indikator.BB(close)
                             son_sell_index = 0
                             for i in range(len(strategy_result) - 1, -1, -1):
@@ -204,10 +204,10 @@ class Trade:
                             destek,direnc,signal=Stratejiler.destek_stop_lose(close[-1],None,None,close,low)
                             buy_control = (strategy_result[-2] == "BUY") and ("BUY" not in strategy_result[son_sell_index:-2])
                             direnc_control = (direnc is not None)
-                            ma_control = (ma_50[-1] is not None and close[-1] > ma_50[-1]) or self.buy_ma_control=="False"
+                            ema_control = (ema_50[-1] is not None and close[-1] > ema_50[-1]) or self.buy_ma_control=="False"
                             bb_control = (bb_mid[-1] is not None and close[-1]<bb_mid[-1]) or self.buy_bb_control=="False"
-                            buy_result.info(f"{periyot} {strategy.__name__} {coin} {buy_control} {direnc_control} {ma_control} {bb_control}")
-                            if (not self.islem_acik) and buy_control and direnc_control and ma_control and bb_control:
+                            buy_result.info(f"{periyot} {strategy.__name__} {coin} {buy_control} {direnc_control} {ema_control} {bb_control}")
+                            if (not self.islem_acik) and buy_control and direnc_control and ema_control and bb_control:
                                 strateji_adi = str(strategy.__name__)
                                 self.adet = self.buy(coin, periyot, strateji_adi, close, nakit)
                                 self.alinan_coin = coin  # Alınan coin'i kaydet
