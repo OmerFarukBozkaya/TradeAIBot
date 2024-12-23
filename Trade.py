@@ -5,6 +5,7 @@ from Binance import Binance
 from Araclar import Araclar
 from Stratejiler import Stratejiler
 import logging
+from logging.handlers import RotatingFileHandler
 import threading
 import json
 import os
@@ -17,26 +18,43 @@ if not os.path.exists('Log'):
 if not os.path.exists('Trade_Durumu'):
     os.makedirs('Trade_Durumu')
 
-# Log ayarları
-logging.basicConfig(filename='Log/trade.log', level=logging.INFO,
-                    format='%(asctime)s - %(levelname)s - %(message)s')
-
-# İşlem geçmişi için ayrı bir logger oluştur
-islemgecmisi = logging.getLogger('islemgecmisi')
-handler = logging.FileHandler('Log/islem_gecmisi.log')
-handler.setLevel(logging.INFO)
+# Ortak format
 formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
-handler.setFormatter(formatter)
-islemgecmisi.addHandler(handler)
+
+# Trade Logger
+trade = logging.getLogger('trade')
+trade.setLevel(logging.INFO)  # Logger seviyesi
+trade_handler = RotatingFileHandler(
+    'Log/trade.log',
+    maxBytes=25 * 1024 * 1024,  # 25 MB
+    backupCount=1              # 1 yedek dosya tut
+)
+trade_handler.setFormatter(formatter)
+trade.addHandler(trade_handler)
+trade.propagate = False
+
+# İşlem Geçmişi Logger
+islemgecmisi = logging.getLogger('islemgecmisi')
+islemgecmisi.setLevel(logging.INFO)  # Logger seviyesi
+islemgecmisi_handler = RotatingFileHandler(
+    'Log/islem_gecmisi.log',
+    maxBytes=25 * 1024 * 1024,  # 25 MB
+    backupCount=1              # 1 yedek dosya tut
+)
+islemgecmisi_handler.setFormatter(formatter)
+islemgecmisi.addHandler(islemgecmisi_handler)
 islemgecmisi.propagate = False
 
-# hesaplama sonuçları için ayrı bir logger oluştur
+# Hesaplama Sonuçları Logger
 buy_result = logging.getLogger('buy_result')
-handler = logging.FileHandler('Log/buy_result.log')
-handler.setLevel(logging.INFO)
-formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
-handler.setFormatter(formatter)
-buy_result.addHandler(handler)
+buy_result.setLevel(logging.INFO)  # Logger seviyesi
+buy_result_handler = RotatingFileHandler(
+    'Log/buy_result.log',
+    maxBytes=25 * 1024 * 1024,  # 25 MB
+    backupCount=1              # 1 yedek dosya tut
+)
+buy_result_handler.setFormatter(formatter)
+buy_result.addHandler(buy_result_handler)
 buy_result.propagate = False
 
 class Trade:
@@ -106,7 +124,7 @@ class Trade:
         self.periyot=periyot
         if not temp_trade:
             self.yukle()
-        logging.info(f"Trade {periyot} Calisiyor ... {gercek}")
+        trade.info(f"Trade {periyot} Calisiyor ... {gercek}")
         print(f"Trade {periyot} Calisiyor ... {gercek}", time.ctime())
         coinlist=self.binance.coin_list()
         self.araclar.mum_olusmasini_bekle(periyot)
@@ -139,7 +157,7 @@ class Trade:
                                     break
                             except Exception as e:
                                 hata = traceback.format_exc()
-                                logging.error(f"Bir hata olustu: {hata}")
+                                trade.error(f"Bir hata olustu: {hata}")
                                 if self.mail_gonder == "True":
                                     self.araclar.mail_gonder(f"HATA | Trade {periyot}", f"{hata}")
                                 if self.telegram_mesaj_gonder == "True":
@@ -161,7 +179,7 @@ class Trade:
                 open = data['open']
                 vol = data['volume_usdt']
             except Exception as e:
-                logging.error(f"Veri ithalinde hata oluştu: {e} \n [{periyot}] [{coin}]")
+                trade.error(f"Veri ithalinde hata oluştu: {e} \n [{periyot}] [{coin}]")
                 continue
 
             if self.araclar.mum_sagligi(open=open[-50:], close=close[-50:]) > 5:
@@ -198,7 +216,7 @@ class Trade:
                                 self.sell_strategy = strategy  # Kullanılan strateji
                                 if not temp_trade:
                                     self.kaydet()
-                                logging.info(f"AL | {coin} alındı, Adet: {self.adet}, Fiyat: {close[-1]}")
+                                trade.info(f"AL | {coin} alındı, Adet: {self.adet}, Fiyat: {close[-1]}")
                                 islemgecmisi.info(
                                     f"{strateji_adi} {periyot} AL | {coin} alındı, Adet: {self.adet}, Fiyat: {close[-1]}")
                                 print(f"{strateji_adi} {periyot} AL | {coin} alındı, Adet: {self.adet}, Fiyat: {close[-1]}")
@@ -209,10 +227,10 @@ class Trade:
                                 return True  # İşlem açıldı, döngüden çık
                             succes = True
                         except Exception as e:
-                            logging.error(f"Alim sinyali kontrolünde hata oluştu: {e} \n [{strategy.__name__}] [{periyot}] [{coin}]")
+                            trade.error(f"Alim sinyali kontrolünde hata oluştu: {e} \n [{strategy.__name__}] [{periyot}] [{coin}]")
                             time.sleep(2)
                             if limit==0:
-                                logging.error(
+                                trade.error(
                                     f"Alim sinyali kontrolünde hata oluştu: Deneme limiti asildi cikis yapiliyot {e} \n [{strategy.__name__}] [{periyot}] [{coin}]")
                                 return False
                             else:
@@ -235,7 +253,7 @@ class Trade:
                 close = data['close']
                 vol = data['volume_usdt']
             except Exception as e:
-                logging.error(
+                trade.error(
                     f"Veri ithali sırasında hata: {e} \n [{periyot}] [{self.alinan_coin}] [{self.sell_strategy.__name__}]")
                 time.sleep(5)
                 hata = traceback.format_exc()
@@ -264,7 +282,7 @@ class Trade:
                 mevcut_adedim = self.binance.mevcut_adedim(self.alinan_coin)
                 minqty = self.binance.get_coin_minQTY(self.alinan_coin)
             except Exception as e:
-                logging.error(
+                trade.error(
                     f"Satış hesaplama sırasında hata: {e} \n [{periyot}] [{self.alinan_coin}] [{self.sell_strategy.__name__}]")
                 time.sleep(5)
                 hata = traceback.format_exc()
@@ -301,7 +319,7 @@ class Trade:
                         self.kaydet()
                     break  # Satış yapıldı, döngüden çık
                 except Exception as e:
-                    logging.error(
+                    trade.error(
                         f"Hedef Satış işleminde hata: {e} \n [{periyot}] [{self.alinan_coin}] [{self.sell_strategy.__name__}]")
                     time.sleep(5)
                     hata = traceback.format_exc()
@@ -324,7 +342,7 @@ class Trade:
                         self.kaydet()
                     break  # Satış yapıldı, döngüden çık
                 except Exception as e:
-                    logging.error(f"STOP-LOSE işleminde hata: {e} \n [{periyot}] [{self.alinan_coin}]")
+                    trade.error(f"STOP-LOSE işleminde hata: {e} \n [{periyot}] [{self.alinan_coin}]")
                     time.sleep(5)
                     hata = traceback.format_exc()
                     if self.mail_gonder=="True":
@@ -352,7 +370,7 @@ class Trade:
                     else:
                         other_strategy_result.append(0)
             except Exception as e:
-                logging.error(f"Diger stratejilerin sonuclarini hesaplamada hata : {e} ")
+                trade.error(f"Diger stratejilerin sonuclarini hesaplamada hata : {e} ")
                 time.sleep(5)
                 hata = traceback.format_exc()
                 if self.mail_gonder=="True":
@@ -363,7 +381,7 @@ class Trade:
 
             stop_seviyesi=round(stop_seviyesi,basamak_sayisi)
             yuvarlanmis_destek=round(self.destek,basamak_sayisi)
-            logging.info(
+            trade.info(
                 f"DURUM : {periyot} {self.sell_strategy.__name__} {self.alinan_coin} Islem Suresi: {self.mum_sayisi} mum. Diger strategyler {other_strategy_result} Stop-Lose: {stop_seviyesi}|{yuvarlanmis_destek} Kar/Zarar: {((close[-1] / self.alim_fiyati) - 1) * 100:.2f}%")
             if self.telegram_mesaj_gonder=="True":
                 self.araclar.telegram_mesaj_gonder(f"🔵 DURUM : {periyot} {self.sell_strategy.__name__} {self.alinan_coin} Islem Suresi: {self.mum_sayisi} mum. Diger strategyler {other_strategy_result} Stop-Lose: {stop_seviyesi}|{yuvarlanmis_destek} Kar/Zarar: {((close[-1] / self.alim_fiyati) - 1) * 100:.2f}%")
@@ -389,7 +407,7 @@ class Trade:
     def sell(self, coin, periyot, close, strateji_adi, buy_price):
         kar_zarar = ((close[-1] / buy_price) - 1) * 100
         self.mum_sayisi = self.mum_sayisi + 1
-        logging.info(f"SAT {strateji_adi} {periyot}| {coin} satıldı, Adet: {self.adet}, Fiyat: {close[-1]}")
+        trade.info(f"SAT {strateji_adi} {periyot}| {coin} satıldı, Adet: {self.adet}, Fiyat: {close[-1]}")
         islemgecmisi.info(
             f"{strateji_adi} {periyot} SAT | {coin} satıldı, Mum sayisi : {self.mum_sayisi} Adet: {self.adet}, Fiyat: {close[-1]} Kar/Zarar: {kar_zarar:.2f}%"
         )
@@ -411,7 +429,7 @@ class Trade:
     def stop_lose(self, coin, periyot, close, strateji_adi, buy_price):
         kar_zarar = ((close[-1] / buy_price) - 1) * 100
         self.mum_sayisi = self.mum_sayisi + 1
-        logging.info(f"SAT [STOP-LOSE] {strateji_adi} {periyot}| {coin} satıldı, Adet: {self.adet}, Fiyat: {close[-1]}")
+        trade.info(f"SAT [STOP-LOSE] {strateji_adi} {periyot}| {coin} satıldı, Adet: {self.adet}, Fiyat: {close[-1]}")
         islemgecmisi.info(
             f"{strateji_adi} {periyot} SAT [STOP-LOSE] | {coin} satıldı, Mum sayisi : {self.mum_sayisi} Adet: {self.adet}, Fiyat: {close[-1]} Kar/Zarar: {kar_zarar:.2f}%"
         )
@@ -433,7 +451,7 @@ class Trade:
     def manul_sell(self, coin, periyot, close, strateji_adi, buy_price):
         kar_zarar = ((close[-1] / buy_price) - 1) * 100
         self.mum_sayisi = self.mum_sayisi + 1
-        logging.info(f"SAT [MANUEL] {strateji_adi} {periyot}| {coin} satıldı, Adet: {self.adet}, Fiyat: {close[-1]}")
+        trade.info(f"SAT [MANUEL] {strateji_adi} {periyot}| {coin} satıldı, Adet: {self.adet}, Fiyat: {close[-1]}")
         islemgecmisi.info(
             f"{strateji_adi} {periyot} SAT [MANUEL] | {coin} satıldı, Mum sayisi : {self.mum_sayisi} Adet: {self.adet}, Fiyat: {close[-1]} Kar/Zarar: {kar_zarar:.2f}%"
         )

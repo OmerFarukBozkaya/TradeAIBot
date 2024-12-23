@@ -9,13 +9,18 @@ from concurrent.futures import ThreadPoolExecutor
 import concurrent.futures
 import logging
 import os
+from logging.handlers import RotatingFileHandler
 
 if not os.path.exists('Log'):
     os.makedirs('Log')
 
 # İşlem geçmişi için ayrı bir logger oluştur
 tarama = logging.getLogger('tarama')
-handler = logging.FileHandler('Log/tarama.log')
+handler = RotatingFileHandler(
+    'Log/tarama.log',
+    maxBytes=25 * 1024 * 1024,  # 25 MB
+    backupCount=1              # 1 yedek dosya tut
+)
 handler.setLevel(logging.INFO)
 formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
 handler.setFormatter(formatter)
