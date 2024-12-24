@@ -767,8 +767,41 @@ class IndikatorTest:
         return supertrend, direction
 
     @staticmethod
-    def Grafik_Indikator(open_prices, high_prices, low_prices, close_prices, timestamps, main_indicators=None,
-                                  sub_indicators=None):
+    def BUY_SELL_VOL(open, high, low, close, vol, length=10):
+        result = []
+        for i in range(len(close)):
+            if i < length - 1:
+                result.append(None)
+                continue  # İlk length-1 iterasyonda işlemi atla.
+
+            # i'nin length'ten küçük olup olmadığını kontrol ederek geçerli bir çerçeve oluştur.
+            frame = {
+                'open': open[i - length + 1:i + 1],
+                'high': high[i - length + 1:i + 1],
+                'low': low[i - length + 1:i + 1],
+                'close': close[i - length + 1:i + 1],
+                'vol': vol[i - length + 1:i + 1]
+            }
+
+            buy_sum = 0
+            sell_sum = 0
+
+            # Frame içindeki verilerde döngü.
+            for j in range(length):
+                if frame['open'][j] < frame['close'][j]:
+                    buy_sum += frame['vol'][j]
+                else:
+                    sell_sum += frame['vol'][j]
+
+            # Alış ve satış hacmi oranını hesapla.
+            oran = ((buy_sum / sell_sum) - 1) * 100 if sell_sum != 0 else float('inf')  # Satış hacmi sıfırsa sonsuz.
+            result.append(oran)
+
+        return result
+
+    @staticmethod
+    def Grafik_Indikator(open_prices, high_prices, low_prices, close_prices, vol, timestamps,
+                         main_indicators=None, sub_indicators=None, sub_horizontal_lines=None):
         """
         Mum grafiği ve indikatörlerin çizimi için bir fonksiyon.
 
@@ -780,6 +813,7 @@ class IndikatorTest:
             timestamps (list): Zaman damgaları (saniye cinsinden UNIX timestamp).
             main_indicators (dict): Ana grafikte gösterilecek indikatörler.
             sub_indicators (dict): Alt grafikte gösterilecek indikatörler.
+            sub_horizontal_lines (list of dict): Alt grafiklerde sabit yatay çizgiler.
 
         Returns:
             None: Grafiği oluşturur ve gösterir.
@@ -811,7 +845,6 @@ class IndikatorTest:
         # Figure başlığını ayarla
         fig.canvas.manager.set_window_title("Mum Grafiği ve İndikatörler")
 
-
         # Eğer tek bir ana grafik varsa, axes bir liste değil, tek bir Axes nesnesi olacaktır
         if num_subplots == 0:
             axes = [axes]
@@ -824,8 +857,8 @@ class IndikatorTest:
         for i in range(n):
             color = 'green' if close_prices[i] >= open_prices[i] else 'red'
             ax_main.plot([i, i], [low_prices[i], high_prices[i]], color=color, linewidth=1.5)  # Fitil çizimi
-            ax_main.add_patch(plt.Rectangle((i - 0.4, min(open_prices[i], close_prices[i])), 0.8, \
-                                            abs(close_prices[i] - open_prices[i]), \
+            ax_main.add_patch(plt.Rectangle((i - 0.4, min(open_prices[i], close_prices[i])), 0.8,
+                                            abs(close_prices[i] - open_prices[i]),
                                             color=color, alpha=0.7))  # Mum gövdesi
 
         # Ana indikatörlerin çizimi
@@ -840,7 +873,7 @@ class IndikatorTest:
         ax_main.legend()
         ax_main.grid(True, linestyle='--', alpha=0.6)
 
-        # Alt grafiklerdeki indikatörlerin çizimi
+        # Alt grafiklerdeki indikatörlerin çizimi ve yatay çizgiler
         if sub_indicators:
             for idx, (ax, indicators) in enumerate(zip(axes[1:], sub_indicators)):
                 colors = plt.cm.tab10(np.linspace(0, 1, len(indicators)))
@@ -849,6 +882,12 @@ class IndikatorTest:
                         raise ValueError(f"{name} alt indikatörünün uzunluğu OHLC verileriyle eşleşmiyor.")
                     filtered_values = [v if v is not None else np.nan for v in values]
                     ax.plot(range(n), filtered_values, label=name, color=color)
+
+                # Alt grafikte yatay çizgiler
+                if sub_horizontal_lines and len(sub_horizontal_lines) > idx:
+                    for line in sub_horizontal_lines[idx]:
+                        ax.axhline(y=line['value'], color=line.get('color', 'black'), linestyle='--', linewidth=1.5,
+                                   label=line.get('name', 'Sabit Çizgi'))
 
                 ax.legend()
                 ax.grid(True, linestyle='--', alpha=0.6)
@@ -874,6 +913,7 @@ class IndikatorTest:
                 h = high_prices[index]
                 l = low_prices[index]
                 c = close_prices[index]
+                v = vol[index]
                 time = dates[index]
 
                 # Yüzdelik değişim hesaplama
@@ -893,10 +933,41 @@ class IndikatorTest:
 
                 # Fiyat değişimini ve diğer indikatörleri ekle
                 indicator_text = ", ".join(f"{name}: {value:.2f}" for name, value in indicator_values.items())
-                return f"Time: {time}, Open: {o}, High: {h}, Low: {l}, Close: {c}, Change: {price_change_percent:.2f}%, {indicator_text}"
+                return f"Time: {time}, Open: {o}, High: {h}, Low: {l}, Close: {c}, Volume: {v} ,Change: {price_change_percent:.2f}%, {indicator_text}"
             return f"X: {x:.2f}, Y: {y:.2f}"
 
         ax_main.format_coord = format_coord
+
+        # Alt grafiklerde fareyi hareket ettirme
+        if sub_indicators:
+            for idx, ax in enumerate(axes[1:], start=0):
+                # Alt grafik için format_coord özelleştirme
+                def format_coord_alt(x, y, idx=idx):
+                    index = int(round(x))
+                    if 0 <= index < n:
+                        o = open_prices[index]
+                        h = high_prices[index]
+                        l = low_prices[index]
+                        c = close_prices[index]
+                        v = vol[index]
+                        time = dates[index]
+
+                        # Yüzdelik değişim hesaplama
+                        if o != 0:
+                            price_change_percent = ((c - o) / o) * 100
+                        else:
+                            price_change_percent = 0
+
+                        sub_values = sub_indicators[idx]  # Alt grafikteki indikatörler
+                        indicator_values = {name: values[index] for name, values in sub_values.items() if
+                                            values[index] is not None}
+
+                        # İndikatör değerlerini formatla
+                        indicator_text = ", ".join(f"{name}: {value:.2f}" for name, value in indicator_values.items())
+                        return f"Time: {time}, Open: {o}, High: {h}, Low: {l}, Close: {c}, Volume: {v} ,Change: {price_change_percent:.2f}%, {indicator_text}"
+                    return f"X: {x:.2f}, Y: {y:.2f}"
+
+                ax.format_coord = format_coord_alt
 
         plt.tight_layout()
         plt.show()
