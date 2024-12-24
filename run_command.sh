@@ -17,11 +17,16 @@ USERS=("$@")
 for USER in "${USERS[@]}"; do
     HOME_DIR="/home/$USER"
     if [ -d "$HOME_DIR" ]; then
-        echo "[$USER] dizinine geçiliyor: $HOME_DIR"
-        cd "$HOME_DIR/TradeAIBot" || { echo "[$USER] Dizine gidilemiyor!"; continue; }
+        echo "[$USER] için giriş yapılıyor..."
 
-        echo "[$USER] komut çalıştırılıyor: $COMMAND"
-        eval "$COMMAND"
+        # Kullanıcı oturumunda komutu çalıştır
+        su - "$USER" -c "cd $HOME_DIR && $COMMAND"
+
+        if [ $? -eq 0 ]; then
+            echo "[$USER] komut başarıyla çalıştırıldı: $COMMAND"
+        else
+            echo "[$USER] komut çalıştırılamadı!"
+        fi
     else
         echo "[$USER] home dizini bulunamadı: $HOME_DIR"
     fi
