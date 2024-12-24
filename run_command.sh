@@ -20,7 +20,7 @@ for USER in "${USERS[@]}"; do
         echo "[$USER] için giriş yapılıyor..."
 
         # Kullanıcı oturumunda komutu çalıştır
-        su - "$USER" -c "cd $HOME_DIR && $COMMAND"
+        su - "$USER" -c "cd $HOME_DIR/TradeAIBot && $COMMAND"
 
         if [ $? -eq 0 ]; then
             echo "[$USER] komut başarıyla çalıştırıldı: $COMMAND"
