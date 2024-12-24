@@ -38,6 +38,7 @@ class Araclar:
         self.strategy_limit_1h=os.getenv('STRATEGY_LIMIT_1H')
         self.strategy_limit_4h=os.getenv('STRATEGY_LIMIT_4H')
         self.strategy_limit_1d=os.getenv('STRATEGY_LIMIT_1D')
+        self.strategy_limit_check=os.getenv('STRATEGY_LIMIT_CHECK')
         if(to_email is not None):
             self.to_email = to_email
 
@@ -281,7 +282,9 @@ class Araclar:
 
                     # Stratejileri listeye ekle, yalnızca belirli sayıda strateji al
                     for strategy in data[:num_strategies]:
-                        if strategy[f"{period} Karlilik Ortalaması"] > limit:
+                        if self.strategy_limit_check == "True" and strategy[f"{period} Karlilik Ortalaması"] > limit:
+                            strategies_list.append(strategy[f"{period} Strategy"].replace("*", ""))
+                        elif self.strategy_limit_check != "True":
                             strategies_list.append(strategy[f"{period} Strategy"].replace("*", ""))
 
                     # Stratejileri kaydet
