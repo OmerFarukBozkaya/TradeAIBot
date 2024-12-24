@@ -1,5 +1,9 @@
 #!/bin/bash
 
+alias trade_durdur="tmux kill-session -t Trade"
+alias tarama_durdur="tmux kill-session -t Tarama"
+alias trade_baslat="bash ~/TradeAIBot/Tmux/tmux_trade.sh"
+
 # Komut kontrolü
 if [ "$#" -lt 2 ]; then
     echo "Kullanım: $0 '<komut>' <kullanıcı1> <kullanıcı2> ... <kullanıcıN>"
