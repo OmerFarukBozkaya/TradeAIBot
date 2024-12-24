@@ -86,6 +86,7 @@ class Trade:
         self.telegram_mesaj_gonder=os.getenv('TELEGRAM_MESAJ_GONDER')
         self.buy_ma_control = os.getenv('BUY_MA_CONTROL')
         self.buy_bb_control = os.getenv('BUY_BB_CONTROL')
+        self.durum_list=[]
     def kaydet(self):
         durum = {
             'islem_acik': self.islem_acik,
@@ -98,11 +99,11 @@ class Trade:
             'mum_sayisi':self.mum_sayisi,
             'highest_price':self.highest_price,
             'destek':self.destek,
-            'direnc':self.direnc
+            'direnc':self.direnc,
+            'durum_list':self.durum_list
         }
         with open(f'Trade_Durumu/trade_durumu_{self.periyot}.json', 'w') as f:
             json.dump(durum, f)
-    # Durumu yükleyen fonksiyon
     def yukle(self):
         if os.path.exists(f'Trade_Durumu/trade_durumu_{self.periyot}.json'):
             with open(f'Trade_Durumu/trade_durumu_{self.periyot}.json', 'r') as f:
@@ -118,6 +119,7 @@ class Trade:
                 self.highest_price = durum['highest_price']
                 self.destek = durum['destek']
                 self.direnc = durum['direnc']
+                self.durum_list = durum['durum_list']
     def TradeEt(self, periyot, gercek,nakit,temp_trade=False):
         self.gercek = gercek  # Gerçek işlem bilgisi kaydedildi
         self.nakit=nakit
@@ -265,11 +267,13 @@ class Trade:
 
             # Hesaplamalar
             try:
+                # Strategy
                 if self.sell_strategy.__name__ == "Alpha_Trend":
                     sell_strategy_result = self.sell_strategy(high, low, close,vol)[-2]
                 else:
                     sell_strategy_result = self.sell_strategy(high, low, close)[-2]
 
+                # Stop-Lose
                 if destek_stop_lose:
                     self.destek, self.direnc, destek_stop_lose_check = Stratejiler.destek_stop_lose(self.alim_fiyati, self.destek, self.direnc, close, low)
                     if self.direnc is None:
@@ -279,6 +283,13 @@ class Trade:
                 if static_stop_lose:
                     static_stop_lose_check = Stratejiler.static_stop_lose(close, self.alim_fiyati)
 
+                # Take-profit
+                kar_zarar = ((close[-1] / self.alim_fiyati) - 1) * 100
+                if kar_zarar > 0:
+                    self.durum_list.append(kar_zarar)
+                ortalama, take_profit_signal = Stratejiler.take_profit(self.durum_list)
+
+                # Data
                 mevcut_adedim = self.binance.mevcut_adedim(self.alinan_coin)
                 minqty = self.binance.get_coin_minQTY(self.alinan_coin)
             except Exception as e:
@@ -302,6 +313,7 @@ class Trade:
                 self.destek = None
                 self.highest_price = None
                 self.mum_sayisi = 0
+                self.durum_list = []
                 if not temp_trade:
                     self.kaydet()
                 break  # Satış yapıldı, döngüden çık
@@ -315,6 +327,7 @@ class Trade:
                     self.destek=None
                     self.highest_price=None
                     self.mum_sayisi = 0
+                    self.durum_list = []
                     if not temp_trade:
                         self.kaydet()
                     break  # Satış yapıldı, döngüden çık
@@ -338,6 +351,7 @@ class Trade:
                     self.direnc = None
                     self.highest_price = None
                     self.mum_sayisi = 0
+                    self.durum_list = []
                     if not temp_trade:
                         self.kaydet()
                     break  # Satış yapıldı, döngüden çık
@@ -350,7 +364,30 @@ class Trade:
                     if self.telegram_mesaj_gonder=="True":
                         self.araclar.telegram_mesaj_gonder(f"❗ HATA | Trade {periyot} \n {e}")
                     continue
-            
+            elif take_profit_signal== "TAKE-PROFIT":
+                try:
+                    self.take_profit_sell(self.alinan_coin, periyot, close, str(self.sell_strategy.__name__), self.alim_fiyati)
+                    self.islem_acik = False
+                    self.alinan_coin = None
+                    self.alim_fiyati = None
+                    self.destek = None
+                    self.direnc = None
+                    self.highest_price = None
+                    self.mum_sayisi = 0
+                    self.durum_list=[]
+                    if not temp_trade:
+                        self.kaydet()
+                    break  # Satış yapıldı, döngüden çık
+                except Exception as e:
+                    trade.error(f"TAKE-PROFIT işleminde hata: {e} \n [{periyot}] [{self.alinan_coin}]")
+                    time.sleep(5)
+                    hata = traceback.format_exc()
+                    if self.mail_gonder=="True":
+                        self.araclar.mail_gonder(f"HATA | Trade {periyot}", f"{hata}")
+                    if self.telegram_mesaj_gonder=="True":
+                        self.araclar.telegram_mesaj_gonder(f"❗ HATA | Trade {periyot} \n {e}")
+                    continue
+
             self.mum_sayisi = self.mum_sayisi + 1
             if not temp_trade:
                 self.kaydet()
@@ -382,9 +419,9 @@ class Trade:
             stop_seviyesi=round(stop_seviyesi,basamak_sayisi)
             yuvarlanmis_destek=round(self.destek,basamak_sayisi)
             trade.info(
-                f"DURUM : {periyot} {self.sell_strategy.__name__} {self.alinan_coin} Islem Suresi: {self.mum_sayisi} mum. Diger strategyler {other_strategy_result} Stop-Lose: {stop_seviyesi}|{yuvarlanmis_destek} Kar/Zarar: {((close[-1] / self.alim_fiyati) - 1) * 100:.2f}%")
+                f"DURUM : {periyot} {self.sell_strategy.__name__} {self.alinan_coin} Islem Suresi: {self.mum_sayisi} mum. Diger strategyler {other_strategy_result} Stop-Lose: {stop_seviyesi}|{yuvarlanmis_destek}. Durum Ortalamasi: {ortalama:.2f} Kar/Zarar: {kar_zarar:.2f}%")
             if self.telegram_mesaj_gonder=="True":
-                self.araclar.telegram_mesaj_gonder(f"🔵 DURUM : {periyot} {self.sell_strategy.__name__} {self.alinan_coin} Islem Suresi: {self.mum_sayisi} mum. Diger strategyler {other_strategy_result} Stop-Lose: {stop_seviyesi}|{yuvarlanmis_destek} Kar/Zarar: {((close[-1] / self.alim_fiyati) - 1) * 100:.2f}%")
+                self.araclar.telegram_mesaj_gonder(f"🔵 DURUM : {periyot} {self.sell_strategy.__name__} {self.alinan_coin} Islem Suresi: {self.mum_sayisi} mum. Diger strategyler {other_strategy_result} Stop-Lose: {stop_seviyesi}|{yuvarlanmis_destek}. Durum Ortalamasi: {ortalama:.2f} Kar/Zarar: {kar_zarar:.2f}%")
             time.sleep(10)
             self.araclar.mum_olusmasini_bekle(periyot)
     def buy(self, coin, periyot, strateji_adi, close,nakit):
@@ -466,4 +503,26 @@ class Trade:
             self.araclar.telegram_mesaj_gonder(
                 f"🛑 SAT [MANUEL] | {strateji_adi} {periyot} \n{coin} satıldı, Adet: {self.adet}, Fiyat: {close[-1]} Kar/Zarar:{((close[-1] / buy_price) - 1) * 100:.2f}%")
 
+        return "SAT"
+    def take_profit_sell(self,coin, periyot, close, strateji_adi, buy_price):
+        kar_zarar = ((close[-1] / buy_price) - 1) * 100
+        self.mum_sayisi = self.mum_sayisi + 1
+        trade.info(f"SAT [TAKE-PROFIT] {strateji_adi} {periyot}| {coin} satıldı, Adet: {self.adet}, Fiyat: {close[-1]}")
+        islemgecmisi.info(
+            f"{strateji_adi} {periyot} SAT [TAKE-PROFIT] | {coin} satıldı, Mum sayisi : {self.mum_sayisi} Adet: {self.adet}, Fiyat: {close[-1]} Kar/Zarar: {kar_zarar:.2f}%"
+        )
+        print(
+            f"{strateji_adi} {periyot} SAT [TAKE-PROFIT] | {coin} satıldı, Mum sayisi : {self.mum_sayisi} Adet: {self.adet}, Fiyat: {close[-1]} Kar/Zarar: {kar_zarar:.2f}%"
+        )
+
+        if self.gercek:
+            mevcut_adedim = self.binance.sahip_olduklarim()[coin]
+            minQty = self.binance.get_coin_minQTY(coin)
+            adet = self.binance.miktar_duzelt(mevcut_adedim, minQty)
+            self.nakit = round(self.nakit + ((close[-1] * adet) * 0.999), 2)
+            self.binance.sat(coin, adet)
+        if self.mail_gonder == "True":
+            self.araclar.mail_gonder(f"SAT [TAKE-PROFIT] | {strateji_adi} {periyot}",f"{coin} satıldı, Adet: {self.adet}, Fiyat: {close[-1]} Kar/Zarar:{((close[-1] / buy_price) - 1) * 100:.2f}%")
+        if self.telegram_mesaj_gonder == "True":
+            self.araclar.telegram_mesaj_gonder(f"✅ SAT [TAKE-PROFIT] | {strateji_adi} {periyot} \n{coin} satıldı, Adet: {self.adet}, Fiyat: {close[-1]} Kar/Zarar:{((close[-1] / buy_price) - 1) * 100:.2f}%")
         return "SAT"

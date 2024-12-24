@@ -8,6 +8,7 @@ class Stratejiler:
     atr_factor_weak_trend = 1.2
     destek_stop_lose_tolerans = 0.01
     dinamik_stop_lose_tolerans = 0.01
+    take_profit_limit = 5
 
     @staticmethod
     def dinamik_stop_lose(high, low, close, highest_price):
@@ -87,6 +88,16 @@ class Stratejiler:
             return None, None, "STOP-LOSE"
         else:
             return destek, direnc, None
+
+    @staticmethod
+    def take_profit(durum_list):
+        if len(durum_list[:-1]) != 0:
+            ortalama = sum(durum_list[:-1]) / len(durum_list[:-1])
+        else:
+            ortalama = 0
+        if ortalama > Stratejiler.take_profit_limit and durum_list[-1] < ortalama:
+            return None, "TAKE-PROFIT"
+        return ortalama, False
 
     @staticmethod
     def MACD(high, low, close):
