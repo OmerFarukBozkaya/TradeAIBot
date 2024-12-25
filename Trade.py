@@ -285,7 +285,7 @@ class Trade:
 
                 # Take-profit
                 kar_zarar = ((close[-1] / self.alim_fiyati) - 1) * 100
-                if kar_zarar > 0:
+                if kar_zarar > 5:
                     self.durum_list.append(kar_zarar)
                 ortalama, take_profit_signal = Stratejiler.take_profit(self.durum_list)
 
