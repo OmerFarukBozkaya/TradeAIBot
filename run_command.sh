@@ -6,14 +6,14 @@ if [ -f ~/.bashrc ]; then
 fi
 
 # Parametre kontrolü
-if [ "$#" -lt 3 ]; then
+if [ "$#" -lt 2 ]; then
     echo "Kullanım: $0 '<komut>' <kullanıcı1> <kullanıcı2> ... <kullanıcıN>"
     exit 1
 fi
 
 COMMAND=$1  # Çalıştırılacak komut (alias dahil olabilir)
 TARGET_DIR="TradeAIBot"  # Hedef klasör
-shift 2
+shift
 USERS=("$@")  # Kullanıcı listesi
 
 for USER in "${USERS[@]}"; do
