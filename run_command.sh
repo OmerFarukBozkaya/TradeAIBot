@@ -1,27 +1,28 @@
 #!/bin/bash
 
-# .bashrc dosyasını kaynak göstererek alias'ları yükleyin
+# Alias'ları tanımlayın veya kullanıcıdan yükleyin
 if [ -f ~/.bashrc ]; then
     source ~/.bashrc
 fi
 
-# Çalıştırılacak komut kontrolü
-if [ "$#" -lt 2 ]; then
+# Parametre kontrolü
+if [ "$#" -lt 3 ]; then
     echo "Kullanım: $0 '<komut>' <kullanıcı1> <kullanıcı2> ... <kullanıcıN>"
     exit 1
 fi
 
-COMMAND=$1
-shift
-USERS=("$@")
+COMMAND=$1  # Çalıştırılacak komut (alias dahil olabilir)
+TARGET_DIR="TradeAIBot"  # Hedef klasör
+shift 2
+USERS=("$@")  # Kullanıcı listesi
 
 for USER in "${USERS[@]}"; do
     HOME_DIR="/home/$USER"
     if [ -d "$HOME_DIR" ]; then
-        echo "[$USER] için giriş yapılıyor..."
+        echo "[$USER] için $TARGET_DIR klasörüne giriş yapılıyor..."
 
-        # Kullanıcının alias'larını ve ortamını kullanarak komutu çalıştır
-        su - "$USER" -c "cd $HOME_DIR && source ~/.bashrc && cd TradeAIBot && $COMMAND"
+        # Kullanıcının ortamında komutları belirli bir klasörde çalıştır
+        su - "$USER" -c "cd $TARGET_DIR && bash -i -c \"$COMMAND\""
 
         if [ $? -eq 0 ]; then
             echo "[$USER] komut başarıyla çalıştırıldı: $COMMAND"
