@@ -38,6 +38,7 @@ def main ():
     17)Tum pozisyonlari kapat
     18)Full nakite gec
     19)Buy result analizi
+    20)Acik pozisyon grafigi
     """)
     com = input("Ne yapılacak :")
     if com == "0":
@@ -194,6 +195,12 @@ def main ():
         binance.buy_result_analyze()
         b=time.time()
         print(araclar.saniye_to_hms(b-a))
+    elif com == "20":
+        a = time.time()
+        periyot=input("Periyot: ")
+        Araclar.acik_pozisyonlarin_grafigi(periyot)
+        b = time.time()
+        print(araclar.saniye_to_hms(b - a))
 
 if __name__ == "__main__":
     main()
