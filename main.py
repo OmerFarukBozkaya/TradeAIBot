@@ -182,12 +182,20 @@ def main ():
         print(araclar.saniye_to_hms(b-a))
     elif com == "17":
         a=time.time()
-        binance.tum_pozisyonlari_kapat()
+        emin_misin=input("Emin misin : ")=="Evet"
+        if emin_misin:
+            binance.tum_pozisyonlari_kapat()
+        else:
+            print("Islem gerceklesmedi !")
         b=time.time()
         print(araclar.saniye_to_hms(b-a))
     elif com == "18":
         a=time.time()
-        binance.full_nakite_gec()
+        emin_misin = input("Emin misin : ") == "Evet"
+        if emin_misin:
+            binance.full_nakite_gec()
+        else:
+            print("Islem gerceklesmedi !")
         b=time.time()
         print(araclar.saniye_to_hms(b-a))
     elif com == "19":

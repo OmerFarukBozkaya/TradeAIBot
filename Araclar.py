@@ -406,7 +406,7 @@ class Araclar:
                       if callable(getattr(Stratejiler, func))
                       and not func.startswith("__")
                       and not getattr(Stratejiler, func).__name__ in ["dinamik_stop_lose", "static_stop_lose",
-                                                                          "destek_stop_lose", "Alpha_Trend"]]
+                                                                          "destek_stop_lose", "Alpha_Trend","take_profit"]]
         for strategy in strategies:
             print(f"{strategy.__name__} : {strategy(high, low, close)[-adet:]}")
 
