@@ -110,7 +110,10 @@ class StratejilerTest:
                 signals.append("SELL")
             else:
                 signals.append(False)
-        return signals
+        indicators={"main_indicators":None,
+                    "sub_indicators": [{"macd_values":macd_values,"macd_signal":macd_signal},{"RSI":rsi_values},{"ADX":adx_values}],
+                    "sub_horizontal_lines":[{"name": "", "value": 0, "color": "black"},{"name": "", "value": 50, "color": "black"}]}
+        return signals,indicators
 
     @staticmethod   #   OK
     def VMZI(high, low, close):
@@ -131,7 +134,10 @@ class StratejilerTest:
                 signals.append("SELL")
             else:
                 signals.append(False)
-        return signals
+        indicators = {"main_indicators": None,
+                      "sub_indicators": [{"VMZI": vmzi}, {"ADX": adx}, {"RSI": rsi}, {"ATR": atr}],
+                      "sub_horizontal_lines":None}
+        return signals,indicators
 
     @staticmethod   #   OK
     def VAMA(high, low, close):
@@ -149,7 +155,10 @@ class StratejilerTest:
                 signals.append("SELL")
             else:
                 signals.append(False)
-        return signals
+        indicators = {"main_indicators": {"SMA50":sma_50},
+                      "sub_indicators": [{"VAMA": vama}],
+                      "sub_horizontal_lines":None}
+        return signals,indicators
 
     @staticmethod   #   OK
     def TSO(high, low, close):
@@ -168,7 +177,10 @@ class StratejilerTest:
                 signals.append("SELL")
             else:
                 signals.append(False)
-        return signals
+        indicators = {"main_indicators": None,
+                      "sub_indicators": [{"TSO": tso},{"ATR": atr}],
+                      "sub_horizontal_lines":None}
+        return signals,indicators
 
     @staticmethod   #   OK
     def BB_RSI(high, low, close):
@@ -188,7 +200,10 @@ class StratejilerTest:
                 signals.append("SELL")
             else:
                 signals.append(False)
-        return signals
+        indicators = {"main_indicators": None,
+                      "sub_indicators": [{"RSI": rsi, "RSI_BB_DOWN": bb_rsi_down, "BB_RSI_MID":bb_rsi_mid, "BB_RSI_UP":bb_rsi_up}, {"ATR": atr}],
+                      "sub_horizontal_lines":[[{"name": "", "value": 50, "color": "black"},{"name": "", "value": 70, "color": "green"},{"name": "", "value": 30, "color": "red"}],[]]}
+        return signals,indicators
 
     @staticmethod   #   OK
     def FDI(high, low, close):
@@ -210,7 +225,10 @@ class StratejilerTest:
                 signals.append("SELL")
             else:
                 signals.append(False)
-        return signals
+        indicators = {"main_indicators": None,
+                      "sub_indicators": [{"FDI":fdi},{"macd_values": macd_values, "macd_signal": macd_signal}, {"RSI": rsi}, {"ADX": adx}],
+                      "sub_horizontal_lines":None}
+        return signals,indicators
 
     @staticmethod   #   OK
     def BB_Close(high, low, close):
@@ -229,7 +247,10 @@ class StratejilerTest:
                 signals.append("SELL")
             else:
                 signals.append(False)
-        return signals
+        indicators = {"main_indicators": {"BB_DOWN":bb_down,"BB_MID":bb_mid,"BB_UP":bb_up},
+                      "sub_indicators": [{"ATR": atr}],
+                      "sub_horizontal_lines":None}
+        return signals,indicators
 
     @staticmethod   #   OK
     def MA_Cross(high, low, close):
@@ -250,7 +271,10 @@ class StratejilerTest:
                 signals.append("SELL")
             else:
                 signals.append(False)
-        return signals
+        indicators = {"main_indicators": {"SMA9":ma_9,"SMA50":ma_50},
+                      "sub_indicators": [{"ATR": atr},{"ADX": adx}],
+                      "sub_horizontal_lines":None}
+        return signals,indicators
 
     @staticmethod   #   OK
     def DMO(high, low, close):
@@ -272,7 +296,10 @@ class StratejilerTest:
                 signals.append("SELL")
             else:
                 signals.append(False)
-        return signals
+        indicators = {"main_indicators": {"BB_DOWN":bb_down,"BB_MID":bb_mid,"BB_UP":bb_up},
+                      "sub_indicators": [{"DMO":dmo},{"RSI": rsi},{"ADX": adx},{"ATR":atr}],
+                      "sub_horizontal_lines":None}
+        return signals,indicators
 
     @staticmethod   #   OK
     def BB_ADX(high, low, close):
@@ -291,7 +318,10 @@ class StratejilerTest:
                 signals.append("SELL")
             else:
                 signals.append(False)
-        return signals
+        indicators = {"main_indicators": {"BB_DOWN": bb_down, "BB_MID": bb_mid, "BB_UP": bb_up},
+                      "sub_indicators": [{"ADX": adx}],
+                      "sub_horizontal_lines":None}
+        return signals,indicators
     @staticmethod
     def Alpha_Trend(high,low,close,vol):
         signals=[]
@@ -305,7 +335,10 @@ class StratejilerTest:
                 signals.append("SELL")
             else:
                 signals.append(False)
-        return signals
+        indicators = {"main_indicators": {"Alpha_Trend": alpha_trend},
+                      "sub_indicators": None,
+                      "sub_horizontal_lines":None}
+        return signals,indicators
 
     @staticmethod
     def Super_Trend(high,low,close):
@@ -320,4 +353,7 @@ class StratejilerTest:
                 signals.append("SELL")
             else:
                 signals.append(False)
-        return signals
+        indicators = {"main_indicators": {"Super_Trend": supertrend},
+                      "sub_indicators": [{"Direction": direction}],
+                      "sub_horizontal_lines":None}
+        return signals,indicators
