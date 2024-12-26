@@ -6,7 +6,9 @@ import time
 from datetime import datetime
 from Binance import Binance
 from Indikator import Indikator
+from IndikatorTest import IndikatorTest
 from Stratejiler import Stratejiler
+from StratejilerTest import StratejilerTest
 import pandas as pd
 import os
 import requests
@@ -15,6 +17,11 @@ from Backtest import Backtest
 from dotenv import load_dotenv
 from glob import glob
 import numpy as np
+from matplotlib.gridspec import GridSpec
+import matplotlib.pyplot as plt
+from datetime import datetime
+from matplotlib.widgets import Cursor
+
 
 if not os.path.exists('Data'):
     os.makedirs('Data')
@@ -546,4 +553,185 @@ class Araclar:
         # Ortalama hesaplama
         return ((open + high + low + close) / 4).tolist()
 
+    @staticmethod
+    def acik_pozisyonlarin_grafigi(periyot):
+        binance = Binance()
 
+        # Dosya kontrolü
+        file_path = f'Trade_Durumu/trade_durumu_{periyot}.json'
+        if not os.path.exists(file_path):
+            print(f"{periyot} için açık işlem dosyası bulunamadı.")
+            return
+
+        # JSON verisini yükle
+        with open(file_path, 'r') as f:
+            durum = json.load(f)
+
+        islem_acik = durum['islem_acik']
+        alinan_coin = durum['alinan_coin']
+        alim_fiyati = durum['alim_fiyati']
+        strategy_func = getattr(StratejilerTest, durum['sell_strategy']) if durum['sell_strategy'] else None
+        periyot = durum['periyot']
+
+        if not islem_acik:
+            print(f"{periyot} için açık işlem yok!")
+            return
+
+        # Binance verisi çek
+        data = binance.get_coin_data(alinan_coin, periyot, 1000)
+        open_date = [datetime.fromtimestamp(ts / 1000.0) for ts in data['opendate']]
+        open_price = data['open']
+        high = data['high']
+        low = data['low']
+        close = data['close']
+        volume = data['volume_coin']
+
+        n = len(open_price)
+
+        # Strateji sonucu ve indikatör değerlerini hesapla
+        strategy_results, indicators = strategy_func(high, low, close)
+
+        # Ana grafik
+        num_sub_graphs = len(indicators['sub_indicators'])
+        total_rows = 2 + num_sub_graphs
+        fig = plt.figure(figsize=(16, 6 + 3 * num_sub_graphs))
+        gs = GridSpec(total_rows, 2, height_ratios=[2] + [1] * num_sub_graphs + [1])
+
+        ax_main = fig.add_subplot(gs[0, :])
+        ax_main.set_title(f"{alinan_coin} {periyot} Grafiği")
+        ax_main.set_ylabel("Fiyat")
+
+        # Mum grafiği
+        for i in range(len(close)):
+            color = 'green' if close[i] >= open_price[i] else 'red'
+            ax_main.plot([i, i], [low[i], high[i]], color=color, linewidth=1)
+            ax_main.add_patch(
+                plt.Rectangle((i - 0.4, min(open_price[i], close[i])), 0.8, abs(close[i] - open_price[i]), color=color))
+
+        # Alış fiyatı
+        ax_main.axhline(alim_fiyati, color='blue', linestyle='--', label=f"Alış Fiyatı: {alim_fiyati}")
+
+        # Ana indikatörler
+        if indicators['main_indicators']:
+            for name, values in indicators['main_indicators'].items():
+                ax_main.plot(values, label=name)
+
+        ax_main.legend()
+
+        # Alt grafikler
+        ax_sub_list = []
+        for idx, sub_indicator in enumerate(indicators['sub_indicators']):
+            ax_sub = fig.add_subplot(gs[1 + idx, :])
+            ax_sub_list.append(ax_sub)
+            for name, values in sub_indicator.items():
+                ax_sub.plot(values, label=name)
+
+            # Sabit yatay çizgileri çizme
+            if 'sub_horizontal_lines' in indicators:
+                for line in indicators['sub_horizontal_lines'][idx]:  # Alt grafik için yatay çizgiler
+                    ax_sub.axhline(line['value'], color=line['color'], linestyle='--')
+
+            ax_sub.legend()
+
+        # Kümülatif sonuç grafikleri
+        ax_cumulative = fig.add_subplot(gs[-1, 0])
+
+
+        ax_cumulative_percentage = fig.add_subplot(gs[-1, 1])
+
+
+        initial_capital = 100
+        capital_history = [initial_capital]
+        profit_loss_percentages = []
+
+        last_signal = None
+        buy_price = None
+
+        for i, signal in enumerate(strategy_results):
+            if last_signal is None or last_signal == 'red':
+                if signal == "BUY":
+                    last_signal = 'green'
+                    buy_price = close[i]
+            elif last_signal == 'green':
+                if signal == "SELL":
+                    last_signal = 'red'
+                    sell_price = close[i]
+                    profit_percentage = ((sell_price - buy_price) / buy_price) * 100
+                    current_capital = capital_history[-1] * (1 + profit_percentage / 100)
+                    capital_history.append(current_capital)
+                    profit_loss_percentages.append(profit_percentage)
+
+        # Kümülatif Kâr/Zarar Grafiği
+        final_capital = capital_history[-1] if capital_history else initial_capital
+        ax_cumulative.axhline(initial_capital, color='black', linestyle='--')
+        ax_cumulative.plot(capital_history, 'o-', label=f"Kapital (Son: {final_capital:.2f})")
+        ax_cumulative.legend()
+
+        # İşlem Sonuçları (%) Grafiği
+        ax_cumulative_percentage.axhline(0, color='black', linestyle='--')
+        ax_cumulative_percentage.plot(profit_loss_percentages, 'o-', label="İşlem Sonuçları (%)")
+        ax_cumulative_percentage.legend()
+
+        # X-ticks'leri kaldır
+        for ax in [ax_main] + ax_sub_list:
+            ax.set_xticks([])
+
+        # Son eksen için yalnızca X-ticks gösterilir
+        ax_cumulative_percentage.set_xlabel("Zaman")
+
+        # Zoom ve pan hareketlerinin eş zamanlı olması için paylaşımı ayarla
+        for ax in [ax_main] + ax_sub_list:
+            ax.sharex(ax_main)
+
+        a = 0
+        # Mouse ile veri inceleme
+        cursor_main = Cursor(ax_main, useblit=True, color='blue', linewidth=1)
+
+        def format_coord(x, y):
+            index = int(round(x))
+            if 0 <= index < n:
+                o = open_price[index]
+                h = high[index]
+                l = low[index]
+                c = close[index]
+                v = volume[index]
+                time = open_date[index]
+
+                # Yüzdelik değişim hesaplama
+                if o != 0:
+                    price_change_percent = ((c - o) / o) * 100
+                else:
+                    price_change_percent = 0
+
+                indicator_values = {}
+                if indicators['main_indicators']:
+                    indicator_values.update(
+                        {name: values[index] for name, values in indicators['main_indicators'].items() if
+                         values[index] is not None})
+                if indicators['sub_indicators']:
+                    for sub in indicators['sub_indicators']:
+                        indicator_values.update(
+                            {name: values[index] for name, values in sub.items() if values[index] is not None})
+
+                # Fiyat değişimini ve diğer indikatörleri ekle
+                indicator_text = ", ".join(f"{name}: {value:.2f}" for name, value in indicator_values.items())
+                return f"Time: {time}, Open: {o}, High: {h}, Low: {l}, Close: {c}, Volume: {v} ,Change: {price_change_percent:.2f}%, {indicator_text}"
+            return f"X: {x:.2f}, Y: {y:.2f}"
+
+        ax_main.format_coord = format_coord
+
+        # Mouse ile veri inceleme
+        cursor_main = Cursor(ax_cumulative_percentage, useblit=True, color='blue', linewidth=1)
+
+        def format_coord(x, y):
+            index = int(round(x))
+            if 0 <= index < n:
+                result = profit_loss_percentages[index]
+
+                return f"{index}. İşlem Sonucu: {result:.2f}% "
+            return f"X: {x:.2f}, Y: {y:.2f}"
+
+        ax_cumulative_percentage.format_coord = format_coord
+
+        plt.tight_layout()
+        plt.show()
