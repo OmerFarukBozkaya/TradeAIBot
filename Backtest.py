@@ -37,7 +37,7 @@ class Backtest:
                       if callable(getattr(StratejilerTest, func))
                       and not func.startswith("__")
                       and not getattr(StratejilerTest, func).__name__ in ["dinamik_stop_lose", "static_stop_lose",
-                                                                          "destek_stop_lose"]]
+                                                                          "destek_stop_lose","take_profit"]]
 
         # Excel'e yazılacak veriler için bir liste oluştur
         excel_data = []
@@ -153,7 +153,7 @@ class Backtest:
                           if callable(getattr(StratejilerTest, func))
                           and not func.startswith("__")
                           and not getattr(StratejilerTest, func).__name__ in ["dinamik_stop_lose", "static_stop_lose",
-                                                                              "destek_stop_lose", "Alpha_Trend"]]
+                                                                              "destek_stop_lose", "Alpha_Trend","take_profit"]]
         else:
             strategies=[getattr(StratejilerTest,selected_strategy_name)]
 
@@ -179,7 +179,7 @@ class Backtest:
             buy_points = []
             sell_points = []
             stop_points = []
-            strategy_resault = strategy(high, low, close)
+            strategy_resault,indicators = strategy(high, low, close)
             destek=None
             direnc=None
             dinamik_stop_lose_check=False
@@ -321,7 +321,6 @@ class Backtest:
             ax3.axhline(0, color='black', linestyle='--')
             ax3.legend()
 
-            a=0
             # Mouse ile veri inceleme
             cursor_main = Cursor(ax3, useblit=True, color='blue', linewidth=1)
 
@@ -351,7 +350,7 @@ class Backtest:
                       if callable(getattr(StratejilerTest, func))
                       and not func.startswith("__")
                       and not getattr(StratejilerTest, func).__name__ in ["dinamik_stop_lose", "static_stop_lose",
-                                                                          "destek_stop_lose", "Alpha_Trend"]]
+                                                                          "destek_stop_lose", "Alpha_Trend","take_profit"]]
 
         fig = plt.figure(figsize=(16, 30))
         gs = gridspec.GridSpec(len(strategies) + 1, 2, height_ratios=[2] + [1] * len(strategies))
