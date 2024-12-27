@@ -240,9 +240,17 @@ class Trade:
 
             return False  # İşlem açılmadı
     def satis_sinyali_bekle(self, periyot,temp_trade=False):
-        dinamik_stop_lose=False
-        static_stop_lose=False
-        destek_stop_lose=True
+        env_files = glob(".env*")
+        if env_files:
+            # İlk bulunan dosyayı seç
+            selected_env_file = env_files[0]
+            # Seçilen dosyayı yükle
+            load_dotenv(selected_env_file)
+        else:
+            print(".env ile başlayan bir dosya bulunamadı.")
+        dinamik_stop_lose=os.getenv('DINAMIK_STOP_LOSE')=="True"
+        static_stop_lose=os.getenv('STATIC_STOP_LOSE')=="True"
+        destek_stop_lose=os.getenv('DESTEK_STOP_LOSE')=="True"
         stop_seviyesi=-1
         basamak_sayisi=self.araclar.ondalik_basamak_sayisi(self.alim_fiyati)
         self.araclar.mum_olusmasini_bekle(periyot)
