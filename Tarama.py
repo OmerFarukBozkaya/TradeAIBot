@@ -107,20 +107,9 @@ class Tarama:
                 else:
                     strategy_result = strategy(high, low, close)
 
-                son_sell_index = 0
-                for i in range(len(strategy_result) - 1, -1, -1):
-                    if strategy_result[i] == 'SELL':
-                        son_sell_index = i
-                        break
-                son_buy_index = 0
-                for i in range(len(strategy_result) - 1, -1, -1):
-                    if strategy_result[i] == 'BUY':
-                        son_buy_index = i
-                        break
-
-                if (strategy_result[-2] == "BUY") and ("BUY" not in strategy_result[son_sell_index:-2]):
+                if strategy_result[-1] == "BUY":
                     coin_results[strategy.__name__] = "BUY"
-                elif strategy_result[-2] == "SELL" and ("SELL" not in strategy_result[son_buy_index:-2]):
+                elif strategy_result[-1] == "SELL":
                     coin_results[strategy.__name__] = "SELL"
             return coin_results
         except Exception as e:
@@ -137,8 +126,28 @@ class Tarama:
                               strategys.items()}
         result_table = pd.DataFrame(index=coinlist, columns=strategies_columns.keys())
 
-        def calculate_strategy(coin, period, strategy, high, low, close):
-            result = strategy(high, low, close)[-1]
+        def calculate_strategy(coin, period, strategy, high, low, close,vol):
+            if strategy.__name__ != "Alpha_Trend":
+                strategy_results = strategy(high, low, close)
+            else:
+                strategy_results = strategy(high, low, close,vol)
+
+            son_sell_index = 0
+            for i in range(len(strategy_results) - 1, -1, -1):
+                if strategy_results[i] == 'SELL':
+                    son_sell_index = i
+                    break
+            son_buy_index = 0
+            for i in range(len(strategy_results) - 1, -1, -1):
+                if strategy_results[i] == 'BUY':
+                    son_buy_index = i
+                    break
+            if (strategy_results[-2] == "BUY") and ("BUY" not in strategy_results[son_sell_index:-2]):
+                result = "BUY"
+            elif strategy_results[-2] == "SELL" and ("SELL" not in strategy_results[son_buy_index:-2]):
+                result = "SELL"
+            else:
+                result = False
             return 1 if result == "BUY" else -1 if result == "SELL" else 0
 
         # Her period ve coin için stratejileri hesapla ve ortalama sonuçları döndür
@@ -147,13 +156,14 @@ class Tarama:
             high = np.array(data['high'])
             low = np.array(data['low'])
             close = np.array(data['close'])
+            vol = np.array(data['volume_coin'])
             if high is None or low is None or close is None:
                 print(f"Veri çekiminde hata: Coin: {coin}, Periyot: {period}")
                 return period, np.nan  # Hata durumunda NaN dön
 
             results = []
             for strategy in strategys[period]:
-                result = calculate_strategy(coin, period, strategy, high, low, close)
+                result = calculate_strategy(coin, period, strategy, high, low, close,vol)
                 results.append(result)
 
             # Ortalama sonucu hesapla ve döndür
