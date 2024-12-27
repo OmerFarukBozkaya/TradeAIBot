@@ -814,6 +814,10 @@ class IndikatorTest:
             main_indicators (dict): Ana grafikte gösterilecek indikatörler.
             sub_indicators (dict): Alt grafikte gösterilecek indikatörler.
             sub_horizontal_lines (list of dict): Alt grafiklerde sabit yatay çizgiler.
+                    sub_horizontal_lines = [
+                        [{"name": "Threshold 1", "value": 50, "color": "red"},{"name": "Threshold 2", "value": 30, "color": "blue"}],
+                        [{"name": "Limit Line", "value": 75, "color": "green"}]
+                        ]
 
         Returns:
             None: Grafiği oluşturur ve gösterir.
