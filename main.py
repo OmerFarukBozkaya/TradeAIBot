@@ -213,7 +213,8 @@ def main ():
     elif com == "21":
         a = time.time()
         coin=input("Coin: ")
-        Araclar.coin_aylik_sonuc(coin)
+        periyot = input("Periyot: ")
+        Araclar.coin_aylik_sonuc(coin,periyot)
         b = time.time()
         print(araclar.saniye_to_hms(b - a))
 

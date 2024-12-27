@@ -757,9 +757,9 @@ class Araclar:
 
         return day, month, year
     @staticmethod
-    def coin_aylik_sonuc(coin):
+    def coin_aylik_sonuc(coin,periyot):
         binance = Binance()
-        data = binance.get_coin_data(coin,"1M",1000)
+        data = binance.get_coin_data(coin,periyot,1000)
         opendate = data['opendate']
         open_price = data['open']
         close = data['close']
