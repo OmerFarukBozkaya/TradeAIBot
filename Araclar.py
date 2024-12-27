@@ -3,7 +3,7 @@ from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 import traceback
 import time
-from datetime import datetime
+import datetime
 from Binance import Binance
 from Indikator import Indikator
 from IndikatorTest import IndikatorTest
@@ -735,3 +735,45 @@ class Araclar:
 
         plt.tight_layout()
         plt.show()
+
+    @staticmethod
+    def ms_to_d_m_y(saniye):
+        """
+            Unix Timestamp'i gün, ay ve yıl olarak döndüren bir fonksiyon.
+
+            Args:
+                timestamp (float): Unix Timestamp değeri (milisaniye olarak)
+
+            Returns:
+                tuple: (gün, ay, yıl) şeklinde bir tuple döndürür.
+        """
+        # Tarihi dönüştür
+        date = datetime.utcfromtimestamp(saniye)
+
+        # Gün, ay ve yılı ayıkla
+        day = date.day
+        month = date.month
+        year = date.year
+
+        return day, month, year
+    @staticmethod
+    def coin_aylik_sonuc(coin):
+        binance = Binance()
+        data = binance.get_coin_data(coin,"1M",1000)
+        opendate = data['opendate']
+        open_price = data['open']
+        close = data['close']
+        high = data['high']
+        low = data['low']
+        vol = data['volume_coin']
+        result={1:[],2:[],3:[],4:[],5:[],6:[],7:[],8:[],9:[],10:[],11:[],12:[]}
+        for i in range(len(opendate)):
+            gun,ay,yil=Araclar.ms_to_d_m_y(opendate[i]/1000)
+            change = ((close[i]/open_price[i])-1)*100
+            if change > 0:
+                change=1
+            else:
+                change = -1
+            result[ay].append(change)
+        print(f"Ocak: {result[1]}| {sum(result[1])}\nSubat: {result[2]}| {sum(result[2])}\nMart: {result[3]}| {sum(result[3])}\nNisan: {result[4]}| {sum(result[4])}\nMayis: {result[5]}| {sum(result[5])}\nHaziran: {result[6]}| {sum(result[6])}\n"
+              f"Temmuz: {result[7]}| {sum(result[7])}\nAgustos: {result[8]}| {sum(result[8])}\nEylul: {result[9]}| {sum(result[9])}\nEkim: {result[10]}| {sum(result[10])}\nKasim: {result[11]}| {sum(result[11])}\nAralik: {result[12]}| {sum(result[12])}\n")

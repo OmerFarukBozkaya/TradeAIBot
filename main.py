@@ -39,6 +39,7 @@ def main ():
     18)Full nakite gec
     19)Buy result analizi
     20)Acik pozisyon grafigi
+    21)Coin aylik sonuc
     """)
     com = input("Ne yapılacak :")
     if com == "0":
@@ -207,6 +208,12 @@ def main ():
         a = time.time()
         periyot=input("Periyot: ")
         Araclar.acik_pozisyonlarin_grafigi(periyot)
+        b = time.time()
+        print(araclar.saniye_to_hms(b - a))
+    elif com == "21":
+        a = time.time()
+        coin=input("Coin: ")
+        Araclar.coin_aylik_sonuc(coin)
         b = time.time()
         print(araclar.saniye_to_hms(b - a))
 
