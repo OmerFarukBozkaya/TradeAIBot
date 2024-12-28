@@ -56,9 +56,9 @@ class Backtest:
 
             # Strateji sonucu hesaplama
             if strategy.__name__ != "Alpha_Trend":
-                strategy_result = strategy(high, low, close)
+                strategy_result,indicators = strategy(high, low, close)
             else:
-                strategy_result = strategy(high, low, close,vol)
+                strategy_result,indicators = strategy(high, low, close,vol)
             high_price = 0
             atr = IndikatorTest.ATR(high,low,close)
             adx = IndikatorTest.ADX(high,low,close)
@@ -72,7 +72,7 @@ class Backtest:
                 elif last_signal == 'green':  # Mevcut pozisyonu kapama
                     if stop:
                         if dinamik_stop:
-                            dinamik_stop_signal,high_price,stop_level=StratejilerTest.dinamik_stop_lose(atr,adx,close,high_price,i)
+                            dinamik_stop_signal,high_price,stop_level=StratejilerTest.dinamik_stop_lose(atr,adx,close,high_price)
                         if static_stop:
                             static_stop_signal = StratejilerTest.static_stop_lose(close,buy_price,i)
                     if strategy_result[i] == "SELL" or (stop and ((dinamik_stop and dinamik_stop_signal == "STOP-LOSE") or (static_stop and static_stop_signal == "STOP-LOSE"))):
