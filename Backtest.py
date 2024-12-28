@@ -397,7 +397,7 @@ class Backtest:
             current_capital = initial_capital
             capital_history = [initial_capital]
 
-            strategy_resault = strategy(high, low, close)
+            strategy_resault,indicators = strategy(high, low, close)
             if strategy.__name__ == "Super_Trend":
                 print(strategy_resault)
             for i in range(len(close)):
