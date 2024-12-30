@@ -251,7 +251,9 @@ class Trade:
         dinamik_stop_lose=os.getenv('DINAMIK_STOP_LOSE')=="True"
         static_stop_lose=os.getenv('STATIC_STOP_LOSE')=="True"
         destek_stop_lose=os.getenv('DESTEK_STOP_LOSE')=="True"
+        take_profit=os.getenv('TAKE_PROFIT')=="True"
         stop_seviyesi=-1
+        ortalama=0
         basamak_sayisi=self.araclar.ondalik_basamak_sayisi(self.alim_fiyati)
         self.araclar.mum_olusmasini_bekle(periyot)
         while self.islem_acik:
@@ -293,9 +295,10 @@ class Trade:
 
                 # Take-profit
                 kar_zarar = ((close[-1] / self.alim_fiyati) - 1) * 100
-                if kar_zarar > 5:
-                    self.durum_list.append(kar_zarar)
-                ortalama, take_profit_signal = Stratejiler.take_profit(self.durum_list)
+                if take_profit:
+                    if kar_zarar > 5:
+                        self.durum_list.append(kar_zarar)
+                    ortalama, take_profit_signal = Stratejiler.take_profit(self.durum_list)
 
                 # Data
                 mevcut_adedim = self.binance.mevcut_adedim(self.alinan_coin)
@@ -372,7 +375,7 @@ class Trade:
                     if self.telegram_mesaj_gonder=="True":
                         self.araclar.telegram_mesaj_gonder(f"❗ HATA | Trade {periyot} \n {e}")
                     continue
-            elif take_profit_signal== "TAKE-PROFIT":
+            elif take_profit and take_profit_signal == "TAKE-PROFIT":
                 try:
                     self.take_profit_sell(self.alinan_coin, periyot, close, str(self.sell_strategy.__name__), self.alim_fiyati)
                     self.islem_acik = False
