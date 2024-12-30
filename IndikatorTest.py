@@ -800,6 +800,65 @@ class IndikatorTest:
         return result
 
     @staticmethod
+    def ParabolicSAR(high, low, start=0.02, increment=0.02, maximum=0.2):
+        """
+        Parabolic SAR hesaplama fonksiyonu.
+
+        :param high: Yüksek fiyatların listesi
+        :param low: Düşük fiyatların listesi
+        :param start: Başlangıç hız faktörü
+        :param increment: Hız faktöründeki artış
+        :param maximum: Maksimum hız faktörü
+        :return: Parabolic SAR değerlerinin listesi
+        """
+        # Yeterli veri kontrolü
+        if len(high) < 2 or len(low) < 2:
+            return [None] * len(high)
+
+        sar = [None]  # İlk SAR değeri None
+        af = start  # Başlangıç hız faktörü
+        ep = high[0]  # İlk yüksek değer (Extreme Point)
+        uptrend = True  # İlk trend yukarı
+
+        for i in range(1, len(high)):
+            if uptrend:
+                # SAR hesaplama
+                new_sar = sar[-1] + af * (ep - sar[-1]) if sar[-1] is not None else low[i - 1]
+
+                # Trend devam ediyor mu kontrolü
+                if high[i] > ep:
+                    ep = high[i]
+                    af = min(af + increment, maximum)
+
+                # Trend değişimi kontrolü
+                if low[i] < new_sar:
+                    uptrend = False
+                    new_sar = ep
+                    ep = low[i]
+                    af = start
+            else:
+                # SAR hesaplama
+                new_sar = sar[-1] + af * (ep - sar[-1]) if sar[-1] is not None else high[i - 1]
+
+                # Trend devam ediyor mu kontrolü
+                if low[i] < ep:
+                    ep = low[i]
+                    af = min(af + increment, maximum)
+
+                # Trend değişimi kontrolü
+                if high[i] > new_sar:
+                    uptrend = True
+                    new_sar = ep
+                    ep = high[i]
+                    af = start
+
+            # SAR'ın mevcut mumun en yüksek veya en düşük değerini aşmamasını sağla
+            new_sar = min(new_sar, high[i - 1]) if uptrend else max(new_sar, low[i - 1])
+            sar.append(new_sar)
+
+        return sar
+
+    @staticmethod
     def Grafik_Indikator(open_prices, high_prices, low_prices, close_prices, vol, timestamps,
                          main_indicators=None, sub_indicators=None, sub_horizontal_lines=None):
         """
