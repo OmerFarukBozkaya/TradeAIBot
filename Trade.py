@@ -428,7 +428,10 @@ class Trade:
                 continue
 
             stop_seviyesi=round(stop_seviyesi,basamak_sayisi)
-            yuvarlanmis_destek=round(self.destek,basamak_sayisi)
+            if destek_stop_lose:
+                yuvarlanmis_destek=round(self.destek,basamak_sayisi)
+            else:
+                yuvarlanmis_destek=-1
             trade.info(
                 f"DURUM : {periyot} {self.sell_strategy.__name__} {self.alinan_coin} Islem Suresi: {self.mum_sayisi} mum. Diger strategyler {other_strategy_result} Stop-Lose: {stop_seviyesi}|{yuvarlanmis_destek}. Durum Ortalamasi: {ortalama:.2f} Kar/Zarar: {kar_zarar:.2f}%")
             if self.telegram_mesaj_gonder=="True":
