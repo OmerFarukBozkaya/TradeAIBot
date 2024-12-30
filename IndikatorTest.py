@@ -106,7 +106,6 @@ class IndikatorTest:
         print(f"VAMA: {test_indikator.Kiyasla(vama , test_vama)} {len(vama)}|{len(test_vama)} | {vama[deger]} {test_vama[deger]}")
         print(f"TSO: {test_indikator.Kiyasla(tso , test_tso)} {len(tso)}|{len(test_tso)} | {tso[deger]} {test_tso[deger]}")
 
-
     @staticmethod
     def EMA(src, length):
         if len(src) < length:
@@ -118,13 +117,28 @@ class IndikatorTest:
         return ema_list
 
     @staticmethod
-    def SMA(src, length):
+    def SMAA(src, length):
         if len(src) < length:
             return [None] * len(src)
 
         sma_list = [None] * (length - 1)  # İlk length-1 değeri None
         for i in range(length - 1, len(src)):
             sma_list.append(np.mean(src[i + 1 - length:i + 1]))
+        return sma_list
+
+    @staticmethod
+    def SMA(src, length):
+        if len(src) < length:
+            return [None] * len(src)
+
+        sma_list = [None] * (length - 1)  # İlk (length-1) değer None
+        for i in range(length - 1, len(src)):
+            window = src[i + 1 - length:i + 1]
+            # Penceredeki tüm değerler sayısal mı?
+            if all(x is not None for x in window):
+                sma_list.append(np.mean(window))
+            else:
+                sma_list.append(None)  # Geçersiz pencereler için None
         return sma_list
 
     @staticmethod
@@ -857,6 +871,63 @@ class IndikatorTest:
             sar.append(new_sar)
 
         return sar
+
+    @staticmethod
+    def StochasticRSI(close, lengthRSI=14, lengthStoch=14, smoothK=3, smoothD=3):
+        """
+        Stochastic RSI hesaplama fonksiyonu.
+
+        :param close: Kapanış fiyatlarının listesi
+        :param lengthRSI: RSI hesaplaması için periyot (varsayılan: 14)
+        :param lengthStoch: Stochastic hesaplaması için periyot (varsayılan: 14)
+        :param smoothK: K hattı için hareketli ortalama periyodu (varsayılan: 3)
+        :param smoothD: D hattı için hareketli ortalama periyodu (varsayılan: 3)
+        :return: Stochastic RSI'nın K ve D değerlerinin listesi
+        """
+        if len(close) < max(lengthRSI, lengthStoch, smoothK, smoothD):
+            return [None] * len(close), [None] * len(close)
+
+        # RSI hesaplama
+        rsi = Indikator.RSI(close, length=lengthRSI)
+
+        # Stochastic K hesaplama
+        stoch_k = []
+        for i in range(len(rsi)):
+            if i < lengthStoch - 1 or rsi[i] is None:
+                stoch_k.append(None)
+            else:
+                window = rsi[i - lengthStoch + 1:i + 1]
+                valid_values = [x for x in window if x is not None]
+                if len(valid_values) == lengthStoch:
+                    min_rsi = min(valid_values)
+                    max_rsi = max(valid_values)
+                    stoch_k.append(
+                        100 * (rsi[i] - min_rsi) / (max_rsi - min_rsi) if max_rsi != min_rsi else 0
+                    )
+                else:
+                    stoch_k.append(None)
+
+        # Smooth K (smoothK ile hareketli ortalama hesaplama)
+        k_values = [None] * (smoothK - 1)  # İlk smoothK - 1 değeri None
+        for i in range(smoothK - 1, len(stoch_k)):
+            window = stoch_k[i - smoothK + 1:i + 1]
+            valid_values = [x for x in window if x is not None]
+            if len(valid_values) == smoothK:
+                k_values.append(sum(valid_values) / smoothK)
+            else:
+                k_values.append(None)
+
+        # Smooth D (smoothD ile hareketli ortalama hesaplama)
+        d_values = [None] * (smoothD - 1)  # İlk smoothD - 1 değeri None
+        for i in range(smoothD - 1, len(k_values)):
+            window = k_values[i - smoothD + 1:i + 1]
+            valid_values = [x for x in window if x is not None]
+            if len(valid_values) == smoothD:
+                d_values.append(sum(valid_values) / smoothD)
+            else:
+                d_values.append(None)
+
+        return k_values, d_values
 
     @staticmethod
     def Grafik_Indikator(open_prices, high_prices, low_prices, close_prices, vol, timestamps,
