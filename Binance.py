@@ -9,7 +9,7 @@ import math
 from dotenv import load_dotenv
 import os
 from glob import glob
-
+from datetime import datetime, timedelta
 
 class Binance:
     def __init__(self):
@@ -395,3 +395,90 @@ class Binance:
                 for k in periyodik_sonuclar[i][j].keys():
                     print(f"{i} {j} {k} | Topalm BUY sinyal sayisi: {periyodik_sonuclar[i][j][k]['buy_sayisi']} | Sadece BUY verenler: {periyodik_sonuclar[i][j][k]['buy_full_false']} | Ek sartlar saglanmadi: {periyodik_sonuclar[i][j][k]['buy_direnc_true']} | Direnc ve MA saglandi: {periyodik_sonuclar[i][j][k]['buy_direnc_ma_true']} | Direnç ve BB saglandi: {periyodik_sonuclar[i][j][k]['buy_direnc_bb_true']} | Tum sartlar saglandi: {periyodik_sonuclar[i][j][k]['buy_full_true']}")
 
+    @staticmethod
+    def trade_aylik_hedef(hedef):
+        file = open("Log/islem_gecmisi.log", "r")
+        temp=(file.readline().strip().split(" "))[0].split("-")
+        strat_date=datetime(int(temp[0]),int(temp[1]),int(temp[2]))
+        end_date=datetime.now()
+        current_date=strat_date
+        aylik_islem_sonucu = {}
+        while current_date <= end_date:
+            key = f"{current_date.year} {current_date.month:02}"
+            aylik_islem_sonucu[key] = {}
+            for salt_periyot in ["15m", "1h", "1d"]:
+                aylik_islem_sonucu[key][salt_periyot] = {}
+                aylik_islem_sonucu[key][salt_periyot]['sonuc'] = 100
+                aylik_islem_sonucu[key][salt_periyot]['adet'] = 0
+                aylik_islem_sonucu[key][salt_periyot]['toplam_mum'] = 0
+                aylik_islem_sonucu[key][salt_periyot]['ortalama_mum'] = 0
+                aylik_islem_sonucu[key][salt_periyot]['karli_islem'] = 0
+                aylik_islem_sonucu[key][salt_periyot]['karli_islem_toplam'] = 0
+                aylik_islem_sonucu[key][salt_periyot]['karli_islem_ortalama'] = 0
+                aylik_islem_sonucu[key][salt_periyot]['zararli_islem'] = 0
+                aylik_islem_sonucu[key][salt_periyot]['zararli_islem_toplam'] = 0
+                aylik_islem_sonucu[key][salt_periyot]['zararli_islem_ortalama'] = 0
+                aylik_islem_sonucu[key][salt_periyot]['stop_adet'] = 0
+                aylik_islem_sonucu[key][salt_periyot]['take_profit_adet'] = 0
+            # Bir sonraki aya geç
+            next_month = current_date.month % 12 + 1
+            next_year = current_date.year + (current_date.month // 12)
+            current_date = datetime(next_year, next_month, 1)
+
+        for line in file.readlines():
+            line = line.split(" ")
+            tarih = line[0]
+            tarih=tarih.split("-")
+            yil=tarih[0]
+            ay=tarih[1]
+            gun=tarih[2]
+            saat = line[1]
+            strategy = line[5]
+            periyot = line[6]
+            islem = line[7]
+
+            if islem == "SAT":
+                sonuc = float(line[-1][:-2])  # Sonucu yüzde olarak alıyoruz
+                mum_sayisi = float(line[-7])
+                tarih = f"{yil} {ay}"
+                # Kümülatif olarak yüzdelik artış işlemi
+                aylik_islem_sonucu[tarih][periyot]['sonuc'] += aylik_islem_sonucu[tarih][periyot]['sonuc'] * sonuc / 100
+                aylik_islem_sonucu[tarih][periyot]['adet'] = aylik_islem_sonucu[tarih][periyot]['adet'] + 1
+                aylik_islem_sonucu[tarih][periyot]['toplam_mum'] = aylik_islem_sonucu[tarih][periyot]['toplam_mum'] + mum_sayisi
+                aylik_islem_sonucu[tarih][periyot]['ortalama_mum'] = aylik_islem_sonucu[tarih][periyot]['toplam_mum'] / aylik_islem_sonucu[tarih][periyot]['adet']
+
+                if line[8] == "[STOP-LOSE]":
+                    # Kümülatif olarak yüzdelik artış işlemi
+                    aylik_islem_sonucu[tarih][periyot]['stop_adet'] = aylik_islem_sonucu[tarih][periyot]['stop_adet'] + 1
+                elif line[8] == "[TAKE-PROFIT]":
+                    aylik_islem_sonucu[tarih][periyot]['take_profit_adet'] = aylik_islem_sonucu[tarih][periyot]['take_profit_adet'] + 1
+
+                if sonuc < 0:
+                    aylik_islem_sonucu[tarih][periyot]['zararli_islem'] = aylik_islem_sonucu[tarih][periyot]['zararli_islem'] + 1
+                    aylik_islem_sonucu[tarih][periyot]['zararli_islem_toplam'] = aylik_islem_sonucu[tarih][periyot]['zararli_islem_toplam'] + sonuc
+                    aylik_islem_sonucu[tarih][periyot]['zararli_islem_ortalama'] = aylik_islem_sonucu[tarih][periyot]['zararli_islem_toplam'] / aylik_islem_sonucu[tarih][periyot]['zararli_islem']
+                else:
+                    aylik_islem_sonucu[tarih][periyot]['karli_islem'] = aylik_islem_sonucu[tarih][periyot]['karli_islem'] + 1
+                    aylik_islem_sonucu[tarih][periyot]['karli_islem_toplam'] = aylik_islem_sonucu[tarih][periyot]['karli_islem_toplam'] + sonuc
+                    aylik_islem_sonucu[tarih][periyot]['karli_islem_ortalama'] = aylik_islem_sonucu[tarih][periyot]['karli_islem_toplam'] / aylik_islem_sonucu[tarih][periyot]['karli_islem']
+
+        total_profit_lose={"15m":100,"1h":100,"1d":100}
+        hedef_profit_lose={"15m":100,"1h":100,"1d":100}
+        for i in aylik_islem_sonucu.keys():
+            for j in aylik_islem_sonucu[i].keys():
+                succes="[XX]"
+                if (aylik_islem_sonucu[i][j]['sonuc']) - 100 > hedef:
+                    succes="[OK]"
+                total_profit_lose[j]= round(total_profit_lose[j] * ((((aylik_islem_sonucu[i][j]['sonuc']) - 100)/100)+1),2)
+                hedef_profit_lose[j]= round(hedef_profit_lose[j]*(1+(hedef/100)),2)
+
+                print(
+                    f"{i} {j} {(aylik_islem_sonucu[i][j]['sonuc']) - 100:.2f}% {succes}\n\t {aylik_islem_sonucu[i][j]['adet']} adet islem | {aylik_islem_sonucu[i][j]['ortalama_mum']:.2f} ortalama mum sayisi \n\t {aylik_islem_sonucu[i][j]['karli_islem']} adet kar. ortalama: {aylik_islem_sonucu[i][j]['karli_islem_ortalama']:.2f}% \n\t {aylik_islem_sonucu[i][j]['zararli_islem']} adet zarar. ortalama: {aylik_islem_sonucu[i][j]['zararli_islem_ortalama']:.2f}% \n\t {aylik_islem_sonucu[i][j]['stop_adet']} adet stop oldu. \n\t {aylik_islem_sonucu[i][j]['take_profit_adet']} adet take-profit.")
+
+            print("--------------------AY SONU--------------------")
+        print("\tSonuc \tHedef")
+        for i in total_profit_lose.keys():
+            succes="[XX]"
+            if total_profit_lose[i]>hedef_profit_lose[i]:
+                succes="[OK]"
+            print(f"{i}\t{total_profit_lose[i]} \t{hedef_profit_lose[i]} \t{succes}")
