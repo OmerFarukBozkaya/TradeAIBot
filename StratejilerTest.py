@@ -90,6 +90,7 @@ class StratejilerTest:
         if ortalama > StratejilerTest.take_profit_limit and durum_list[-1]<ortalama:
             return None,"TAKE-PROFIT"
         return ortalama,False
+
     @staticmethod
     def MACD(high, low, close):
         # Sonuçları tutmak için liste
@@ -383,6 +384,125 @@ class StratejilerTest:
         indicators = {"main_indicators": {"Alpha_Trend": alpha_trend},
                       "sub_indicators": None,
                       "sub_horizontal_lines":None}
+        return signals,indicators
+
+    @staticmethod
+    def EMA_StochasticRSI(high, low, close):
+        signals = []
+
+        ema_50 = Indikator.EMA(close, 50)
+        stoch_k, stoch_d = Indikator.StochasticRSI(close)
+
+        for i in range(len(close)):
+            if ema_50[i] is None or stoch_k[i] is None or stoch_d[i] is None:
+                signals.append(None)
+            elif close[i] > ema_50[i] and stoch_k[i] > stoch_d[i]:
+                signals.append("BUY")
+            elif close[i] < ema_50[i] and stoch_k[i] < stoch_d[i]:
+                signals.append("SELL")
+            else:
+                signals.append(False)
+
+        indicators = {"main_indicators": {"EMA50": ema_50},
+                      "sub_indicators": [{"%K": stoch_k,"%D": stoch_d}],
+                      "sub_horizontal_lines": [
+                          [{"name": "", "value": 50, "color": "yellow"},{"name": "", "value": 30, "color": "red"},{"name": "", "value": 70, "color": "green"}]
+                      ]}
+
+        return signals,indicators
+
+    @staticmethod
+    def CCI_ATR(high, low, close):
+        signals = []
+
+        cci = Indikator.CCI(high, low, close)
+        atr = Indikator.ATR(high, low, close)
+
+        for i in range(len(close)):
+            if cci[i] is None or atr[i] is None or atr[i - 1] is None:
+                signals.append(None)
+            elif cci[i] > 100 and atr[i] > atr[i - 1]:
+                signals.append("BUY")
+            elif cci[i] < 0 and atr[i] < atr[i - 1]:
+                signals.append("SELL")
+            else:
+                signals.append(False)
+        indicators = {"main_indicators": None,
+                      "sub_indicators": [{"CCI": cci},{"ATR": atr}],
+                      "sub_horizontal_lines": [[]]}
+
+        return signals,indicators
+
+    @staticmethod
+    def ADX_Donchian(high, low, close):
+        signals = []
+
+        adx = Indikator.ADX(high, low, close)
+        donchian_upper, donchian_lower = Indikator.Donchian_Kanali(high, low)
+
+        for i in range(len(close)):
+            if adx[i] is None or donchian_upper[i] is None or donchian_lower[i] is None:
+                signals.append(None)
+            elif adx[i] > 25 and close[i] > donchian_upper[i]:
+                signals.append("BUY")
+            elif adx[i] > 25 and close[i] < donchian_lower[i]:
+                signals.append("SELL")
+            else:
+                signals.append(False)
+
+        indicators = {"main_indicators": {"D_low": donchian_lower,"D_up":donchian_upper},
+                      "sub_indicators": [{"ADX": adx}],
+                      "sub_horizontal_lines": [
+                          []
+                      ]}
+        return signals,indicators
+
+    @staticmethod
+    def RSI_SuperTrend(high, low, close):
+        signals = []
+
+        rsi = Indikator.RSI(close)
+        supertrend, direction = Indikator.Super_Trend(high, low, close)
+
+        for i in range(len(close)):
+            if rsi[i] is None or direction[i] is None:
+                signals.append(None)
+            elif rsi[i] > 50 and direction[i] == 1:
+                signals.append("BUY")
+            elif rsi[i] < 50 and direction[i] == -1:
+                signals.append("SELL")
+            else:
+                signals.append(False)
+        indicators = {"main_indicators": {"Super_Trend": supertrend},
+                      "sub_indicators": [[{"RSI":rsi}],[{"Direction":direction}]],
+                      "sub_horizontal_lines": [
+                          [{"name": "", "value": 25, "color": "red"},{"name": "", "value": 50, "color": "yellow"},{"name": "", "value": 70, "color": "green"}],[]
+                                              ]}
+        return signals,indicators
+
+    @staticmethod
+    def MACD_AlphaTrend(high, low, close):
+        signals = []
+
+        macd_values, macd_signal = Indikator.MACD(close)
+        alpha_trend = Indikator.Alpha_Trend(high, low, close)
+
+        for i in range(len(close)):
+            if macd_values[i] is None or macd_signal[i] is None or alpha_trend[i] is None:
+                signals.append(None)
+            elif macd_values[i] > macd_signal[i] and alpha_trend[i] > 0:
+                signals.append("BUY")
+            elif macd_values[i] < macd_signal[i] and alpha_trend[i] < 0:
+                signals.append("SELL")
+            else:
+                signals.append(False)
+
+        indicators = {"main_indicators": {"Super_Trend": alpha_trend},
+                      "sub_indicators": [[{"macd_values": macd_values},{"macd_signal": macd_signal}]],
+                      "sub_horizontal_lines": [
+                          [{"name": "", "value": 0, "color": "black"}]
+                      ]}
+
         return signals,indicators
 
     @staticmethod
