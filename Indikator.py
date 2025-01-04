@@ -678,3 +678,119 @@ class Indikator:
                     supertrend[i] = max(supertrend[i], data['lower_band'].iloc[i])
         supertrend = [float(x) if x is not None else float('nan') for x in supertrend]
         return supertrend, direction
+
+    @staticmethod
+    def ParabolicSAR(high, low, start=0.02, increment=0.02, maximum=0.2):
+        """
+        Parabolic SAR hesaplama fonksiyonu.
+
+        :param high: Yüksek fiyatların listesi
+        :param low: Düşük fiyatların listesi
+        :param start: Başlangıç hız faktörü
+        :param increment: Hız faktöründeki artış
+        :param maximum: Maksimum hız faktörü
+        :return: Parabolic SAR değerlerinin listesi
+        """
+        # Yeterli veri kontrolü
+        if len(high) < 2 or len(low) < 2:
+            return [None] * len(high)
+
+        sar = [None]  # İlk SAR değeri None
+        af = start  # Başlangıç hız faktörü
+        ep = high[0]  # İlk yüksek değer (Extreme Point)
+        uptrend = True  # İlk trend yukarı
+
+        for i in range(1, len(high)):
+            if uptrend:
+                # SAR hesaplama
+                new_sar = sar[-1] + af * (ep - sar[-1]) if sar[-1] is not None else low[i - 1]
+
+                # Trend devam ediyor mu kontrolü
+                if high[i] > ep:
+                    ep = high[i]
+                    af = min(af + increment, maximum)
+
+                # Trend değişimi kontrolü
+                if low[i] < new_sar:
+                    uptrend = False
+                    new_sar = ep
+                    ep = low[i]
+                    af = start
+            else:
+                # SAR hesaplama
+                new_sar = sar[-1] + af * (ep - sar[-1]) if sar[-1] is not None else high[i - 1]
+
+                # Trend devam ediyor mu kontrolü
+                if low[i] < ep:
+                    ep = low[i]
+                    af = min(af + increment, maximum)
+
+                # Trend değişimi kontrolü
+                if high[i] > new_sar:
+                    uptrend = True
+                    new_sar = ep
+                    ep = high[i]
+                    af = start
+
+            # SAR'ın mevcut mumun en yüksek veya en düşük değerini aşmamasını sağla
+            new_sar = min(new_sar, high[i - 1]) if uptrend else max(new_sar, low[i - 1])
+            sar.append(new_sar)
+
+        return sar
+
+    @staticmethod
+    def StochasticRSI(close, lengthRSI=14, lengthStoch=14, smoothK=3, smoothD=3):
+        """
+        Stochastic RSI hesaplama fonksiyonu.
+
+        :param close: Kapanış fiyatlarının listesi
+        :param lengthRSI: RSI hesaplaması için periyot (varsayılan: 14)
+        :param lengthStoch: Stochastic hesaplaması için periyot (varsayılan: 14)
+        :param smoothK: K hattı için hareketli ortalama periyodu (varsayılan: 3)
+        :param smoothD: D hattı için hareketli ortalama periyodu (varsayılan: 3)
+        :return: Stochastic RSI'nın K ve D değerlerinin listesi
+        """
+        if len(close) < max(lengthRSI, lengthStoch, smoothK, smoothD):
+            return [None] * len(close), [None] * len(close)
+
+        # RSI hesaplama
+        rsi = Indikator.RSI(close, length=lengthRSI)
+
+        # Stochastic K hesaplama
+        stoch_k = []
+        for i in range(len(rsi)):
+            if i < lengthStoch - 1 or rsi[i] is None:
+                stoch_k.append(None)
+            else:
+                window = rsi[i - lengthStoch + 1:i + 1]
+                valid_values = [x for x in window if x is not None]
+                if len(valid_values) == lengthStoch:
+                    min_rsi = min(valid_values)
+                    max_rsi = max(valid_values)
+                    stoch_k.append(
+                        100 * (rsi[i] - min_rsi) / (max_rsi - min_rsi) if max_rsi != min_rsi else 0
+                    )
+                else:
+                    stoch_k.append(None)
+
+        # Smooth K (smoothK ile hareketli ortalama hesaplama)
+        k_values = [None] * (smoothK - 1)  # İlk smoothK - 1 değeri None
+        for i in range(smoothK - 1, len(stoch_k)):
+            window = stoch_k[i - smoothK + 1:i + 1]
+            valid_values = [x for x in window if x is not None]
+            if len(valid_values) == smoothK:
+                k_values.append(sum(valid_values) / smoothK)
+            else:
+                k_values.append(None)
+
+        # Smooth D (smoothD ile hareketli ortalama hesaplama)
+        d_values = [None] * (smoothD - 1)  # İlk smoothD - 1 değeri None
+        for i in range(smoothD - 1, len(k_values)):
+            window = k_values[i - smoothD + 1:i + 1]
+            valid_values = [x for x in window if x is not None]
+            if len(valid_values) == smoothD:
+                d_values.append(sum(valid_values) / smoothD)
+            else:
+                d_values.append(None)
+
+        return k_values, d_values
