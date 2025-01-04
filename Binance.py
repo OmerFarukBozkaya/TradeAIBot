@@ -476,9 +476,9 @@ class Binance:
                     f"{i} {j} {(aylik_islem_sonucu[i][j]['sonuc']) - 100:.2f}% {succes}\n\t {aylik_islem_sonucu[i][j]['adet']} adet islem | {aylik_islem_sonucu[i][j]['ortalama_mum']:.2f} ortalama mum sayisi \n\t {aylik_islem_sonucu[i][j]['karli_islem']} adet kar. ortalama: {aylik_islem_sonucu[i][j]['karli_islem_ortalama']:.2f}% \n\t {aylik_islem_sonucu[i][j]['zararli_islem']} adet zarar. ortalama: {aylik_islem_sonucu[i][j]['zararli_islem_ortalama']:.2f}% \n\t {aylik_islem_sonucu[i][j]['stop_adet']} adet stop oldu. \n\t {aylik_islem_sonucu[i][j]['take_profit_adet']} adet take-profit.")
 
             print("--------------------AY SONU--------------------")
-        print("\tSonuc \tHedef")
+        print("\tSonuc \t\tHedef")
         for i in total_profit_lose.keys():
             succes="[XX]"
             if total_profit_lose[i]>hedef_profit_lose[i]:
                 succes="[OK]"
-            print(f"{i}\t{total_profit_lose[i]} \t{hedef_profit_lose[i]} \t{succes}")
+            print(f"{i}\t{total_profit_lose[i]-100:.2f}%\t\t{hedef_profit_lose[i]-100:.2f}%\t\t{succes}")
