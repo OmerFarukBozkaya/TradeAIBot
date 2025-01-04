@@ -300,7 +300,7 @@ class Backtest:
 
             def format_coord(x, y):
                 index = int(round(x))
-                if 0 <= index < n:
+                if 0 <= index < len(capital_history):
                     kumulatif = capital_history[index]
 
                     return f"Kumulatif deger: {kumulatif:.2f} "
@@ -326,7 +326,7 @@ class Backtest:
 
             def format_coord(x, y):
                 index = int(round(x))
-                if 0 <= index < n:
+                if 0 <= index < len(cumulative_profit_loss):
                     result = cumulative_profit_loss[index]
 
                     return f"{index}. İşlem Sonucu: {result:.2f}% "
