@@ -54,15 +54,18 @@ def kontrol_ve_mesaj_gonder():
             if eski_ip == current_ip:
                 return
 
-            # IP değişmişse mail gönder
+            # IP değişmişse mesaj gönder
             araclar.telegram_mesaj_gonder(f"🌐 IP Değişti Yeni IP: {current_ip}")
+
+            # IP mail gonder
+            araclar.mail_gonder("IP Değişti",f"Yeni IP: {current_ip}")
 
             # Dosyayı güncelle
             with open(path, "w") as dosya_yaz:
                 dosya_yaz.write(current_ip)
     except Exception as e:
         hata_mesaji = traceback.format_exc()
-        araclar.mail_gonder("HATA | IP", hata_mesaji, 300)
+        araclar.mail_gonder("HATA | IP", hata_mesaji)
         print("Bir hata oluştu: ", hata_mesaji)
 
 def main():
