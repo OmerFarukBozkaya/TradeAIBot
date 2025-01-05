@@ -256,6 +256,35 @@ class Trade:
         ortalama=0
         basamak_sayisi=self.araclar.ondalik_basamak_sayisi(self.alim_fiyati)
         self.araclar.mum_olusmasini_bekle(periyot)
+        def kontrol_et():
+            while self.islem_acik:
+                try:
+                    mevcut_adedim = self.binance.mevcut_adedim(self.alinan_coin)
+                    minqty = self.binance.get_coin_minQTY(self.alinan_coin)
+
+                    if self.gercek and mevcut_adedim <= minqty:
+                        self.manul_sell(self.alinan_coin, periyot, close, str(self.sell_strategy.__name__),
+                                        self.alim_fiyati)
+                        self.islem_acik = False
+                        self.alinan_coin = None
+                        self.alim_fiyati = None
+                        self.direnc = None
+                        self.destek = None
+                        self.highest_price = None
+                        self.mum_sayisi = 0
+                        self.durum_list = []
+                        if not temp_trade:
+                            self.kaydet()
+                        break
+                except Exception as e:
+                    trade.error(f"Kontrol işleminde hata: {e}")
+                time.sleep(60)  # Kontrol işlemini sürekli hale getirmek için kısa bir bekleme
+
+        # Kontrol iş parçacığını başlat
+        kontrol_thread = threading.Thread(target=kontrol_et)
+        kontrol_thread.daemon = True
+        kontrol_thread.start()
+
         while self.islem_acik:
             # Veri ithali
             try:
@@ -315,20 +344,7 @@ class Trade:
                 continue
 
             # İşlemler
-            if self.gercek and mevcut_adedim <= minqty:
-                self.manul_sell(self.alinan_coin, periyot, close, str(self.sell_strategy.__name__), self.alim_fiyati)
-                self.islem_acik = False
-                self.alinan_coin = None
-                self.alim_fiyati = None
-                self.direnc = None
-                self.destek = None
-                self.highest_price = None
-                self.mum_sayisi = 0
-                self.durum_list = []
-                if not temp_trade:
-                    self.kaydet()
-                break  # Satış yapıldı, döngüden çık
-            elif sell_strategy_result == "SELL":
+            if sell_strategy_result == "SELL":
                 try:
                     self.sell(self.alinan_coin, periyot, close, str(self.sell_strategy.__name__), self.alim_fiyati)
                     self.islem_acik = False
