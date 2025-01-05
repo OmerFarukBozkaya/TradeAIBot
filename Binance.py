@@ -482,3 +482,18 @@ class Binance:
             if total_profit_lose[i]>hedef_profit_lose[i]:
                 succes="[OK]"
             print(f"{i}\t{total_profit_lose[i]-100:.2f}%\t\t{hedef_profit_lose[i]-100:.2f}%\t\t{succes}")
+
+    def tek_pozisyon_kapat(self,periyot):
+        dosya_yolu = f"Trade_Durumu/trade_durumu_{periyot}.json"
+        try:
+            with open(dosya_yolu, "r", encoding="utf-8") as json_dosya:
+                veri = json.load(json_dosya)
+                if veri["islem_acik"]:
+                    coin = veri["alinan_coin"]
+                    mevcut_adedim = self.sahip_olduklarim()[coin]
+                    minQty = self.get_coin_minQTY(coin)
+                    adet = self.miktar_duzelt(mevcut_adedim, minQty)
+                    self.sat(coin, adet)
+        except:
+            hata = traceback.format_exc()
+            print(f"HATA {dosya_yolu} dosyasinda hata {hata}")

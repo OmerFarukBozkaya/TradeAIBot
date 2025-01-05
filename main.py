@@ -41,6 +41,7 @@ def main ():
     20)Acik pozisyon grafigi
     21)Coin aylik sonuc
     22)Trade aylik hedef kontrolu
+    23)Tek pozisyon kapat
     """)
     com = input("Ne yapılacak :")
     if com == "0":
@@ -222,6 +223,12 @@ def main ():
         a = time.time()
         hedef=int(input("Hedef: "))
         binance.trade_aylik_hedef(hedef)
+        b = time.time()
+        print(araclar.saniye_to_hms(b - a))
+    elif com == "23":
+        a = time.time()
+        periyot=int(input("Periyot: "))
+        binance.tek_pozisyon_kapat(periyot)
         b = time.time()
         print(araclar.saniye_to_hms(b - a))
 
