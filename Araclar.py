@@ -208,7 +208,7 @@ class Araclar:
         if time.time() % zaman_dilimleri[periyot] > 10:
             time.sleep(zaman_dilimleri[periyot] - (time.time() % zaman_dilimleri[periyot]))
 
-    def strategy_result_analyze(input="Data/strategy_results.xlsx", output_file='Data/strategy_results_analyze.xlsx'):
+    def strategy_result_analyze(self,input="Data/strategy_results.xlsx", output_file='Data/strategy_results_analyze.xlsx'):
         # Excel dosyasını oku
         df = pd.read_excel(input)
 
