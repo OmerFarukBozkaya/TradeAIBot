@@ -296,14 +296,14 @@ class Backtest:
             ax2.legend()
 
             # Mouse ile veri inceleme
-            cursor_main = Cursor(ax2, useblit=True, color='blue', linewidth=1)
+            cursor_capital = Cursor(ax2, useblit=True, color='blue', linewidth=1)
 
             def format_coord(x, y):
                 index = int(round(x))
                 if 0 <= index < len(capital_history):
                     kumulatif = capital_history[index]
 
-                    return f"Kumulatif deger: {kumulatif:.2f} "
+                    return f"{index}. Kumulatif deger: {kumulatif:.2f} "
                 return f"X: {x:.2f}, Y: {y:.2f}"
 
             ax2.format_coord = format_coord
@@ -322,7 +322,7 @@ class Backtest:
             ax3.legend()
 
             # Mouse ile veri inceleme
-            cursor_main = Cursor(ax3, useblit=True, color='blue', linewidth=1)
+            cursor_result = Cursor(ax3, useblit=True, color='blue', linewidth=1)
 
             def format_coord(x, y):
                 index = int(round(x))
@@ -537,5 +537,3 @@ class Backtest:
         for strategy in strategys:
             print(f"{strategy}:Dinamik stop:{sonuc[strategy]['dinamik_stop_sayisi']} Static stop: {sonuc[strategy]['static_stop_sayisi']} Hedef: {sonuc[strategy]['hedef_satis_sayisi']} Stop Orani: {sonuc[strategy]['stop_orani']}")
         return sonuc
-
-
