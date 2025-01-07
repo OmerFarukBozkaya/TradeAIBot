@@ -54,7 +54,7 @@ def main ():
         # Hesaplamalar Yapılıyor
         backtest.paralel_hesaplama()
         # Analiz yapılıyor
-        Araclar.strategy_result_analyze()
+        araclar.strategy_result_analyze()
         b = time.time()
         print(araclar.saniye_to_hms(b - a))
     elif com == "2":
