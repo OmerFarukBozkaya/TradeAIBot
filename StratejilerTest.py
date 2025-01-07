@@ -365,7 +365,7 @@ class StratejilerTest:
         indicators = {"main_indicators": {"BB_DOWN": bb_down, "BB_MID": bb_mid, "BB_UP": bb_up},
                       "sub_indicators": [{"ADX": adx}],
                       "sub_horizontal_lines":[
-                          [{"name": "", "value": 25, "color": "black"}]
+                          [{"name": "", "value": 30, "color": "black"}]
                                               ]}
         return signals,indicators
     @staticmethod
@@ -441,11 +441,13 @@ class StratejilerTest:
         donchian_upper, donchian_lower = Indikator.Donchian_Kanali(high, low)
 
         for i in range(len(close)):
-            if adx[i] is None or donchian_upper[i] is None or donchian_lower[i] is None:
+            if i == 0:
                 signals.append(None)
-            elif adx[i] > 25 and close[i] > donchian_upper[i]:
+            if adx[i] is None or donchian_upper[i-1] is None or donchian_lower[i-1] is None:
+                signals.append(None)
+            elif adx[i] > 25 and close[i] > donchian_upper[i-1]:
                 signals.append("BUY")
-            elif adx[i] > 25 and close[i] < donchian_lower[i]:
+            elif adx[i] > 25 and close[i] < donchian_lower[i-1]:
                 signals.append("SELL")
             else:
                 signals.append(False)
