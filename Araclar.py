@@ -21,10 +21,26 @@ from matplotlib.gridspec import GridSpec
 import matplotlib.pyplot as plt
 from datetime import datetime
 from matplotlib.widgets import Cursor
-
+import logging
+from logging.handlers import RotatingFileHandler
 
 if not os.path.exists('Data'):
     os.makedirs('Data')
+
+# Ortak format
+formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
+
+# Trade Logger
+trade = logging.getLogger('trade')
+trade.setLevel(logging.INFO)  # Logger seviyesi
+trade_handler = RotatingFileHandler(
+    'Log/trade.log',
+    maxBytes=25 * 1024 * 1024,  # 25 MB
+    backupCount=1              # 1 yedek dosya tut
+)
+trade_handler.setFormatter(formatter)
+trade.addHandler(trade_handler)
+trade.propagate = False
 
 class Araclar:
     def __init__(self , to_email=None):
@@ -258,8 +274,7 @@ class Araclar:
         with open(json_output_file, 'w', encoding='utf-8') as f:
             json.dump(result_dict, f, indent=4, ensure_ascii=False)
 
-        print(f"Sonuçlar {output_file} ve {json_output_file} dosyalarına başarıyla kaydedildi.")
-
+        trade.info(f"Sonuçlar {output_file} ve {json_output_file} dosyalarına başarıyla kaydedildi.")
 
     def strategy_analyze_save(self):
         # Dosya var mı kontrolü
