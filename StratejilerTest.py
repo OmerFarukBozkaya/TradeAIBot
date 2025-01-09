@@ -1,4 +1,5 @@
 from Indikator import Indikator
+from IndikatorTest import IndikatorTest
 import pandas as pd
 import numpy as np
 
@@ -368,6 +369,7 @@ class StratejilerTest:
                           [{"name": "", "value": 30, "color": "black"}]
                                               ]}
         return signals,indicators
+
     @staticmethod
     def Alpha_Trend(high,low,close,vol):
         signals=[]
@@ -434,78 +436,55 @@ class StratejilerTest:
         return signals,indicators
 
     @staticmethod
-    def ADX_Donchian(high, low, close):
+    def Local_Min_Max(high,low,close):
+        # Sonuçları tutmak için liste
         signals = []
 
-        adx = Indikator.ADX(high, low, close)
-        donchian_upper, donchian_lower = Indikator.Donchian_Kanali(high, low)
-
-        for i in range(len(close)):
-            if i == 0:
-                signals.append(None)
-            if adx[i] is None or donchian_upper[i-1] is None or donchian_lower[i-1] is None:
-                signals.append(None)
-            elif adx[i] > 25 and close[i] > donchian_upper[i-1]:
-                signals.append("BUY")
-            elif adx[i] > 25 and close[i] < donchian_lower[i-1]:
-                signals.append("SELL")
-            else:
-                signals.append(False)
-
-        indicators = {"main_indicators": {"D_low": donchian_lower,"D_up":donchian_upper},
-                      "sub_indicators": [{"ADX": adx}],
-                      "sub_horizontal_lines": [
-                          []
-                      ]}
-        return signals,indicators
-
-    @staticmethod
-    def RSI_SuperTrend(high, low, close):
-        signals = []
-
+        # Tüm indikatörlerin bir defa hesaplanması
+        local_min_max = IndikatorTest.local_min_max(high, low,14)
+        bb_down,bb_mid,bb_up = Indikator.BB(close)
         rsi = Indikator.RSI(close)
-        supertrend, direction = Indikator.Super_Trend(high, low, close)
+        adx=Indikator.ADX(high, low, close)
+        ema50=Indikator.EMA(close,50)
 
-        for i in range(len(close)):
-            if rsi[i] is None or direction[i] is None:
+        # Her fiyat noktası için sinyal hesaplama
+        for i in range(len(high)):
+            if local_min_max[i] is None or adx[i] is None or bb_mid[i] is None or ema50[i] is None:
                 signals.append(None)
-            elif rsi[i] > 50 and direction[i] == 1:
+            elif close[i] > local_min_max[i] and adx[i]>30 and close[i]<bb_mid[i] and close[i]>ema50[i]:
                 signals.append("BUY")
-            elif rsi[i] < 50 and direction[i] == -1:
+            elif close[i] < local_min_max[i]:
                 signals.append("SELL")
             else:
                 signals.append(False)
-        indicators = {"main_indicators": {"Super_Trend": supertrend},
-                      "sub_indicators": [[{"RSI":rsi}],[{"Direction":direction}]],
-                      "sub_horizontal_lines": [
-                          [{"name": "", "value": 25, "color": "red"},{"name": "", "value": 50, "color": "yellow"},{"name": "", "value": 70, "color": "green"}],[]
-                                              ]}
-        return signals,indicators
+        indicators = {"main_indicators": {"MIN_MAX":local_min_max},
+                      "sub_indicators": [],
+                      "sub_horizontal_lines": [[]]}
+        return signals, indicators
 
     @staticmethod
-    def MACD_AlphaTrend(high, low, close):
+    def SignalMovingAvarage(high,low,close):
+        # Sonuçları tutmak için liste
         signals = []
 
-        macd_values, macd_signal = Indikator.MACD(close)
-        alpha_trend = Indikator.Alpha_Trend(high, low, close)
+        # Tüm indikatörlerin bir defa hesaplanması
+        ma,css = IndikatorTest.SignalMovingAverage(close,50)
+        adx=Indikator.ADX(high, low, close)
 
-        for i in range(len(close)):
-            if macd_values[i] is None or macd_signal[i] is None or alpha_trend[i] is None:
+        # Her fiyat noktası için sinyal hesaplama
+        for i in range(len(high)):
+            if ma[i] is None or adx[i] is None:
                 signals.append(None)
-            elif macd_values[i] > macd_signal[i] and alpha_trend[i] > 0:
+            elif css[i]==1 and adx[i]>25:
                 signals.append("BUY")
-            elif macd_values[i] < macd_signal[i] and alpha_trend[i] < 0:
+            elif css[i]==-1:
                 signals.append("SELL")
             else:
                 signals.append(False)
-
-        indicators = {"main_indicators": {"Super_Trend": alpha_trend},
-                      "sub_indicators": [[{"macd_values": macd_values},{"macd_signal": macd_signal}]],
-                      "sub_horizontal_lines": [
-                          [{"name": "", "value": 0, "color": "black"}]
-                      ]}
-
-        return signals,indicators
+        indicators = {"main_indicators": {"MA": ma},
+                      "sub_indicators": [{"SIGNAL":css}],
+                      "sub_horizontal_lines": [[{"name": "", "value": 0, "color": "black"}]]}
+        return signals, indicators
 
     @staticmethod
     def Super_Trend(high,low,close):
