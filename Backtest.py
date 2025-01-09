@@ -12,7 +12,7 @@ from matplotlib.widgets import Cursor
 
 class Backtest:
     @staticmethod
-    def Hesapla(coin, periyot,stop=False,canli_veri=True):
+    def Hesapla(coin, periyot,stop=False,canli_veri=True,ema_check=False,bb_check=False,sar_check=False,adx_atr_check=False):
         dinamik_stop=True
         static_stop=True
         binance = Binance()
@@ -37,7 +37,7 @@ class Backtest:
                       if callable(getattr(StratejilerTest, func))
                       and not func.startswith("__")
                       and not getattr(StratejilerTest, func).__name__ in ["dinamik_stop_lose", "static_stop_lose",
-                                                                          "destek_stop_lose","take_profit"]]
+                                                                          "destek_stop_lose","take_profit","Local_Min_Max"]]
 
         # Excel'e yazılacak veriler için bir liste oluştur
         excel_data = []
@@ -62,13 +62,54 @@ class Backtest:
             high_price = 0
             atr = IndikatorTest.ATR(high,low,close)
             adx = IndikatorTest.ADX(high,low,close)
+            if ema_check:
+                ema21 = IndikatorTest.EMA(close,21)
+            if bb_check:
+                bb_down,bb_mid,bb_top=IndikatorTest.BB(close)
+            if sar_check:
+                sar = IndikatorTest.ParabolicSAR(high, low)
 
             for i in range(len(close)):
                 if last_signal is None or last_signal == 'red':  # Yeni pozisyon açma
-                    if strategy_result[i] == "BUY":
-                        islem_gecmisi.append(f"{i}.mum {strategy.__name__} {periyot} {coin} fiyat : {close[i]} alindi.")
-                        last_signal = 'green'
-                        buy_price = close[i]
+                    if ema_check or bb_check:
+                        if ema_check:
+                            if ema21[i] is not None and close[i]>ema21[i]:
+                                pass
+                            else:
+                                continue
+                        if bb_check:
+                            if bb_mid[i] is not None and close[i]<bb_mid[i]:
+                                pass
+                            else:
+                                continue
+                        if sar_check:
+                            if sar[i] is not None and close[i]>sar[i]:
+                                pass
+                            else:
+                                continue
+                        if adx_atr_check:
+                            if adx[i] is not None and atr[i] is not None and atr[i-1] is not None and 25>adx[i] and atr[i]>atr[i-1]:
+                                pass
+                            else:
+                                continue
+                        son_sell_index = 0
+                        for j in range(len(strategy_result[:i+1]) - 1, -1, -1):
+                            if strategy_result[:i+1][j] == 'SELL':
+                                son_sell_index = j
+                                break
+                        buy_control = (strategy_result[i] == "BUY") and ("BUY" not in strategy_result[son_sell_index:i])
+                        if buy_control:
+                            islem_gecmisi.append(
+                                f"{i}.mum {strategy.__name__} {periyot} {coin} fiyat : {close[i]} alindi.")
+                            last_signal = 'green'
+                            buy_price = close[i]
+                    else:
+                        if strategy_result[i] == "BUY":
+                            islem_gecmisi.append(
+                                f"{i}.mum {strategy.__name__} {periyot} {coin} fiyat : {close[i]} alindi.")
+                            last_signal = 'green'
+                            buy_price = close[i]
+
                 elif last_signal == 'green':  # Mevcut pozisyonu kapama
                     if stop:
                         if dinamik_stop:
@@ -137,7 +178,7 @@ class Backtest:
         # Veriyi sıfırdan dosyaya yaz (önceki veriler silinir)
         new_data_df.to_excel(output_file, index=False, engine='openpyxl')
     @staticmethod
-    def Grafik_Ciz(coin, periyot,selected_strategy_name=None,stop=False):
+    def Grafik_Ciz(coin, periyot,selected_strategy_name=None,stop=False,ema_check=False,bb_check=False):
         # Veri ithali
         binance = Binance()
         data = binance.get_coin_data(coin, periyot, 1000)
@@ -146,6 +187,7 @@ class Backtest:
         high = data['high']
         low = data['low']
         close = data['close']
+        vol = data['volume_coin']
 
         # Strateji listesi
         if selected_strategy_name is None:
@@ -187,11 +229,43 @@ class Backtest:
             dinamik_stop_signal=None
             atr=IndikatorTest.ATR(high, low, close)
             adx=IndikatorTest.ADX(high, low, close)
+            if ema_check:
+                ema50=IndikatorTest.EMA(close,50)
+            if bb_check:
+                bb_down, bb_mid, bb_top = IndikatorTest.BB(close)
+
+            # 2. Grafik: Kapital ve kâr/zarar hesaplama
+            initial_capital = 100
+            current_capital = initial_capital
+            capital_history = [initial_capital]
+            cumulative_profit_loss = []
+            buy_price = None
+
             for i in range(len(close)):
+                if strategy.__name__=="Local_Min_Max":
+                    strategy_resault,indicators=strategy(high[:i+1],low[:i+1],close[:i+1])
                 if last_signal is None or last_signal == 'red':
-                    if strategy_resault[i] == "BUY":
-                        last_signal = 'green'
-                        buy_points.append(i)
+                    if ema_check or bb_check:
+                        if ema_check:
+                            if ema50[i] is not None and close[i] > ema50[i]:
+                                pass
+                            else:
+                                continue
+                        if bb_check:
+                            if bb_mid[i] is not None and close[i] < bb_mid[i]:
+                                pass
+                            else:
+                                continue
+                        if strategy_resault[i] == "BUY":
+                            last_signal = 'green'
+                            buy_points.append(i)
+                            buy_price = close[i]
+                    else:
+                        if strategy_resault[i] == "BUY":  # and (ema50[i] is not None and close[i]>ema50[i])
+                            last_signal = 'green'
+                            buy_points.append(i)
+                            buy_price = close[i]
+
                 elif last_signal == 'green':
                     # Stop-lose hesaplama
                     if stop:
@@ -205,11 +279,21 @@ class Backtest:
                     if strategy_resault[i] == "SELL":
                         last_signal = 'red'
                         sell_points.append(i)
+                        sell_price = close[i]
+                        profit_percentage = ((sell_price - buy_price) / buy_price) * 100
+                        current_capital *= (1 + profit_percentage / 100)
+                        capital_history.append(current_capital)
+                        cumulative_profit_loss.append(profit_percentage)
                     elif stop and (destek_stop_signal=="STOP-LOSE" or (dinamik_stop_lose_check and dinamik_stop_signal=="STOP-LOSE")):
                         last_signal = 'red'
                         dinamik_stop_lose_check=False
                         higest_price=0
                         stop_points.append(i)
+                        sell_price = close[i]
+                        profit_percentage = ((sell_price - buy_price) / buy_price) * 100
+                        current_capital *= (1 + profit_percentage / 100)
+                        capital_history.append(current_capital)
+                        cumulative_profit_loss.append(profit_percentage)
 
             # Yeni pencere oluştur
             fig = plt.figure(figsize=(16, 10))
@@ -263,29 +347,6 @@ class Backtest:
 
             ax1.format_coord = format_coord
 
-            # 2. Grafik: Kapital ve kâr/zarar hesaplama
-            initial_capital = 100
-            current_capital = initial_capital
-            capital_history = [initial_capital]
-            cumulative_profit_loss = []
-
-            last_signal = None
-            buy_price = None
-
-            for i in range(len(close)):
-                if last_signal is None or last_signal == 'red':
-                    if strategy_resault[i] == "BUY":
-                        last_signal = 'green'
-                        buy_price = close[i]
-                elif last_signal == 'green':
-                    if strategy_resault[i] == "SELL":
-                        last_signal = 'red'
-                        sell_price = close[i]
-                        profit_percentage = ((sell_price - buy_price) / buy_price) * 100
-                        current_capital *= (1 + profit_percentage / 100)
-                        capital_history.append(current_capital)
-                        cumulative_profit_loss.append(profit_percentage)
-
             ax2 = plt.subplot2grid((2, 2), (1, 0))
             ax2.plot(capital_history, marker='o', markersize=5, linewidth=2,
                      label=f"Kapital\nSon Kapital: {capital_history[-1]:.2f}")
@@ -335,7 +396,8 @@ class Backtest:
             ax3.format_coord = format_coord
 
             plt.tight_layout()
-        plt.show()
+            IndikatorTest.Grafik_Indikator(open,high,low,close,vol,opendate,indicators['main_indicators'],indicators['sub_indicators'],indicators['sub_horizontal_lines'])
+            plt.show()
     @staticmethod
     def Grafik_Ciz_Save(coin, periyot, selected_strategy_name=None):
         # Veri ithali
