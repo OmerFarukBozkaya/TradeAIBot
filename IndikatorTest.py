@@ -930,6 +930,93 @@ class IndikatorTest:
         return k_values, d_values
 
     @staticmethod
+    def local_min_max(high,low,length=3):
+        result=[]
+        for i in range(length):
+            result.append(None)
+        for j in range(length,len(high)-length):
+            mevcut_fiyat_high = high[j]
+            mevcut_fiyat_low = low[j]
+            onceki_length_high=high[j-length:j]
+            sonraki_length_high=high[j+1:j+length+1]
+            onceki_length_low = low[j - length:j]
+            sonraki_length_low = low[j + 1:j + length + 1]
+            local_max=True
+            local_min=True
+            for l in range(length):
+                if mevcut_fiyat_low<onceki_length_low[l] and mevcut_fiyat_low<sonraki_length_low[l]:
+                    pass
+                else:
+                    local_min=False
+                if onceki_length_high[l] < mevcut_fiyat_high and sonraki_length_high[l]<mevcut_fiyat_high:
+                    pass
+                else:
+                    local_max=False
+            if local_max:
+                result.append(high[j])
+            elif local_min:
+                result.append(low[j])
+            else:
+                result.append(result[-1])
+
+            #print(f"{mevcut_fiyat}\n{onceki_length}\n{sonraki_length}")
+        for k in range(length):
+            result.append(result[-1])
+        return result
+
+    @staticmethod
+    def SignalMovingAverage(src, length):
+        """
+        Signal Moving Average (LuxAlgo) indikatörü.
+
+        :param src: Fiyat verileri (list)
+        :param length: SMA uzunluğu (int)
+        :return: Signal Moving Average ve Renk sinyalleri (list, list)
+        """
+        if len(src) < length:
+            return [None] * len(src), [None] * len(src)
+
+        # SMA hesaplama
+        sma = np.convolve(src, np.ones(length) / length, mode='valid')
+        sma = [None] * (length - 1) + sma.tolist()  # SMA'yı hizalamak için başa None ekle
+
+        # Mutlak fark hesaplama
+        abs_diff = [None if i == 0 or sma[i] is None or sma[i - 1] is None else abs(sma[i] - sma[i - 1]) for i in
+                    range(len(src))]
+
+        # R² hesaplama (Korelasyonun karesi)
+        bar_index = np.arange(len(src))
+        r2 = []
+        for i in range(len(src)):
+            if i < length:
+                r2.append(None)
+            else:
+                valid_src = src[i - length + 1:i + 1]
+                valid_bar_index = bar_index[i - length + 1:i + 1]
+                correlation = np.corrcoef(valid_src, valid_bar_index)[0, 1]
+                r2.append(correlation ** 2)
+
+        # Signal Moving Average hesaplama
+        ma = [None] * len(src)
+        os = [None] * len(src)  # Yön sinyali
+        for i in range(1, len(src)):
+            if r2[i] is not None and r2[i] > 0.5:
+                os[i] = np.sign(src[i - 1] - sma[i - 1]) if sma[i - 1] is not None else os[i - 1]
+                ma[i] = r2[i] * sma[i] + (1 - r2[i]) * (ma[i - 1] if ma[i - 1] is not None else sma[i])
+            else:
+                os[i] = os[i - 1]
+                if ma[i - 1] is not None and abs_diff[i] is not None and os[i] is not None:
+                    ma[i] = ma[i - 1] - abs_diff[i] * os[i]
+                else:
+                    ma[i] = ma[i - 1]  # Eğer önceki değer yoksa aynı değeri koru veya None bırak
+
+        # Renk sinyalleri (Yeşil: Pozitif trend, Kırmızı: Negatif trend)
+        css = [None if o is None else (1 if o == 1 else -1) for o in os]
+
+        return ma, css
+
+
+    @staticmethod
     def Grafik_Indikator(open_prices, high_prices, low_prices, close_prices, vol, timestamps,
                          main_indicators=None, sub_indicators=None, sub_horizontal_lines=None):
         """
