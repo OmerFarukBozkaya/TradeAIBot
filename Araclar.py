@@ -31,7 +31,7 @@ if not os.path.exists('Data'):
 formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
 
 # Trade Logger
-trade = logging.getLogger('trade')
+trade = logging.getLogger('araclar')
 trade.setLevel(logging.INFO)  # Logger seviyesi
 trade_handler = RotatingFileHandler(
     'Log/trade.log',
