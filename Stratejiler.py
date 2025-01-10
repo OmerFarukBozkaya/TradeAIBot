@@ -331,3 +331,87 @@ class Stratejiler:
             else:
                 signals.append(False)
         return signals
+
+    @staticmethod
+    def EMA_StochasticRSI(high, low, close):
+        signals = []
+
+        ema_50 = Indikator.EMA(close, 50)
+        stoch_k, stoch_d = Indikator.StochasticRSI(close)
+
+        for i in range(len(close)):
+            if ema_50[i] is None or stoch_k[i] is None or stoch_d[i] is None:
+                signals.append(None)
+            elif close[i] > ema_50[i] and stoch_k[i] > stoch_d[i]:
+                signals.append("BUY")
+            elif close[i] < ema_50[i] and stoch_k[i] < stoch_d[i]:
+                signals.append("SELL")
+            else:
+                signals.append(False)
+
+        return signals
+
+    @staticmethod
+    def CCI_ATR(high, low, close):
+        signals = []
+
+        cci = Indikator.CCI(high, low, close)
+        atr = Indikator.ATR(high, low, close)
+
+        for i in range(len(close)):
+            if cci[i] is None or atr[i] is None or atr[i - 1] is None:
+                signals.append(None)
+            elif cci[i] > 100 and atr[i] > atr[i - 1]:
+                signals.append("BUY")
+            elif cci[i] < 0 and atr[i] < atr[i - 1]:
+                signals.append("SELL")
+            else:
+                signals.append(False)
+
+        return signals
+
+    @staticmethod
+    def Local_Min_Max(high, low, close):
+        # Sonuçları tutmak için liste
+        signals = []
+
+        # Tüm indikatörlerin bir defa hesaplanması
+        local_min_max = Indikator.local_min_max(high, low, 14)
+        bb_down, bb_mid, bb_up = Indikator.BB(close)
+        adx = Indikator.ADX(high, low, close)
+        ema50 = Indikator.EMA(close, 50)
+
+        # Her fiyat noktası için sinyal hesaplama
+        for i in range(len(high)):
+            if local_min_max[i] is None or adx[i] is None or bb_mid[i] is None or ema50[i] is None:
+                signals.append(None)
+            elif close[i] > local_min_max[i] and adx[i] > 30 and close[i] < bb_mid[i] and close[i] > ema50[i]:
+                signals.append("BUY")
+            elif close[i] < local_min_max[i]:
+                signals.append("SELL")
+            else:
+                signals.append(False)
+
+        return signals
+
+    @staticmethod
+    def SignalMovingAvarage(high, low, close):
+        # Sonuçları tutmak için liste
+        signals = []
+
+        # Tüm indikatörlerin bir defa hesaplanması
+        ma, css = Indikator.SignalMovingAverage(close, 50)
+        adx = Indikator.ADX(high, low, close)
+
+        # Her fiyat noktası için sinyal hesaplama
+        for i in range(len(high)):
+            if ma[i] is None or adx[i] is None:
+                signals.append(None)
+            elif css[i] == 1 and adx[i] > 25:
+                signals.append("BUY")
+            elif css[i] == -1:
+                signals.append("SELL")
+            else:
+                signals.append(False)
+
+        return signals
