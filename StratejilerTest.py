@@ -443,7 +443,6 @@ class StratejilerTest:
         # Tüm indikatörlerin bir defa hesaplanması
         local_min_max = IndikatorTest.local_min_max(high, low,14)
         bb_down,bb_mid,bb_up = Indikator.BB(close)
-        rsi = Indikator.RSI(close)
         adx=Indikator.ADX(high, low, close)
         ema50=Indikator.EMA(close,50)
 
