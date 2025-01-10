@@ -333,6 +333,11 @@ class Backtest:
                     l = low[index]
                     c = close[index]
                     time = dates[index]
+                    buy_sell_points=None
+                    if index in buy_points:
+                        buy_sell_points="BUY"
+                    elif index in sell_points:
+                        buy_sell_points="SELL"
 
                     # Yüzdelik değişim hesaplama
                     if o != 0:
@@ -342,7 +347,7 @@ class Backtest:
 
                     # Fiyat değişimini ve diğer indikatörleri ekle
 
-                    return f"Time: {time}, Open: {o}, High: {h}, Low: {l}, Close: {c}, Change: {price_change_percent:.2f}% "
+                    return f"Time: {time}, Open: {o}, High: {h}, Low: {l}, Close: {c}, Change: {price_change_percent:.2f}%, Buy/Sell Points: {buy_sell_points} "
                 return f"X: {x:.2f}, Y: {y:.2f}"
 
             ax1.format_coord = format_coord
