@@ -87,6 +87,7 @@ class Trade:
         self.buy_ma_control = os.getenv('BUY_MA_CONTROL')
         self.buy_bb_control = os.getenv('BUY_BB_CONTROL')
         self.durum_list=[]
+        self.calisacak_periyotlar= json.loads(os.getenv("CALISACAK_PERIYOTLAR"))
     def kaydet(self):
         durum = {
             'islem_acik': self.islem_acik,
@@ -124,6 +125,9 @@ class Trade:
         self.gercek = gercek  # Gerçek işlem bilgisi kaydedildi
         self.nakit=nakit
         self.periyot=periyot
+        if self.periyot not in self.calisacak_periyotlar:
+            trade.info(f"Trade {periyot} Calistirilmayacak !!! {gercek}")
+            exit(0)
         if not temp_trade:
             self.yukle()
         trade.info(f"Trade {periyot} Calisiyor ... {gercek}")

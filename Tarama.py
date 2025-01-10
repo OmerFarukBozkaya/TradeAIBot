@@ -10,6 +10,9 @@ import concurrent.futures
 import logging
 import os
 from logging.handlers import RotatingFileHandler
+from glob import glob
+from dotenv import load_dotenv
+import json
 
 if not os.path.exists('Log'):
     os.makedirs('Log')
@@ -30,12 +33,25 @@ tarama.propagate = False
 class Tarama:
     @staticmethod
     def Tara(coinlist, periyot, mum_bekle=True):
-        binance = Binance()
-        araclar = Araclar()
+        env_files = glob(".env*")
+        if env_files:
+            # İlk bulunan dosyayı seç
+            selected_env_file = env_files[0]
+            # Seçilen dosyayı yükle
+            load_dotenv(selected_env_file)
+        else:
+            print(".env ile başlayan bir dosya bulunamadı.")
+        calisacak_periyotlar = json.loads(os.getenv("CALISACAK_PERIYOTLAR"))
+        
+        if periyot not in calisacak_periyotlar:
+            tarama.info(f"Tarama {periyot} Calistirilmayacak !!!")
+            exit(0)
 
         print(f"Tarama {periyot} Calisiyor ...", time.ctime())
         tarama.info(f"Tarama {periyot} Calisiyor ...")
 
+        binance = Binance()
+        araclar = Araclar()
         while True:
             try:
                 strategys = araclar.get_strategys()
