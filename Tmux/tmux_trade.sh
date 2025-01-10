@@ -8,11 +8,11 @@ SCRIPT_PATH="./main.py"  # Kendi script dosyanızın yolunu yazın
 JSON_FILE="gercek.json"
 
 # Tarama ve Trade işlemleri için periyot listeleri
-PERIODS=("15m" "1h" "1d")
+PERIODS=("15m" "1h" "4h" "1d")
 
 # Gercek.json dosyasının var olup olmadığını kontrol et
 if [ ! -f $JSON_FILE ]; then
-    echo '{"15m":"False","1h":"False","1d":"False"}' > $JSON_FILE
+    echo '{"15m":"False","1h":"False","4h":"False","1d":"False"}' > $JSON_FILE
 fi
 
 # Yeni bir tmux oturumu başlatın, ilk pencere otomatik olarak atanacak
