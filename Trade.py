@@ -423,7 +423,10 @@ class Trade:
             if not temp_trade:
                 self.kaydet()
             other_strategy = self.strategys[periyot].copy()
-            other_strategy.remove(self.sell_strategy)
+            try:
+                other_strategy.remove(self.sell_strategy)
+            except:
+                print("Satis stratejisi stratejiler listesinde bulunmuyor !")
             other_strategy_result = []
             try:
                 for strategy in other_strategy:
