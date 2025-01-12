@@ -504,3 +504,40 @@ class StratejilerTest:
                           [{"name": "", "value": 0, "color": "black"}]
                                               ]}
         return signals,indicators
+
+    @staticmethod
+    def SqueezeMomentum(high, low, close):
+        """
+        Squeeze Momentum indikatörüne dayalı bir strateji.
+        """
+        signals = []
+
+        # İndikatör hesaplamaları
+        momentum, momentum_state, squeeze_state = IndikatorTest.SqueezeMomentumIndicator(close, high, low)
+        adx=Indikator.ADX(high, low, close)
+        rsi=IndikatorTest.RSI(close)
+        bb_down,bb_mid,bb_up=Indikator.BB(close)
+        ema50=Indikator.EMA(close,50)
+
+
+        # Sinyal üretimi
+        for i in range(len(close)):
+            if momentum[i] is None or squeeze_state[i] is None or ema50[i] is None:
+                signals.append(None)
+            elif squeeze_state[i] == 1 and momentum[i]>0 and close[i]>ema50[i]:
+                signals.append("BUY")  # Squeeze On ve pozitif momentum artışı
+            elif squeeze_state[i] == -1 and momentum[i]<0 and close[i]<ema50[i]:
+                signals.append("SELL")  # Squeeze Off ve negatif momentum artışı
+            else:
+                signals.append(False)
+
+        # Göstergeler ve yatay çizgiler
+        indicators = {
+            "main_indicators": None,
+            "sub_indicators": [{"Momentum State": momentum_state}, {"Squeeze State": squeeze_state}],
+            "sub_horizontal_lines": [
+                [{"name": "Zero Line", "value": 0, "color": "black"}]
+            ],
+        }
+
+        return signals, indicators
