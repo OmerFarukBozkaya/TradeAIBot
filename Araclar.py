@@ -215,6 +215,75 @@ class Araclar:
         df.to_excel(path, index=False)
 
     @staticmethod
+    def veri_seti_olustur_strategys(coin,period):
+        binance = Binance()
+        indikator = Indikator()
+        data = binance.get_coin_data(coin, period, 1000)
+        high = data['high']
+        low = data['low']
+        close = data['close']
+        acilis = data['open']
+        opendate = data['opendate']
+
+        # Strategyler
+        macd,indicators = StratejilerTest.MACD(high, low, close)
+        vmzi,indicators = StratejilerTest.VMZI(high, low, close)
+        vama,indicators = StratejilerTest.VAMA(high, low, close)
+        tso,indicators = StratejilerTest.TSO(high, low, close)
+        bb_rsi,indicators = StratejilerTest.BB_RSI(high, low, close)
+        fdi,indicators = StratejilerTest.FDI(high, low, close)
+        bb_close,indicators = StratejilerTest.BB_Close(high, low, close)
+        ma_cross,indicators = StratejilerTest.MA_Cross(high, low, close)
+        dmo,indicators = StratejilerTest.DMO(high, low, close)
+        bb_adx,indicators = StratejilerTest.BB_ADX(high, low, close)
+        ema_stochastic,indicators = StratejilerTest.EMA_StochasticRSI(high, low, close)
+        cci_atr,indicators = StratejilerTest.CCI_ATR(high, low, close)
+        signal_moving_avarage,indicators = StratejilerTest.SignalMovingAvarage(high, low, close)
+        super_trend,indicators = StratejilerTest.Super_Trend(high, low, close)
+        squeeze_momentum,indicators = StratejilerTest.SqueezeMomentum(high, low, close)
+
+        # Listeleri bir dataframe'e dönüştürüyoruz ve eksik olan yerleri None (veya NaN) ile dolduruyoruz
+        df = pd.DataFrame({
+            'opendate': opendate,
+            'acilis': acilis,
+            'high': high,
+            'low': low,
+            'close': close,
+            'macd' : macd,
+            'vmzi' : vmzi,
+            'vama' : vama,
+            'tso' : tso,
+            'bb_rsi' : bb_rsi,
+            'fdi' : fdi,
+            'bb_close' : bb_close,
+            'ma_cross' : ma_cross,
+            'dmo' : dmo,
+            'bb_adx' : bb_adx,
+            'ema_stochastic' : ema_stochastic,
+            'cci_atr' : cci_atr,
+            'signal_moving_avarage' : signal_moving_avarage,
+            'super_trend' : super_trend,
+            'squeeze_momentum' : squeeze_momentum
+        })
+
+        # Değerleri değiştir
+        df.replace({'BUY': 1, 'SELL': -1, 'False': 0}, inplace=True)
+
+        # Gerekli sütunlarda veri türü dönüşümü
+        df = df.astype({'macd': 'float64', 'vmzi': 'float64', 'vama': 'float64', 'tso': 'float64',
+                        'bb_rsi': 'float64', 'fdi': 'float64', 'bb_close': 'float64', 'ma_cross': 'float64',
+                        'dmo': 'float64', 'bb_adx': 'float64', 'ema_stochastic': 'float64',
+                        'cci_atr': 'float64', 'signal_moving_avarage': 'float64', 'super_trend': 'float64',
+                        'squeeze_momentum': 'float64'})
+
+        # Eksik olan değerleri None (veya NaN) ile doldurma
+        df = df.apply(lambda col: col.tolist() + [None] * (df['opendate'].size - col.size) if col.size < df[
+            'opendate'].size else col)
+        path = 'Data/veriler_strategys.xlsx'
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        df.to_excel(path, index=False)
+
+    @staticmethod
     def mum_olusmasini_bekle(periyot):
         zaman_dilimleri = {
             "1m": 60, "3m": 180, "5m": 300, "15m": 900, "30m": 1800,
