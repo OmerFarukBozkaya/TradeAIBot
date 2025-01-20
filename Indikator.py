@@ -880,3 +880,96 @@ class Indikator:
         css = [None if o is None else (1 if o == 1 else -1) for o in os]
 
         return ma, css
+
+    @staticmethod
+    def SqueezeMomentumIndicator(high, low, close, length=20, multBB=2.0, lengthKC=20, multKC=1.5, useTrueRange=True):
+        """
+        Squeeze Momentum Indicator [LazyBear].
+
+        :param close: Kapanış fiyatları (list veya np.array)
+        :param high: En yüksek fiyatlar (list veya np.array)
+        :param low: En düşük fiyatlar (list veya np.array)
+        :param length: Bollinger Bantları için dönem uzunluğu
+        :param multBB: Bollinger Bantları çarpanı
+        :param lengthKC: Keltner Kanalı için dönem uzunluğu
+        :param multKC: Keltner Kanalı çarpanı
+        :param useTrueRange: TrueRange kullanım seçeneği
+        :return: Momentum değerleri (list), momentum durumları (list), squeeze durumları (list)
+        """
+        close = np.array(close, dtype=float)
+        high = np.array(high, dtype=float)
+        low = np.array(low, dtype=float)
+
+        # Bollinger Bantları (BB) hesaplama
+        bb_basis = pd.Series(close).rolling(window=length).mean().to_numpy()
+        bb_dev = pd.Series(close).rolling(window=length).std().to_numpy() * multBB
+        upperBB = bb_basis + bb_dev
+        lowerBB = bb_basis - bb_dev
+
+        # Keltner Kanalları (KC) hesaplama
+        kc_ma = pd.Series(close).rolling(window=lengthKC).mean().to_numpy()
+        if useTrueRange:
+            tr = np.maximum(high - low, np.maximum(np.abs(high - np.roll(close, 1)), np.abs(low - np.roll(close, 1))))
+        else:
+            tr = high - low
+        tr[0] = 0  # İlk değer için TR sıfır yapılır
+        kc_range_ma = pd.Series(tr).rolling(window=lengthKC).mean().to_numpy()
+        upperKC = kc_ma + kc_range_ma * multKC
+        lowerKC = kc_ma - kc_range_ma * multKC
+
+        # Squeeze Durumlarını Belirleme
+        sqz_on = (lowerBB > lowerKC) & (upperBB < upperKC)
+        sqz_off = (lowerBB < lowerKC) & (upperBB > upperKC)
+        no_sqz = ~(sqz_on | sqz_off)
+
+        squeeze_state = np.where(sqz_on, 1, np.where(sqz_off, -1, 0))
+
+        # Momentum Hesaplama
+        avg_high_low = (pd.Series(high).rolling(window=lengthKC).max() + pd.Series(low).rolling(
+            window=lengthKC).min()) / 2
+        linreg_source = close - (avg_high_low + kc_ma) / 2
+        momentum = pd.Series(linreg_source).rolling(window=lengthKC).apply(
+            lambda x: np.polyfit(np.arange(len(x)), x, 1)[0], raw=True
+        ).to_numpy()
+
+        # Momentum Durumları
+        momentum_state = []
+        for i in range(len(momentum)):
+            if i == 0 or np.isnan(momentum[i]) or np.isnan(momentum[i - 1]):
+                momentum_state.append(None)
+            elif momentum[i] > 0:
+                momentum_state.append(1 if momentum[i] > momentum[i - 1] else 0)
+            else:
+                momentum_state.append(-2 if momentum[i] < momentum[i - 1] else -1)
+
+        return momentum.tolist(), momentum_state, squeeze_state.tolist()
+
+    @staticmethod
+    def SMC(high, low, close, length=20):
+        """
+        Gelişmiş SMC indikatörü:
+        - Likidite Havuzları
+        - Order Blocks
+        - Market Structure Break (MSB)
+        - Fair Value Gap (FVG)
+        """
+        # Likidite Havuzları
+        highs = [max(high[i - length:i]) if i >= length else None for i in range(len(high))]
+        lows = [min(low[i - length:i]) if i >= length else None for i in range(len(low))]
+
+        # MSB Tespiti
+        msb_up = [close[i] > highs[i - 1] if i > 0 and highs[i - 1] is not None else None for i in range(len(close))]
+        msb_down = [close[i] < lows[i - 1] if i > 0 and lows[i - 1] is not None else None for i in range(len(close))]
+
+        # Fair Value Gap (FVG) Tespiti
+        fvg_up = [high[i - 2] < low[i] if i >= 2 else None for i in range(len(close))]
+        fvg_down = [low[i - 2] > high[i] if i >= 2 else None for i in range(len(close))]
+
+        return {
+            "highs": highs,
+            "lows": lows,
+            "msb_up": msb_up,
+            "msb_down": msb_down,
+            "fvg_up": fvg_up,
+            "fvg_down": fvg_down
+        }

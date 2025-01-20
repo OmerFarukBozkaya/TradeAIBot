@@ -1,4 +1,5 @@
 from Indikator import Indikator
+from Binance import Binance
 import pandas as pd
 import numpy as np
 
@@ -415,3 +416,75 @@ class Stratejiler:
                 signals.append(False)
 
         return signals
+
+    @staticmethod
+    def SqueezeMomentum(high, low, close):
+        """
+        Squeeze Momentum indikatörüne dayalı bir strateji.
+        """
+        signals = []
+
+        # İndikatör hesaplamaları
+        momentum, momentum_state, squeeze_state = Indikator.SqueezeMomentumIndicator(close, high, low)
+        adx = Indikator.ADX(high, low, close)
+        rsi = Indikator.RSI(close)
+        bb_down, bb_mid, bb_up = Indikator.BB(close)
+        ema50 = Indikator.EMA(close, 50)
+
+        # Sinyal üretimi
+        for i in range(len(close)):
+            if momentum[i] is None or squeeze_state[i] is None or ema50[i] is None:
+                signals.append(None)
+            elif squeeze_state[i] == 1 and momentum[i] > 0 and close[i] > ema50[i]:
+                signals.append("BUY")  # Squeeze On ve pozitif momentum artışı
+            elif squeeze_state[i] == -1 and momentum[i] < 0 and close[i] < ema50[i]:
+                signals.append("SELL")  # Squeeze Off ve negatif momentum artışı
+            else:
+                signals.append(False)
+
+        # Göstergeler ve yatay çizgiler
+        indicators = {
+            "main_indicators": None,
+            "sub_indicators": [{"Momentum State": momentum_state}, {"Squeeze State": squeeze_state}],
+            "sub_horizontal_lines": [
+                [{"name": "Zero Line", "value": 0, "color": "black"}]
+            ],
+        }
+
+        return signals, indicators
+
+    @staticmethod
+    def SMC_Strategy(high, low, close):
+        """
+        Gelişmiş SMC stratejisi: Momentum ve Trend gücü dahil
+        """
+        smc = Indikator.SMC(high, low, close)
+        highs, lows = smc["highs"], smc["lows"]
+        msb_up, msb_down = smc["msb_up"], smc["msb_down"]
+        fvg_up, fvg_down = smc["fvg_up"], smc["fvg_down"]
+
+        # Momentum ve trend gücü indikatörleri
+        rsi = Indikator.RSI(close)
+        adx = Indikator.ADX(high, low, close)
+        ema_kisa = Indikator.EMA(Binance.hlc3(high, low, close), 50)
+        ema_uzun = Indikator.EMA(Binance.hlc3(high, low, close), 200)
+
+        signals = []
+        for i in range(len(close)):
+            if msb_up[i] and adx[i] > 25 and ema_uzun[i] is not None and ema_kisa[i] is not None and ema_kisa[i] < \
+                    close[i] and ema_uzun[i] < ema_kisa[i]:
+                signals.append("BUY")
+            elif msb_down[i] and adx[i] > 25:
+                signals.append("SELL")
+            else:
+                signals.append(None)
+
+        indicators = {
+            "main_indicators": {"Highs": highs, "Lows": lows, "EMA_Kisa": ema_kisa, "EMA_Uzun": ema_uzun},
+            "sub_indicators": [{"RSI": rsi}, {"ADX": adx}],
+            "sub_horizontal_lines": [
+                [{"name": "50", "value": 50, "color": "black"}, {"name": "70", "value": 70, "color": "green"},
+                 {"name": "30", "value": 30, "color": "red"}], [{"name": "25", "value": 25, "color": "green"}]]
+        }
+
+        return signals, indicators
