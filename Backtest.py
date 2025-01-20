@@ -12,7 +12,7 @@ from matplotlib.widgets import Cursor
 
 class Backtest:
     @staticmethod
-    def Hesapla(coin, periyot,stop=False,canli_veri=True,ema_check=False,bb_check=False,sar_check=False,adx_atr_check=False):
+    def Hesapla(coin, periyot,stop=False,canli_veri=True,ema_check=True,bb_check=False,sar_check=False,adx_atr_check=False):
         dinamik_stop=True
         static_stop=True
         binance = Binance()
@@ -63,7 +63,8 @@ class Backtest:
             atr = IndikatorTest.ATR(high,low,close)
             adx = IndikatorTest.ADX(high,low,close)
             if ema_check:
-                ema21 = IndikatorTest.EMA(close,21)
+                hlc3=Binance.hlc3(high, low, close)
+                ema200 = IndikatorTest.EMA(hlc3, 200)
             if bb_check:
                 bb_down,bb_mid,bb_top=IndikatorTest.BB(close)
             if sar_check:
@@ -73,7 +74,7 @@ class Backtest:
                 if last_signal is None or last_signal == 'red':  # Yeni pozisyon açma
                     if ema_check or bb_check:
                         if ema_check:
-                            if ema21[i] is not None and close[i]>ema21[i]:
+                            if ema200[i] is not None and close[i]>ema200[i]:
                                 pass
                             else:
                                 continue
@@ -104,7 +105,13 @@ class Backtest:
                             last_signal = 'green'
                             buy_price = close[i]
                     else:
-                        if strategy_result[i] == "BUY":
+                        son_sell_index = 0
+                        for j in range(len(strategy_result[:i + 1]) - 1, -1, -1):
+                            if strategy_result[:i + 1][j] == 'SELL':
+                                son_sell_index = j
+                                break
+                        buy_control = (strategy_result[i] == "BUY") and ("BUY" not in strategy_result[son_sell_index:i])
+                        if buy_control:
                             islem_gecmisi.append(
                                 f"{i}.mum {strategy.__name__} {periyot} {coin} fiyat : {close[i]} alindi.")
                             last_signal = 'green'
@@ -242,7 +249,7 @@ class Backtest:
             buy_price = None
 
             for i in range(len(close)):
-                if strategy.__name__=="Local_Min_Max":
+                if strategy.__name__=="Local_Min_Max" or strategy.__name__=="SMC_Strategy":
                     strategy_resault,indicators=strategy(high[:i+1],low[:i+1],close[:i+1])
                 if last_signal is None or last_signal == 'red':
                     if ema_check or bb_check:
