@@ -608,36 +608,6 @@ class Araclar:
         return None
 
     @staticmethod
-    def hlc3(high, low, close):
-        # NumPy dizilerine dönüştürme (performansı artırır)
-        high = np.array(high)
-        low = np.array(low)
-        close = np.array(close)
-
-        # Ortalama hesaplama
-        return ((high + low + close) / 3).tolist()
-
-    @staticmethod
-    def hl2(high,low):
-        # NumPy dizilerine dönüştürme (performansı artırır)
-        high = np.array(high)
-        low = np.array(low)
-
-        # Ortalama hesaplama
-        return ((high + low) / 2).tolist()
-
-    @staticmethod
-    def ohlc4(open,high, low,close):
-        # NumPy dizilerine dönüştürme (performansı artırır)
-        open=np.array(open)
-        high = np.array(high)
-        low = np.array(low)
-        close=np.array(close)
-
-        # Ortalama hesaplama
-        return ((open + high + low + close) / 4).tolist()
-
-    @staticmethod
     def acik_pozisyonlarin_grafigi(periyot):
         binance = Binance()
 
