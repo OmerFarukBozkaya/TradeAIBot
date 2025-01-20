@@ -932,8 +932,12 @@ class IndikatorTest:
     @staticmethod
     def local_min_max(high,low,length=3):
         result=[]
+        local_min_result=[]
+        local_max_result=[]
         for i in range(length):
             result.append(None)
+            local_min_result.append(None)
+            local_max_result.append(None)
         for j in range(length,len(high)-length):
             mevcut_fiyat_high = high[j]
             mevcut_fiyat_low = low[j]
@@ -954,15 +958,23 @@ class IndikatorTest:
                     local_max=False
             if local_max:
                 result.append(high[j])
+                local_max_result.append(high[j])
+                local_min_result.append(local_min_result[-1])
             elif local_min:
                 result.append(low[j])
+                local_min_result.append(low[j])
+                local_max_result.append(local_max_result[-1])
             else:
+                local_min_result.append(local_min_result[-1])
+                local_max_result.append(local_max_result[-1])
                 result.append(result[-1])
 
             #print(f"{mevcut_fiyat}\n{onceki_length}\n{sonraki_length}")
         for k in range(length):
+            local_min_result.append(local_min_result[-1])
+            local_max_result.append(local_max_result[-1])
             result.append(result[-1])
-        return result
+        return result,local_min_result,local_max_result
 
     @staticmethod
     def SignalMovingAverage(src, length):
@@ -1076,6 +1088,36 @@ class IndikatorTest:
                 momentum_state.append(-2 if momentum[i] < momentum[i - 1] else -1)
 
         return momentum.tolist(), momentum_state, squeeze_state.tolist()
+
+    @staticmethod
+    def SMC(high, low, close, length=20):
+        """
+        Gelişmiş SMC indikatörü:
+        - Likidite Havuzları
+        - Order Blocks
+        - Market Structure Break (MSB)
+        - Fair Value Gap (FVG)
+        """
+        # Likidite Havuzları
+        highs = [max(high[i - length:i]) if i >= length else None for i in range(len(high))]
+        lows = [min(low[i - length:i]) if i >= length else None for i in range(len(low))]
+
+        # MSB Tespiti
+        msb_up = [close[i] > highs[i - 1] if i > 0 and highs[i - 1] is not None else None for i in range(len(close))]
+        msb_down = [close[i] < lows[i - 1] if i > 0 and lows[i - 1] is not None else None for i in range(len(close))]
+
+        # Fair Value Gap (FVG) Tespiti
+        fvg_up = [high[i - 2] < low[i] if i >= 2 else None for i in range(len(close))]
+        fvg_down = [low[i - 2] > high[i] if i >= 2 else None for i in range(len(close))]
+
+        return {
+            "highs": highs,
+            "lows": lows,
+            "msb_up": msb_up,
+            "msb_down": msb_down,
+            "fvg_up": fvg_up,
+            "fvg_down": fvg_down
+        }
 
     @staticmethod
     def Grafik_Indikator(open_prices, high_prices, low_prices, close_prices, vol, timestamps,
@@ -1214,7 +1256,7 @@ class IndikatorTest:
                             {name: values[index] for name, values in sub.items() if values[index] is not None})
 
                 # Fiyat değişimini ve diğer indikatörleri ekle
-                indicator_text = ", ".join(f"{name}: {value:.2f}" for name, value in indicator_values.items())
+                indicator_text = ", ".join(f"{name}: {value:.6f}" for name, value in indicator_values.items())
                 return f"Time: {time}, Open: {o}, High: {h}, Low: {l}, Close: {c}, Volume: {v} ,Change: {price_change_percent:.2f}%, {indicator_text}"
             return f"X: {x:.2f}, Y: {y:.2f}"
 
