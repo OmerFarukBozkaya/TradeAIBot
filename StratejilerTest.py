@@ -1,7 +1,6 @@
 from Indikator import Indikator
 from IndikatorTest import IndikatorTest
-import pandas as pd
-import numpy as np
+from Binance import Binance
 
 class StratejilerTest:
     static_stop_lose_value = 0.025
@@ -279,32 +278,29 @@ class StratejilerTest:
                 signals.append(False)
         indicators = {"main_indicators": {"BB_DOWN":bb_down,"BB_MID":bb_mid,"BB_UP":bb_up},
                       "sub_indicators": [{"ATR": atr}],
-                      "sub_horizontal_lines":[
-                          [{"name": "", "value": 50, "color": "black"},{"name": "", "value": 70, "color": "green"},{"name": "", "value": 30, "color": "red"}],
-                          []
-                        ]}
+                      "sub_horizontal_lines":[[]]}
         return signals,indicators
 
     @staticmethod   #   OK
-    def MA_Cross(high, low, close):
+    def EMA_Cross(high, low, close):
         signals=[]
 
-        ma_9 = Indikator.SMA(close, 9)
-        ma_50 = Indikator.SMA(close, 50)
+        ema_kisa = Indikator.EMA(close, 21)
+        ema_uzun = Indikator.EMA(close, 50)
         adx = Indikator.ADX(high, low, close)
         atr = Indikator.ATR(high, low, close)  # ATR eklendi
 
         # Her fiyat noktası için sinyal hesaplama
         for i in range(len(close)):
-            if ma_9[i] is None or ma_9[i-1] is None or ma_50[i] is None or ma_50[i-1] is None or adx[i] is None or atr[i] is None or atr[i-1] is None:
+            if ema_kisa[i] is None or ema_kisa[i-1] is None or ema_uzun[i] is None or ema_uzun[i-1] is None or adx[i] is None or atr[i] is None or atr[i-1] is None:
                 signals.append(None)
-            elif ma_9[i-1] < ma_50[i-1] and ma_9[i] > ma_50[i] and adx[i] > 25 and atr[i] > atr[i-1]:
+            elif ema_kisa[i-1] < ema_uzun[i-1] and ema_kisa[i] > ema_uzun[i] and adx[i] > 25 and atr[i] > atr[i-1]:
                 signals.append("BUY")
-            elif ((ma_9[i-1] > ma_50[i-1] and ma_9[i] < ma_50[i]) or (ma_50[i] * 0.99 > close[i])) and adx[i]>25 and atr[i] > atr[i-1]:
+            elif ((ema_kisa[i-1] > ema_uzun[i-1] and ema_kisa[i] < ema_uzun[i]) or (ema_kisa[i] * 0.99 > close[i])) and adx[i]>25 and atr[i] > atr[i-1]:
                 signals.append("SELL")
             else:
                 signals.append(False)
-        indicators = {"main_indicators": {"SMA9":ma_9,"SMA50":ma_50},
+        indicators = {"main_indicators": {"EMA_KISA":ema_kisa,"EMA_UZUN":ema_uzun},
                       "sub_indicators": [{"ATR": atr},{"ADX": adx}],
                       "sub_horizontal_lines":[
                           [],
@@ -441,22 +437,22 @@ class StratejilerTest:
         signals = []
 
         # Tüm indikatörlerin bir defa hesaplanması
-        local_min_max = IndikatorTest.local_min_max(high, low,14)
+        result,local_min,local_max = IndikatorTest.local_min_max(high, low,14)
         bb_down,bb_mid,bb_up = Indikator.BB(close)
         adx=Indikator.ADX(high, low, close)
         ema50=Indikator.EMA(close,50)
 
         # Her fiyat noktası için sinyal hesaplama
         for i in range(len(high)):
-            if local_min_max[i] is None or adx[i] is None or bb_mid[i] is None or ema50[i] is None:
+            if local_min[i] is None or adx[i] is None or bb_mid[i] is None or ema50[i] is None:
                 signals.append(None)
-            elif close[i] > local_min_max[i] and adx[i]>30 and close[i]<bb_mid[i] and close[i]>ema50[i]:
+            elif close[i] > local_max[i] and adx[i]>30 and close[i]<bb_mid[i] and close[i]>ema50[i]:
                 signals.append("BUY")
-            elif close[i] < local_min_max[i]:
+            elif close[i] < local_min[i]:
                 signals.append("SELL")
             else:
                 signals.append(False)
-        indicators = {"main_indicators": {"MIN_MAX":local_min_max},
+        indicators = {"main_indicators": {"MIN":local_min,"MAX":local_max},
                       "sub_indicators": [],
                       "sub_horizontal_lines": [[]]}
         return signals, indicators
@@ -538,6 +534,39 @@ class StratejilerTest:
             "sub_horizontal_lines": [
                 [{"name": "Zero Line", "value": 0, "color": "black"}]
             ],
+        }
+
+        return signals, indicators
+
+    @staticmethod
+    def SMC_Strategy(high, low, close):
+        """
+        Gelişmiş SMC stratejisi: Momentum ve Trend gücü dahil
+        """
+        smc = IndikatorTest.SMC(high, low, close)
+        highs, lows = smc["highs"], smc["lows"]
+        msb_up, msb_down = smc["msb_up"], smc["msb_down"]
+        fvg_up, fvg_down = smc["fvg_up"], smc["fvg_down"]
+
+        # Momentum ve trend gücü indikatörleri
+        rsi = IndikatorTest.RSI(close)
+        adx = IndikatorTest.ADX(high, low, close)
+        ema_kisa = IndikatorTest.EMA(Binance.hlc3(high, low, close),50)
+        ema_uzun = IndikatorTest.EMA(Binance.hlc3(high, low, close),200)
+
+        signals = []
+        for i in range(len(close)):
+            if msb_up[i] and adx[i] > 25 and ema_uzun[i] is not None and ema_kisa[i] is not None and ema_kisa[i]<close[i] and ema_uzun[i]<ema_kisa[i]:
+                signals.append("BUY")
+            elif msb_down[i] and adx[i] > 25:
+                signals.append("SELL")
+            else:
+                signals.append(None)
+
+        indicators = {
+            "main_indicators": {"Highs": highs, "Lows": lows,"EMA_Kisa":ema_kisa, "EMA_Uzun": ema_uzun},
+            "sub_indicators": [{"RSI": rsi}, {"ADX": adx}],
+            "sub_horizontal_lines": [[{"name": "50", "value": 50, "color": "black"},{"name": "70", "value": 70, "color": "green"},{"name": "30", "value": 30, "color": "red"}],[{"name": "25", "value": 25, "color": "green"}]]
         }
 
         return signals, indicators
