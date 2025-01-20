@@ -37,7 +37,7 @@ class Backtest:
                       if callable(getattr(StratejilerTest, func))
                       and not func.startswith("__")
                       and not getattr(StratejilerTest, func).__name__ in ["dinamik_stop_lose", "static_stop_lose",
-                                                                          "destek_stop_lose","take_profit","Local_Min_Max"]]
+                                                                          "destek_stop_lose","take_profit","Local_Min_Max","SMC_Strategy"]]
 
         # Excel'e yazılacak veriler için bir liste oluştur
         excel_data = []
