@@ -10,6 +10,7 @@ from dotenv import load_dotenv
 import os
 from glob import glob
 from datetime import datetime, timedelta
+import numpy as np
 
 class Binance:
     def __init__(self):
@@ -497,3 +498,33 @@ class Binance:
         except:
             hata = traceback.format_exc()
             print(f"HATA {dosya_yolu} dosyasinda hata {hata}")
+
+    @staticmethod
+    def hlc3(high, low, close):
+        # NumPy dizilerine dönüştürme (performansı artırır)
+        high = np.array(high)
+        low = np.array(low)
+        close = np.array(close)
+
+        # Ortalama hesaplama
+        return ((high + low + close) / 3).tolist()
+
+    @staticmethod
+    def hl2(high, low):
+        # NumPy dizilerine dönüştürme (performansı artırır)
+        high = np.array(high)
+        low = np.array(low)
+
+        # Ortalama hesaplama
+        return ((high + low) / 2).tolist()
+
+    @staticmethod
+    def ohlc4(open, high, low, close):
+        # NumPy dizilerine dönüştürme (performansı artırır)
+        open = np.array(open)
+        high = np.array(high)
+        low = np.array(low)
+        close = np.array(close)
+
+        # Ortalama hesaplama
+        return ((open + high + low + close) / 4).tolist()
