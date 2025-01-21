@@ -149,7 +149,7 @@ def main ():
     elif com == "13":
         a = time.time()
         periyot = input("Periyot:")
-        Araclar.update_strategys(periyot)
+        araclar.update_strategys(periyot)
         b = time.time()
         print(araclar.saniye_to_hms(b-a))
     elif com == "14":
