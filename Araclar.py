@@ -62,6 +62,7 @@ class Araclar:
         self.strategy_limit_4h=os.getenv('STRATEGY_LIMIT_4H')
         self.strategy_limit_1d=os.getenv('STRATEGY_LIMIT_1D')
         self.strategy_limit_check=os.getenv('STRATEGY_LIMIT_CHECK')
+        self.update_strategy_check=os.getenv('UPDATE_STRATEGYS_CHECK')
         if(to_email is not None):
             self.to_email = to_email
 
@@ -546,11 +547,13 @@ class Araclar:
             # Tüm parçalar gönderildikten sonra döngüden çık
             break
 
-    @staticmethod
-    def update_strategys(periyod):
+    def update_strategys(self,periyod):
         backtest=Backtest()
         while True:
             Araclar.mum_olusmasini_bekle(periyod)
+            if self.strategy_limit_check != "True":
+                time.sleep(10)
+                continue
             araclar=Araclar()
             # Hesaplamalar Yapılıyor
             backtest.paralel_hesaplama()
