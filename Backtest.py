@@ -228,7 +228,8 @@ class Backtest:
             buy_points = []
             sell_points = []
             stop_points = []
-            strategy_resault,indicators = strategy(high, low, close)
+            if strategy.__name__ not in ["Local_Min_Max","SMC_Strategy","SMC_Strategy_new"]:
+                strategy_resault,indicators = strategy(high, low, close)
             destek=None
             direnc=None
             dinamik_stop_lose_check=False
@@ -249,7 +250,7 @@ class Backtest:
             buy_price = None
 
             for i in range(len(close)):
-                if strategy.__name__=="Local_Min_Max" or strategy.__name__=="SMC_Strategy":
+                if strategy.__name__ in ["Local_Min_Max","SMC_Strategy","SMC_Strategy_new"]:
                     strategy_resault,indicators=strategy(high[:i+1],low[:i+1],close[:i+1])
                 if last_signal is None or last_signal == 'red':
                     if ema_check or bb_check:
