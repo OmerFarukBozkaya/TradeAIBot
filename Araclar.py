@@ -104,8 +104,9 @@ class Araclar:
                 file.write(f"{i},")
 
     def mail_gonder(self, baslik, mesaj, smtp_server="smtp.gmail.com", smtp_port=587):
+        deneme_hakki=5
         while True:
-            if not Araclar.internet_var_mi():
+            if not self.internet_var_mi():
                 time.sleep(5)
                 continue
 
@@ -128,7 +129,11 @@ class Araclar:
                 break
             except:
                 hata = traceback.format_exc()
-                print("E-posta gönderilirken bir hata oluştu:", hata)
+                trade.error(f"E-posta gönderilirken bir hata oluştu: {baslik} \n {hata}")
+                deneme_hakki=deneme_hakki-1
+                if deneme_hakki==0:
+                    trade.error(f"!!! E-posta gonder deneme limiti bitti !!! kapatiliyor ...")
+                    break
                 continue
 
     @staticmethod
@@ -516,6 +521,7 @@ class Araclar:
 
     def telegram_mesaj_gonder(self, mesaj):
         max_length = 4096  # Telegram'ın maksimum mesaj uzunluğu sınırı
+        deneme_hakki=5
         while True:
             if not self.internet_var_mi():
                 print("Internet yok. Mesaj gönderilemedi!")
@@ -526,23 +532,31 @@ class Araclar:
                 print("Gerekli bilgiler eksik")
                 break
 
-            # Mesajı parçalar halinde gönderme
-            for i in range(0, len(mesaj), max_length):
-                chunk = mesaj[i:i + max_length]
-                url = f"https://api.telegram.org/bot{self.telegram_api_token}/sendMessage"
-                payload = {
-                    "chat_id": self.telegram_chat_id,
-                    "text": chunk
-                }
+            try:
+                # Mesajı parçalar halinde gönderme
+                for i in range(0, len(mesaj), max_length):
+                    chunk = mesaj[i:i + max_length]
+                    url = f"https://api.telegram.org/bot{self.telegram_api_token}/sendMessage"
+                    payload = {
+                        "chat_id": self.telegram_chat_id,
+                        "text": chunk
+                    }
 
-                response = requests.post(url, data=payload)
+                    response = requests.post(url, data=payload)
 
-                if response.status_code == 200:
-                    pass
-                else:
-                    print("Mesaj gönderilemedi:", response.text)
-                    time.sleep(5)
-                    continue
+                    if response.status_code == 200:
+                        pass
+                    else:
+                        print("Mesaj gönderilemedi:", response.text)
+                        time.sleep(5)
+                        continue
+            except:
+                trade.error("!!! Telegram mesaji gonderiminde hata !!!")
+                deneme_hakki=deneme_hakki-1
+                if deneme_hakki==0:
+                    trade.error("!!! Telegram mesaj deneme hakki bitti !!! kapatiliyor ...")
+                    break
+                continue
 
             # Tüm parçalar gönderildikten sonra döngüden çık
             break
