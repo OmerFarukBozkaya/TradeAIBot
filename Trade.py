@@ -267,8 +267,7 @@ class Trade:
                     minqty = self.binance.get_coin_minQTY(self.alinan_coin)
 
                     if self.gercek and mevcut_adedim <= minqty:
-                        self.manul_sell(self.alinan_coin, periyot, close, str(self.sell_strategy.__name__),
-                                        self.alim_fiyati)
+                        self.manul_sell(self.alinan_coin, periyot, close, str(self.sell_strategy.__name__),self.alim_fiyati)
                         self.islem_acik = False
                         self.alinan_coin = None
                         self.alim_fiyati = None
@@ -279,6 +278,7 @@ class Trade:
                         self.durum_list = []
                         if not temp_trade:
                             self.kaydet()
+                        open(f"bitir_{periyot}","w")
                         break
                 except Exception as e:
                     trade.error(f"Kontrol işleminde hata: {e}")
