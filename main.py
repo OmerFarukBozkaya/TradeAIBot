@@ -227,7 +227,7 @@ def main ():
         print(araclar.saniye_to_hms(b - a))
     elif com == "23":
         a = time.time()
-        periyot=int(input("Periyot: "))
+        periyot=input("Periyot: ")
         binance.tek_pozisyon_kapat(periyot)
         b = time.time()
         print(araclar.saniye_to_hms(b - a))
