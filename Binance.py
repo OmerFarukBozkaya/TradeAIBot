@@ -528,3 +528,30 @@ class Binance:
 
         # Ortalama hesaplama
         return ((open + high + low + close) / 4).tolist()
+
+    @staticmethod
+    def heiken_ashi(data):
+        # Heiken Ashi hesaplama için Open, High, Low ve Close verilerini alır.
+        ha_data = {
+            'open': [],
+            'high': [],
+            'low': [],
+            'close': []
+        }
+
+        for i in range(len(data['close'])):
+            ha_close = (data['open'][i] + data['high'][i] + data['low'][i] + data['close'][i]) / 4
+            if i == 0:
+                ha_open = data['open'][i]  # İlk mum için aynı kalır.
+            else:
+                ha_open = (ha_data['open'][i - 1] + ha_data['close'][i - 1]) / 2
+
+            ha_high = max(data['high'][i], ha_open, ha_close)
+            ha_low = min(data['low'][i], ha_open, ha_close)
+
+            ha_data['open'].append(ha_open)
+            ha_data['high'].append(ha_high)
+            ha_data['low'].append(ha_low)
+            ha_data['close'].append(ha_close)
+
+        return ha_data
