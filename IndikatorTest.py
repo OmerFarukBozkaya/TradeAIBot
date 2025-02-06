@@ -4,6 +4,7 @@ from Indikator import Indikator
 import matplotlib.pyplot as plt
 from matplotlib.widgets import Cursor
 from datetime import datetime
+
 class IndikatorTest:
     @staticmethod
     def Kiyasla(list1, list2):
@@ -959,14 +960,14 @@ class IndikatorTest:
             if local_max:
                 result.append(high[j])
                 local_max_result.append(high[j])
-                local_min_result.append(local_min_result[-1])
+                local_min_result.append(None)
             elif local_min:
                 result.append(low[j])
                 local_min_result.append(low[j])
-                local_max_result.append(local_max_result[-1])
+                local_max_result.append(None)
             else:
-                local_min_result.append(local_min_result[-1])
-                local_max_result.append(local_max_result[-1])
+                local_min_result.append(None)
+                local_max_result.append(None)
                 result.append(result[-1])
 
             #print(f"{mevcut_fiyat}\n{onceki_length}\n{sonraki_length}")
@@ -1120,6 +1121,50 @@ class IndikatorTest:
         }
 
     @staticmethod
+    def MACD_DEMA(src, short_length=12, long_length=26, signal_length=9):
+        """
+        MACD DEMA hesaplama fonksiyonu
+        """
+        if len(src) < long_length:
+            return [None] * len(src), [None] * len(src)
+
+        def DEMA(values, length):
+            ema_a = pd.Series(values).ewm(span=length).mean()
+            ema_b = ema_a.ewm(span=length).mean()
+            return 2 * ema_a - ema_b
+
+        demaslow = DEMA(src, long_length)
+        demafast = DEMA(src, short_length)
+
+        macd_line = demafast - demaslow
+        signal_line = DEMA(macd_line, signal_length)
+        histogram = macd_line - signal_line
+
+        return macd_line.tolist(), signal_line.tolist(), histogram.tolist()
+
+    @staticmethod
+    def BBTrend(src, short_length=20, long_length=50, std_dev=2.0):
+        """
+        BBTrend hesaplama fonksiyonu
+        """
+        if len(src) < max(short_length, long_length):
+            return [None] * len(src)
+
+        def BB(values, length, std_dev):
+            middle = pd.Series(values).rolling(length).mean()
+            std = pd.Series(values).rolling(length).std()
+            upper = middle + std_dev * std
+            lower = middle - std_dev * std
+            return middle, upper, lower
+
+        short_middle, short_upper, short_lower = BB(src, short_length, std_dev)
+        long_middle, long_upper, long_lower = BB(src, long_length, std_dev)
+
+        bb_trend = (abs(short_lower - long_lower) - abs(short_upper - long_upper)) / short_middle * 100
+
+        return bb_trend.tolist()
+
+    @staticmethod
     def Grafik_Indikator(open_prices, high_prices, low_prices, close_prices, vol, timestamps,
                          main_indicators=None, sub_indicators=None, sub_horizontal_lines=None):
         """
@@ -1192,7 +1237,7 @@ class IndikatorTest:
                 if len(values) != n:
                     raise ValueError(f"{name} indikatörünün uzunluğu OHLC verileriyle eşleşmiyor.")
                 filtered_values = [v if v is not None else np.nan for v in values]
-                ax_main.plot(range(n), filtered_values, label=name, color=color)
+                ax_main.plot(range(n), filtered_values, marker="o",label=name, color=color)
 
         ax_main.legend()
         ax_main.grid(True, linestyle='--', alpha=0.6)
@@ -1205,7 +1250,7 @@ class IndikatorTest:
                     if len(values) != n:
                         raise ValueError(f"{name} alt indikatörünün uzunluğu OHLC verileriyle eşleşmiyor.")
                     filtered_values = [v if v is not None else np.nan for v in values]
-                    ax.plot(range(n), filtered_values, label=name, color=color)
+                    ax.plot(range(n), filtered_values, marker="o",label=name, color=color)
 
                 # Alt grafikte yatay çizgiler
                 if sub_horizontal_lines and len(sub_horizontal_lines) > idx:
