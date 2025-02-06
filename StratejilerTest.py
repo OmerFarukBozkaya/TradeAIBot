@@ -1,6 +1,7 @@
 from Indikator import Indikator
 from IndikatorTest import IndikatorTest
 from Binance import Binance
+import numpy as np
 
 class StratejilerTest:
     static_stop_lose_value = 0.025
@@ -90,7 +91,6 @@ class StratejilerTest:
         if ortalama > StratejilerTest.take_profit_limit and durum_list[-1]<ortalama:
             return None,"TAKE-PROFIT"
         return ortalama,False
-
     @staticmethod
     def MACD(high, low, close):
         # Sonuçları tutmak için liste
@@ -569,4 +569,62 @@ class StratejilerTest:
             "sub_horizontal_lines": [[{"name": "50", "value": 50, "color": "black"},{"name": "70", "value": 70, "color": "green"},{"name": "30", "value": 30, "color": "red"}],[{"name": "25", "value": 25, "color": "green"}]]
         }
 
+        return signals, indicators
+
+    @staticmethod
+    def E_A_S_Y(high,low,close):
+        signals=[]
+
+        ema_low_5=Indikator.EMA(low,8)
+        ema_high_5=Indikator.EMA(high,8)
+
+        ema_close_20=Indikator.EMA(close,34)
+        rsi=Indikator.RSI(low)
+        atr=Indikator.ATR(high, low, close)
+        adx=Indikator.ADX(high, low, close)
+        macd,macd_signal=Indikator.MACD(close)
+        bb_alt,bb_mid,bb_ust=Indikator.BB(close)
+
+        for i in range(len(close)):
+            if ema_high_5[i] is None or ema_low_5[i] is None:
+                signals.append(None)
+                continue
+            if close[i]>ema_high_5[i] :
+                signals.append("BUY")
+            elif close[i]<ema_low_5[i]:
+                signals.append("SELL")
+            else:
+                signals.append(False)
+
+        indicators = {"main_indicators": {"EMA_LOW_5":ema_low_5,"EMA_HIGH_5":ema_high_5,"EMA_CLOSE_20":ema_close_20},
+                      "sub_indicators": [{"ADX":adx}],
+                      "sub_horizontal_lines": [[{"name": "", "value": 30, "color": "green"}]]}
+
+        return signals,indicators
+
+    @staticmethod
+    def BBTrend_MACDDEMA(high,low,close):
+        signals = [None]
+
+        bb_trend = IndikatorTest.BBTrend(close,30)
+        macd,signal,_ =  IndikatorTest.MACD_DEMA(close)
+
+        # Her fiyat noktası için sinyal hesaplama
+        for i in range(1,len(close)):
+            if macd[i-1] is None or signal[i-1] is None or bb_trend[i] is None:
+                signals.append(None)
+            elif macd[i]<0 and signal[i]<0 and macd[i-1]<signal[i-1] and macd[i]>signal[i] and bb_trend[i]>0:
+                signals.append("BUY")
+            elif macd[i]>0 and signal[i]>0 and macd[i]<signal[i] and bb_trend[i]<0:
+                signals.append("SELL")
+            else:
+                signals.append(False)
+        indicators = {"main_indicators": None,
+                      "sub_indicators": [
+                          {"BB_Trend": bb_trend},
+                          {"MACD": macd,"SIGNAL":signal}],
+                      "sub_horizontal_lines": [
+                          [{"name": "", "value": 0, "color": "black"}],
+                          [{"name": "", "value": 0, "color": "black"}]
+                      ]}
         return signals, indicators
