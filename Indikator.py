@@ -973,3 +973,47 @@ class Indikator:
             "fvg_up": fvg_up,
             "fvg_down": fvg_down
         }
+
+    @staticmethod
+    def MACD_DEMA(src, short_length=12, long_length=26, signal_length=9):
+        """
+        MACD DEMA hesaplama fonksiyonu
+        """
+        if len(src) < long_length:
+            return [None] * len(src), [None] * len(src)
+
+        def DEMA(values, length):
+            ema_a = pd.Series(values).ewm(span=length).mean()
+            ema_b = ema_a.ewm(span=length).mean()
+            return 2 * ema_a - ema_b
+
+        demaslow = DEMA(src, long_length)
+        demafast = DEMA(src, short_length)
+
+        macd_line = demafast - demaslow
+        signal_line = DEMA(macd_line, signal_length)
+        histogram = macd_line - signal_line
+
+        return macd_line.tolist(), signal_line.tolist(), histogram.tolist()
+
+    @staticmethod
+    def BBTrend(src, short_length=20, long_length=50, std_dev=2.0):
+        """
+        BBTrend hesaplama fonksiyonu
+        """
+        if len(src) < max(short_length, long_length):
+            return [None] * len(src)
+
+        def BB(values, length, std_dev):
+            middle = pd.Series(values).rolling(length).mean()
+            std = pd.Series(values).rolling(length).std()
+            upper = middle + std_dev * std
+            lower = middle - std_dev * std
+            return middle, upper, lower
+
+        short_middle, short_upper, short_lower = BB(src, short_length, std_dev)
+        long_middle, long_upper, long_lower = BB(src, long_length, std_dev)
+
+        bb_trend = (abs(short_lower - long_lower) - abs(short_upper - long_upper)) / short_middle * 100
+
+        return bb_trend.tolist()

@@ -488,3 +488,31 @@ class Stratejiler:
         }
 
         return signals, indicators
+
+    @staticmethod
+    def BBTrend_MACDDEMA(high, low, close):
+        signals = [None]
+
+        bb_trend = Indikator.BBTrend(close, 30)
+        macd, signal, _ = Indikator.MACD_DEMA(close)
+
+        # Her fiyat noktası için sinyal hesaplama
+        for i in range(1, len(close)):
+            if macd[i - 1] is None or signal[i - 1] is None or bb_trend[i] is None:
+                signals.append(None)
+            elif macd[i] < 0 and signal[i] < 0 and macd[i - 1] < signal[i - 1] and macd[i] > signal[i] and bb_trend[
+                i] > 0:
+                signals.append("BUY")
+            elif macd[i] > 0 and signal[i] > 0 and macd[i] < signal[i] and bb_trend[i] < 0:
+                signals.append("SELL")
+            else:
+                signals.append(False)
+        indicators = {"main_indicators": None,
+                      "sub_indicators": [
+                          {"BB_Trend": bb_trend},
+                          {"MACD": macd, "SIGNAL": signal}],
+                      "sub_horizontal_lines": [
+                          [{"name": "", "value": 0, "color": "black"}],
+                          [{"name": "", "value": 0, "color": "black"}]
+                      ]}
+        return signals, indicators
