@@ -37,7 +37,7 @@ class Binance:
     def sahip_olduklarim(self):
         sahip_olduklarim = {}
         for i in self.client.get_account()["balances"]:
-            if ((float(i["free"]) == 0 and float(i["locked"]) == 0) or i["asset"]=="NFT" or i["asset"] == "BUSD"  or (
+            if ((float(i["free"]) == 0 and float(i["locked"]) == 0) or i["asset"]=="SOLO" or i["asset"]=="NFT" or i["asset"] == "BUSD"  or (
                     i["asset"] == "BNB" and (
                     ((float(i["free"]) + float(i["locked"])) * self.get_coin_data("BNBUSDT","4h",1)['close'][-1]) <= 10))):
                 continue
