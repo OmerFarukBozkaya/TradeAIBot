@@ -423,10 +423,9 @@ class Araclar:
         return strategys
 
     @staticmethod
-    def listeden_sahip_olduklarimi_cikar(coinlist):
+    def listeden_sahip_olduklarimi_cikar(coinlist,sahip_olduklarim):
         # Eğer alım yapacaksam sahip olunan coinleri liste dışı bırak
-        binance = Binance()
-        for sil in binance.sahip_olduklarim().keys():
+        for sil in sahip_olduklarim.keys():
             try:
                 coinlist.remove(sil)
             except:
