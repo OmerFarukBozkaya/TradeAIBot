@@ -149,9 +149,15 @@ class Trade:
                 else:
                     coinlist = self.binance.coin_list()
                     self.strategys = self.araclar.get_strategys()
+                    try:
+                        sahip_olduklarim=self.binance.sahip_olduklarim()
+                    except:
+                        trade.error("Sahip olduklarim cekilirken hata olustu")
+                        continue
+
                     if len(self.strategys[periyot])>0:
                         # Sahip olunan coinleri hariç tutarak işlem yapılacak coin listesini güncelle
-                        coinlist = self.araclar.listeden_sahip_olduklarimi_cikar(coinlist)
+                        coinlist = self.araclar.listeden_sahip_olduklarimi_cikar(coinlist,sahip_olduklarim)
                         future_to_coin = {
                             executor.submit(self.alim_sinyali_kontrol, coin, periyot, self.strategys, self.nakit,
                                             temp_trade): coin
