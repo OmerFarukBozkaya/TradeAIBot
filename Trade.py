@@ -222,6 +222,9 @@ class Trade:
                             if (not self.islem_acik) and buy_control and direnc_control and ema_control and bb_control:
                                 strateji_adi = str(strategy.__name__)
                                 self.adet = self.buy(coin, periyot, strateji_adi, close, nakit)
+                                if self.adet==-1:
+                                    trade.error("Yeterli miktarda nakit yok !!! IPTAL")
+                                    return False
                                 self.alinan_coin = coin  # Alınan coin'i kaydet
                                 self.alim_fiyati = close[-1]  # Alım fiyatını kaydet
                                 self.islem_acik = True  # İşlem açıldı
