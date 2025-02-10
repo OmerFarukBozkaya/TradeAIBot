@@ -442,16 +442,7 @@ class Stratejiler:
             else:
                 signals.append(False)
 
-        # Göstergeler ve yatay çizgiler
-        indicators = {
-            "main_indicators": None,
-            "sub_indicators": [{"Momentum State": momentum_state}, {"Squeeze State": squeeze_state}],
-            "sub_horizontal_lines": [
-                [{"name": "Zero Line", "value": 0, "color": "black"}]
-            ],
-        }
-
-        return signals, indicators
+        return signals
 
     @staticmethod
     def SMC_Strategy(high, low, close):
@@ -464,7 +455,6 @@ class Stratejiler:
         fvg_up, fvg_down = smc["fvg_up"], smc["fvg_down"]
 
         # Momentum ve trend gücü indikatörleri
-        rsi = Indikator.RSI(close)
         adx = Indikator.ADX(high, low, close)
         ema_kisa = Indikator.EMA(Binance.hlc3(high, low, close), 50)
         ema_uzun = Indikator.EMA(Binance.hlc3(high, low, close), 200)
@@ -479,15 +469,7 @@ class Stratejiler:
             else:
                 signals.append(None)
 
-        indicators = {
-            "main_indicators": {"Highs": highs, "Lows": lows, "EMA_Kisa": ema_kisa, "EMA_Uzun": ema_uzun},
-            "sub_indicators": [{"RSI": rsi}, {"ADX": adx}],
-            "sub_horizontal_lines": [
-                [{"name": "50", "value": 50, "color": "black"}, {"name": "70", "value": 70, "color": "green"},
-                 {"name": "30", "value": 30, "color": "red"}], [{"name": "25", "value": 25, "color": "green"}]]
-        }
-
-        return signals, indicators
+        return signals
 
     @staticmethod
     def BBTrend_MACDDEMA(high, low, close):
@@ -500,19 +482,11 @@ class Stratejiler:
         for i in range(1, len(close)):
             if macd[i - 1] is None or signal[i - 1] is None or bb_trend[i] is None:
                 signals.append(None)
-            elif macd[i] < 0 and signal[i] < 0 and macd[i - 1] < signal[i - 1] and macd[i] > signal[i] and bb_trend[
-                i] > 0:
+            elif macd[i] < 0 and signal[i] < 0 and macd[i - 1] < signal[i - 1] and macd[i] > signal[i] and bb_trend[i] > 0:
                 signals.append("BUY")
             elif macd[i] > 0 and signal[i] > 0 and macd[i] < signal[i] and bb_trend[i] < 0:
                 signals.append("SELL")
             else:
                 signals.append(False)
-        indicators = {"main_indicators": None,
-                      "sub_indicators": [
-                          {"BB_Trend": bb_trend},
-                          {"MACD": macd, "SIGNAL": signal}],
-                      "sub_horizontal_lines": [
-                          [{"name": "", "value": 0, "color": "black"}],
-                          [{"name": "", "value": 0, "color": "black"}]
-                      ]}
-        return signals, indicators
+
+        return signals
