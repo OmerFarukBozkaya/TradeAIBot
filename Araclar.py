@@ -847,3 +847,15 @@ class Araclar:
             result[ay].append(change)
         print(f"Ocak: {result[1]}| {sum(result[1])}\nSubat: {result[2]}| {sum(result[2])}\nMart: {result[3]}| {sum(result[3])}\nNisan: {result[4]}| {sum(result[4])}\nMayis: {result[5]}| {sum(result[5])}\nHaziran: {result[6]}| {sum(result[6])}\n"
               f"Temmuz: {result[7]}| {sum(result[7])}\nAgustos: {result[8]}| {sum(result[8])}\nEylul: {result[9]}| {sum(result[9])}\nEkim: {result[10]}| {sum(result[10])}\nKasim: {result[11]}| {sum(result[11])}\nAralik: {result[12]}| {sum(result[12])}\n")
+
+    @staticmethod
+    def change_env_variable(file_path, key, new_value):
+        with open(file_path, "r") as file:
+            lines = file.readlines()
+
+        with open(file_path, "w") as file:
+            for line in lines:
+                if line.startswith(f"{key}="):
+                    file.write(f"{key}={new_value}\n")
+                else:
+                    file.write(line)
