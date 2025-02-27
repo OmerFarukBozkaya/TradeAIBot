@@ -145,6 +145,15 @@ class Trade:
                             self.araclar.mail_gonder(f"Trade {periyot} durduruldu","Son işlem kapatıldı ve trade durduruldu")
                         if self.telegram_mesaj_gonder=="True":
                             self.araclar.telegram_mesaj_gonder(f"❌ Trade {periyot} son işlem kapatıldı ve trade durduruldu")
+                        self.calisacak_periyotlar = json.loads(os.getenv("CALISACAK_PERIYOTLAR"))
+                        try:
+                            self.calisacak_periyotlar.remove(periyot)
+                        except:
+                            trade.error(f"CALISACAK_PERIYOTLAR dan {periyot} kaldirilamadi !")
+                        yeni_deger = str(self.calisacak_periyotlar).replace("\'", "\"")
+                        env_files = glob(".env*")
+                        env_files = env_files[0]
+                        self.araclar.change_env_variable(env_files, "CALISACAK_PERIYOTLAR", yeni_deger)
                         exit(0)
                 else:
                     coinlist = self.binance.coin_list()
