@@ -377,18 +377,15 @@ class Stratejiler:
         signals = []
 
         # Tüm indikatörlerin bir defa hesaplanması
-        local_min_max = Indikator.local_min_max(high, low, 14)
-        bb_down, bb_mid, bb_up = Indikator.BB(close)
-        adx = Indikator.ADX(high, low, close)
-        ema50 = Indikator.EMA(close, 50)
+        result = Indikator.local_min_max(close, close, 14)
 
         # Her fiyat noktası için sinyal hesaplama
         for i in range(len(high)):
-            if local_min_max[i] is None or adx[i] is None or bb_mid[i] is None or ema50[i] is None:
+            if result[i] is None:  # local_min[i] is None or local_max[i] is None or adx[i] is None or bb_mid[i] is None or ema50[i] is None
                 signals.append(None)
-            elif close[i] > local_min_max[i] and adx[i] > 30 and close[i] < bb_mid[i] and close[i] > ema50[i]:
+            elif close[i] > result[i]:  # and adx[i]>30 and close[i]<bb_mid[i] and close[i]>ema50[i]
                 signals.append("BUY")
-            elif close[i] < local_min_max[i]:
+            elif close[i] < result[i]:
                 signals.append("SELL")
             else:
                 signals.append(False)
