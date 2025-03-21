@@ -5,3 +5,5 @@ Data
 Log
 Trade_Durumu
 .env*
+scaler.pkl
+tradeai_model.keras
