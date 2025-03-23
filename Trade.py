@@ -215,19 +215,29 @@ class Trade:
                     succes = False
                     while not succes:
                         try:
-                            ema_50 = Indikator.EMA(close,50)
-                            bb_down,bb_mid,bb_up = Indikator.BB(close)
-                            son_sell_index = 0
-                            for i in range(len(strategy_result) - 1, -1, -1):
-                                if strategy_result[i] == 'SELL':
-                                    son_sell_index = i
-                                    break
-                            destek,direnc,signal=Stratejiler.destek_stop_lose(close[-1],None,None,close,low)
-                            buy_control = (strategy_result[-2] == "BUY") and ("BUY" not in strategy_result[son_sell_index:-2])
-                            direnc_control = (direnc is not None)
-                            ema_control = (ema_50[-1] is not None and close[-1] > ema_50[-1]) or self.buy_ma_control=="False"
-                            bb_control = (bb_mid[-1] is not None and close[-1]<bb_mid[-1]) or self.buy_bb_control=="False"
-                            buy_result.info(f"{periyot} {strategy.__name__} {coin} {buy_control} {direnc_control} {ema_control} {bb_control}")
+                            if strategy.__name__ != 'AI':
+                                ema_50 = Indikator.EMA(close, 50)
+                                bb_down, bb_mid, bb_up = Indikator.BB(close)
+                                son_sell_index = 0
+                                for i in range(len(strategy_result) - 1, -1, -1):
+                                    if strategy_result[i] == 'SELL':
+                                        son_sell_index = i
+                                        break
+                                destek, direnc, signal = Stratejiler.destek_stop_lose(close[-1], None, None, close, low)
+                                buy_control = (strategy_result[-2] == "BUY") and ("BUY" not in strategy_result[son_sell_index:-2])
+                                direnc_control = (direnc is not None)
+                                ema_control = (ema_50[-1] is not None and close[-1] > ema_50[-1]) or self.buy_ma_control == "False"
+                                bb_control = (bb_mid[-1] is not None and close[-1] < bb_mid[-1]) or self.buy_bb_control == "False"
+                                buy_result.info(f"{periyot} {strategy.__name__} {coin} {buy_control} {direnc_control} {ema_control} {bb_control}")
+                            elif strategy.__name__ == 'AI':
+                                buy_control = (strategy_result[-1] == 'BUY')
+                                direnc_control = True
+                                ema_control = True
+                                bb_control = True
+                                buy_result.info(f"{periyot} {strategy.__name__} {coin} {buy_control} {'Null'} {'Null'} {'Null'}")
+                            else:
+                                trade.error(f"{strategy.__name__} kapsam disinda !!! alim kontrol sartlarini kontol et !!!")
+                                break
                             if (not self.islem_acik) and buy_control and direnc_control and ema_control and bb_control:
                                 strateji_adi = str(strategy.__name__)
                                 self.adet = self.buy(coin, periyot, strateji_adi, close, nakit)
@@ -259,7 +269,6 @@ class Trade:
                                 return False
                             else:
                                 limit=limit-1
-
             return False  # İşlem açılmadı
     def satis_sinyali_bekle(self, periyot,temp_trade=False):
         env_files = glob(".env*")
@@ -331,6 +340,8 @@ class Trade:
                 # Strategy
                 if self.sell_strategy.__name__ == "Alpha_Trend":
                     sell_strategy_result = self.sell_strategy(high, low, close,vol)[-2]
+                elif self.sell_strategy.__name__ == 'AI':
+                    sell_strategy_result = self.sell_strategy(high, low, close)[-1]
                 else:
                     sell_strategy_result = self.sell_strategy(high, low, close)[-2]
 
@@ -450,6 +461,8 @@ class Trade:
                 for strategy in other_strategy:
                     if strategy.__name__ == "Alpha_Trend":
                         result = strategy(high[:-1], low[:-1], close[:-1], vol[:-1])[-1]
+                    elif strategy.__name__ == 'AI':
+                        continue
                     else:
                         result = strategy(high[:-1], low[:-1], close[:-1])[-1]
                     if result == "BUY":
@@ -473,8 +486,7 @@ class Trade:
                 yuvarlanmis_destek=round(self.destek,basamak_sayisi)
             else:
                 yuvarlanmis_destek=-1
-            trade.info(
-                f"DURUM : {periyot} {self.sell_strategy.__name__} {self.alinan_coin} Islem Suresi: {self.mum_sayisi} mum. Diger strategyler {other_strategy_result} Stop-Lose: {stop_seviyesi}|{yuvarlanmis_destek}. Durum Ortalamasi: {ortalama:.2f} Kar/Zarar: {kar_zarar:.2f}%")
+            trade.info(f"DURUM : {periyot} {self.sell_strategy.__name__} {self.alinan_coin} Islem Suresi: {self.mum_sayisi} mum. Diger strategyler {other_strategy_result} Stop-Lose: {stop_seviyesi}|{yuvarlanmis_destek}. Durum Ortalamasi: {ortalama:.2f} Kar/Zarar: {kar_zarar:.2f}%")
             if self.telegram_mesaj_gonder=="True":
                 self.araclar.telegram_mesaj_gonder(f"🔵 DURUM : {periyot} {self.sell_strategy.__name__} {self.alinan_coin} Islem Suresi: {self.mum_sayisi} mum. Diger strategyler {other_strategy_result} Stop-Lose: {stop_seviyesi}|{yuvarlanmis_destek}. Durum Ortalamasi: {ortalama:.2f} Kar/Zarar: {kar_zarar:.2f}%")
             time.sleep(10)
