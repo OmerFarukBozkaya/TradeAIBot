@@ -2,6 +2,7 @@ from Indikator import Indikator
 from Binance import Binance
 import pandas as pd
 import numpy as np
+from AI import predict_single_row
 
 class Stratejiler:
     static_stop_lose_value = 0.025
@@ -487,3 +488,35 @@ class Stratejiler:
                 signals.append(False)
 
         return signals
+
+    @staticmethod
+    def AI(high,low,close):
+        n=1
+        # Hesaplamalar
+        log_return = np.log(pd.DataFrame({'close':close}) / pd.DataFrame({'close':close}).shift(1))
+        indicators = {
+            'atr': Indikator.ATR(high, low, close)[-n],
+            'log_return': log_return[-n],
+            'volatility': log_return.rolling(window=20).std()[-n]
+        }
+        strategies = {
+            'vama': Stratejiler.VAMA(high, low, close)[-n],
+            'bb_rsi': Stratejiler.BB_RSI(high, low, close)[-n],
+            'fdi': Stratejiler.FDI(high, low, close)[-n],
+            'bb_close': Stratejiler.BB_Close(high, low, close)[-n],
+            'ema_stochastic': Stratejiler.EMA_StochasticRSI(high, low, close)[-n],
+            'cci_atr': Stratejiler.CCI_ATR(high, low, close)[-n],
+            'signal_moving_avarage': Stratejiler.SignalMovingAvarage(high, low, close)[-n],
+            'super_trend': Stratejiler.Super_Trend(high, low, close)[-n],
+            'bbtrend_macddema': Stratejiler.BBTrend_MACDDEMA(high, low, close)[-n]
+        }
+
+        # DataFrame oluşturma
+        df = pd.DataFrame({
+            'close': close,
+            **indicators,
+            **strategies
+        })
+
+        signal=predict_single_row(df)
+        return [str(signal)]
