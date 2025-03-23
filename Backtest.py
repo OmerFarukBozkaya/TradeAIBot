@@ -12,9 +12,9 @@ from matplotlib.widgets import Cursor
 
 class Backtest:
     @staticmethod
-    def Hesapla(coin, periyot,stop=False,canli_veri=True,ema_check=True,bb_check=False,sar_check=False,adx_atr_check=False):
-        dinamik_stop=True
-        static_stop=True
+    def Hesapla(coin, periyot,stop=False,canli_veri=True,ema_check=False,bb_check=False,sar_check=False,adx_atr_check=False):
+        dinamik_stop=False
+        static_stop=False
         binance = Binance()
         # Veri ithali
         data = binance.get_coin_data(coin, periyot, 1000)
@@ -55,10 +55,17 @@ class Backtest:
             capital_history = [initial_capital]
 
             # Strateji sonucu hesaplama
-            if strategy.__name__ != "Alpha_Trend":
-                strategy_result,indicators = strategy(high, low, close)
-            else:
-                strategy_result,indicators = strategy(high, low, close,vol)
+            if strategy.__name__ not in ["Smart_MACD_Reversal",
+                                         "Alpha_Trend", "E_A_S_Y"]:
+                strategy_result, indicators = strategy(high, low, close)
+            if strategy.__name__ in ["Smart_MACD_Reversal", "Alpha_Trend"]:
+                strategy_result, indicators = strategy(high, low, close, vol)
+            if strategy.__name__ in ["E_A_S_Y"]:
+                ha_data = binance.heiken_ashi(data)
+                ha_high = ha_data['high']
+                ha_low = ha_data['low']
+                ha_close = ha_data['close']
+                strategy_result, indicators = strategy(ha_high, ha_low, ha_close)
             high_price = 0
             atr = IndikatorTest.ATR(high,low,close)
             adx = IndikatorTest.ADX(high,low,close)
@@ -116,7 +123,6 @@ class Backtest:
                                 f"{i}.mum {strategy.__name__} {periyot} {coin} fiyat : {close[i]} alindi.")
                             last_signal = 'green'
                             buy_price = close[i]
-
                 elif last_signal == 'green':  # Mevcut pozisyonu kapama
                     if stop:
                         if dinamik_stop:
@@ -185,16 +191,18 @@ class Backtest:
         # Veriyi sıfırdan dosyaya yaz (önceki veriler silinir)
         new_data_df.to_excel(output_file, index=False, engine='openpyxl')
     @staticmethod
-    def Grafik_Ciz(coin, periyot,selected_strategy_name=None,stop=False,ema_check=False,bb_check=False):
+    def Grafik_Ciz(coin, periyot,selected_strategy_name=None,stop=False,ema_check=False,bb_check=False,heiken_ashi=False):
         # Veri ithali
         binance = Binance()
         data = binance.get_coin_data(coin, periyot, 1000)
         opendate=data['opendate']
-        open=data['open']
+        vol = data['volume_coin']
+        if heiken_ashi:
+            data=binance.heiken_ashi(data)
+        open = data['open']
         high = data['high']
         low = data['low']
         close = data['close']
-        vol = data['volume_coin']
 
         # Strateji listesi
         if selected_strategy_name is None:
@@ -202,7 +210,7 @@ class Backtest:
                           if callable(getattr(StratejilerTest, func))
                           and not func.startswith("__")
                           and not getattr(StratejilerTest, func).__name__ in ["dinamik_stop_lose", "static_stop_lose",
-                                                                              "destek_stop_lose", "Alpha_Trend","take_profit"]]
+                                                                              "destek_stop_lose", "take_profit"]]
         else:
             strategies=[getattr(StratejilerTest,selected_strategy_name)]
 
@@ -228,8 +236,16 @@ class Backtest:
             buy_points = []
             sell_points = []
             stop_points = []
-            if strategy.__name__ not in ["Local_Min_Max","SMC_Strategy","SMC_Strategy_new"]:
+            if strategy.__name__ not in ["SMC_Strategy","SMC_Strategy_new","Smart_MACD_Reversal","Alpha_Trend","E_A_S_Y"]:
                 strategy_resault,indicators = strategy(high, low, close)
+            if strategy.__name__ in ["Smart_MACD_Reversal","Alpha_Trend"]:
+                strategy_resault,indicators = strategy(high,low,close,vol)
+            if strategy.__name__ in ["E_A_S_Y"]:
+                ha_data=binance.heiken_ashi(data)
+                ha_high=ha_data['high']
+                ha_low=ha_data['low']
+                ha_close=ha_data['close']
+                strategy_resault, indicators = strategy(ha_high, ha_low, ha_close)
             destek=None
             direnc=None
             dinamik_stop_lose_check=False
@@ -250,7 +266,7 @@ class Backtest:
             buy_price = None
 
             for i in range(len(close)):
-                if strategy.__name__ in ["Local_Min_Max","SMC_Strategy","SMC_Strategy_new"]:
+                if strategy.__name__ in ["SMC_Strategy","SMC_Strategy_new"]:
                     strategy_resault,indicators=strategy(high[:i+1],low[:i+1],close[:i+1])
                 if last_signal is None or last_signal == 'red':
                     if ema_check or bb_check:
@@ -260,7 +276,7 @@ class Backtest:
                             else:
                                 continue
                         if bb_check:
-                            if bb_mid[i] is not None and close[i] < bb_mid[i]:
+                            if bb_mid[i] is not None and close[i] <= bb_mid[i]:
                                 pass
                             else:
                                 continue
@@ -281,9 +297,7 @@ class Backtest:
                         if direnc is None:
                             dinamik_stop_lose_check = True
                         if dinamik_stop_lose_check:
-                            dinamik_stop_signal, higest_price, stop_level = StratejilerTest.dinamik_stop_lose(
-                                atr[:i + 1], adx[:i + 1], close[:i + 1], higest_price)
-
+                            dinamik_stop_signal, higest_price, stop_level = StratejilerTest.dinamik_stop_lose(atr[:i + 1], adx[:i + 1], close[:i + 1], higest_price)
                     if strategy_resault[i] == "SELL":
                         last_signal = 'red'
                         sell_points.append(i)
@@ -292,7 +306,8 @@ class Backtest:
                         current_capital *= (1 + profit_percentage / 100)
                         capital_history.append(current_capital)
                         cumulative_profit_loss.append(profit_percentage)
-                    elif stop and (destek_stop_signal=="STOP-LOSE" or (dinamik_stop_lose_check and dinamik_stop_signal=="STOP-LOSE")):
+
+                    elif stop and (destek_stop_signal=="STOP-LOSE" or (dinamik_stop_lose_check and dinamik_stop_signal=="STOP-LOSE")):     #
                         last_signal = 'red'
                         dinamik_stop_lose_check=False
                         higest_price=0
@@ -314,6 +329,7 @@ class Backtest:
             ax1.tick_params(axis='y', labelcolor='black')
             ax1.set_xticks(np.arange(0, len(close), step=25))
             ax1.set_ylim(min(close) * 0.95, max(close) * 1.05)
+
 
             # Mum grafiği çizimi
             for i in range(len(close)):
@@ -377,7 +393,7 @@ class Backtest:
                 if 0 <= index < len(capital_history):
                     kumulatif = capital_history[index]
 
-                    return f"{index}. Kumulatif deger: {kumulatif:.2f} "
+                    return f"{index+1}. Kumulatif deger: {kumulatif:.2f} "
                 return f"X: {x:.2f}, Y: {y:.2f}"
 
             ax2.format_coord = format_coord
@@ -403,7 +419,7 @@ class Backtest:
                 if 0 <= index < len(cumulative_profit_loss):
                     result = cumulative_profit_loss[index]
 
-                    return f"{index}. İşlem Sonucu: {result:.2f}% "
+                    return f"{index+1}. İşlem Sonucu: {result:.2f}% "
                 return f"X: {x:.2f}, Y: {y:.2f}"
 
             ax3.format_coord = format_coord
