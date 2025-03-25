@@ -470,25 +470,34 @@ class Indikator:
 
     @staticmethod
     def CCI(high, low, close, period=20, length=5):
+        # NumPy array'lerine çevir
         high = np.array(high)
         low = np.array(low)
         close = np.array(close)
 
         # Typical Price (TP) hesapla
         tp = (high + low + close) / 3
+        tp_series = pd.Series(tp)
 
-        # SMA hesapla (Basit Hareketli Ortalama)
-        sma_tp = pd.Series(tp).rolling(window=period).mean().to_numpy()
+        # SMA hesapla (rolling hesaplamada min_periods parametresi ile yeterli veri olmadığında NaN döndür)
+        sma_tp = tp_series.rolling(window=period, min_periods=period).mean()
 
-        # Mean Deviation (Ortalama Sapma) hesapla
-        mean_deviation = pd.Series(tp).rolling(window=period).apply(
-            lambda x: np.mean(np.abs(x - np.mean(x)))).to_numpy()
+        # Ortalama Sapma hesapla
+        mean_deviation = tp_series.rolling(window=period, min_periods=period).apply(
+            lambda x: np.mean(np.abs(x - np.mean(x))), raw=True
+        )
 
-        # CCI hesapla
-        cci = (tp - sma_tp) / (0.015 * mean_deviation)
-        # CCI ortalamasını hesaplayıp geri döndürme
-        cci = pd.Series(cci)
-        return cci.rolling(window=length).mean().to_numpy().tolist()
+        # CCI hesapla, yeterli veri olmadığı durumlarda NaN üretir
+        cci = (tp_series - sma_tp) / (0.015 * mean_deviation)
+
+        # Ek bir smoothing: rolling ortalama ile 'length' periyotlu ortalama hesaplama
+        cci_smoothed = cci.rolling(window=length, min_periods=length).mean()
+
+        # NaN değerleri None olarak değiştirip listeye çevir
+        result = [None if pd.isna(x) else x for x in cci_smoothed.tolist()]
+
+        # Çıktı, giriş verisi ile aynı uzunlukta olacaktır (ilk kısımlar None)
+        return result
 
     @staticmethod
     def TSO(high, low, close, period_ema_short=12, period_ema_long=26):
@@ -510,10 +519,11 @@ class Indikator:
     @staticmethod
     def Alpha_Trend(high, low, close, volume=None, coeff=1.0, period=14, use_volume=False):
         """
-        AlphaTrend göstergesini hesaplar.
+        AlphaTrend göstergesini hesaplar. Giriş verisiyle aynı uzunlukta çıktı üretir;
+        ilk periyotlarda yeterli veri olmadığı için None değerleri döndürür.
         """
         # ATR Hesaplama
-        atr = Indikator.ATR(high, low, close, length=period)
+        atr = IndikatorTest.ATR(high, low, close, length=period)
 
         # UpT ve DownT Hesaplama
         upT = [low[i] - (atr[i] * coeff) if atr[i] is not None else None for i in range(len(low))]
@@ -521,33 +531,44 @@ class Indikator:
 
         # Trend Yönü (RSI veya MFI Kullanımı)
         if use_volume and volume is not None:
-            mfi = Indikator.MFI(high, low, close, volume, length=period)
+            mfi = IndikatorTest.MFI(high, low, close, volume, length=period)
             trend_indicator = [mfi[i] >= 50 if mfi[i] is not None else None for i in range(len(mfi))]
         else:
-            rsi = Indikator.RSI(close, length=period)
+            rsi = IndikatorTest.RSI(close, length=period)
             trend_indicator = [rsi[i] >= 50 if rsi[i] is not None else None for i in range(len(rsi))]
 
-            # AlphaTrend Hesaplama
+        # AlphaTrend hesaplaması için sonuç listesi (giriş uzunluğu kadar None ile başlatılır)
         alpha_trend = [None] * len(close)
 
-        # İlk periyotlar için hesaplama yapılmayacak, sonrasında ise hesaplama yapılacak
         for i in range(len(close)):
-            # İlk geçerli veriyi bulmak için (period-1) kadar bekliyoruz
-            if i >= period - 1:
-                if trend_indicator[i] is not None:
-                    # İlk geçerli hesaplama
-                    if i == period - 1:
+            # Yeterli veri yoksa hesaplama yapılmaz, None kalır
+            if i < period - 1:
+                alpha_trend[i] = None
+            else:
+                # İlk hesaplama: i == period-1
+                if i == period - 1:
+                    # Eğer trend göstergesi None değilse, upT veya downT seçimi
+                    if trend_indicator[i] is not None:
                         alpha_trend[i] = upT[i] if trend_indicator[i] else downT[i]
-                    # Sonraki hesaplamalar
-                    elif i > period - 1:
-                        # Önceki alpha_trend değeri None değilse, işlemi gerçekleştirebiliriz
-                        if alpha_trend[i - 1] is not None:
+                    else:
+                        alpha_trend[i] = None
+                else:
+                    # Önceki alpha_trend değeri mevcutsa, devamlılık sağlanır
+                    if alpha_trend[i - 1] is not None:
+                        if trend_indicator[i] is not None:
                             if trend_indicator[i]:
+                                # Mevcut upT değeri varsa, önceki ile karşılaştır
                                 alpha_trend[i] = max(alpha_trend[i - 1], upT[i]) if upT[i] is not None else alpha_trend[
                                     i - 1]
                             else:
                                 alpha_trend[i] = min(alpha_trend[i - 1], downT[i]) if downT[i] is not None else \
-                                alpha_trend[i - 1]
+                                    alpha_trend[i - 1]
+                        else:
+                            # Trend göstergesi hesaplanamadıysa, önceki değeri koru
+                            alpha_trend[i] = alpha_trend[i - 1]
+                    else:
+                        # Önceki hesaplanmış değer yoksa None kalır
+                        alpha_trend[i] = None
 
         return alpha_trend
 
@@ -642,24 +663,23 @@ class Indikator:
         data['upper_band'] = hl2 + factor * data['atr']
         data['lower_band'] = hl2 - factor * data['atr']
 
-        # Supertrend ve yön hesaplama
+        # Çıkış listelerini giriş verisi ile aynı uzunlukta oluştur (ilk kısımlar None)
         supertrend = [None] * len(data)
         direction = [None] * len(data)
 
         for i in range(len(data)):
             if i < atr_length:
-                # ATR periyodu tamamlanmadan Supertrend hesaplanmaz
+                # ATR periyodu tamamlanmadan hesaplama yapma, None bırak
                 continue
             elif i == atr_length:
-                # İlk trend başlangıcı için alt bant kullanılır
+                # İlk hesaplama için başlangıç değeri: alt bant kullanılıyor
                 supertrend[i] = data['lower_band'].iloc[i]
                 direction[i] = 1  # Başlangıçta Uptrend
             else:
-                # Önceki trend ve yön
+                # Önceki değerlerden faydalanarak hesaplama yap
                 prev_supertrend = supertrend[i - 1]
                 prev_direction = direction[i - 1]
 
-                # Şartlara göre Supertrend hesaplama
                 if data['close'].iloc[i] > prev_supertrend:
                     supertrend[i] = data['lower_band'].iloc[i]
                     direction[i] = 1  # Uptrend
@@ -667,73 +687,79 @@ class Indikator:
                     supertrend[i] = data['upper_band'].iloc[i]
                     direction[i] = -1  # Downtrend
                 else:
-                    # Trend değişmezse önceki değerleri koru
                     supertrend[i] = prev_supertrend
                     direction[i] = prev_direction
 
                 # Üst ve alt bant güncellemesi
-                if direction[i] == 1:  # Uptrend ise üst bandı aşmamalı
+                if direction[i] == 1:
                     supertrend[i] = min(supertrend[i], data['upper_band'].iloc[i])
-                elif direction[i] == -1:  # Downtrend ise alt bandı geçmemeli
+                elif direction[i] == -1:
                     supertrend[i] = max(supertrend[i], data['lower_band'].iloc[i])
-        supertrend = [float(x) if x is not None else float('nan') for x in supertrend]
+
         return supertrend, direction
 
     @staticmethod
     def ParabolicSAR(high, low, start=0.02, increment=0.02, maximum=0.2):
         """
         Parabolic SAR hesaplama fonksiyonu.
+        İlk iki değer None döndürülür, çünkü ilk periyotlar için yeterli veri yoktur.
 
         :param high: Yüksek fiyatların listesi
         :param low: Düşük fiyatların listesi
         :param start: Başlangıç hız faktörü
         :param increment: Hız faktöründeki artış
         :param maximum: Maksimum hız faktörü
-        :return: Parabolic SAR değerlerinin listesi
+        :return: Parabolic SAR değerlerinin listesi (giriş verisi ile aynı uzunlukta)
         """
         # Yeterli veri kontrolü
         if len(high) < 2 or len(low) < 2:
             return [None] * len(high)
 
-        sar = [None]  # İlk SAR değeri None
+        # İlk iki değer None (ilk periyotlar için hesaplama yapılamıyor)
+        sar = [None, None]
+
+        # Varsayılan olarak uptrend kabul edelim
+        uptrend = True
+        # İlk hesaplama için, uptrend olduğundan,
+        # başlangıç SAR değeri ilk iki mumun en düşük değerlerinin minimumu olsun.
+        sar[1] = min(low[0], low[1])
+        # EP (Extreme Point): Uptrend için en yüksek, downtrend için en düşük değeri temsil eder.
+        ep = max(high[0], high[1])
         af = start  # Başlangıç hız faktörü
-        ep = high[0]  # İlk yüksek değer (Extreme Point)
-        uptrend = True  # İlk trend yukarı
 
-        for i in range(1, len(high)):
+        # Hesaplamalara 2. indeksten başlanır.
+        for i in range(2, len(high)):
             if uptrend:
-                # SAR hesaplama
-                new_sar = sar[-1] + af * (ep - sar[-1]) if sar[-1] is not None else low[i - 1]
+                new_sar = sar[i - 1] + af * (ep - sar[i - 1])
+                # Uptrend durumunda, yeni SAR değeri önceki iki mumun düşük değeriyle sınırlandırılır.
+                new_sar = min(new_sar, low[i - 1], low[i - 2])
+                # Eğer güncel düşük, hesaplanan SAR değerinin altına düşerse trend tersine döner.
+                if low[i] < new_sar:
+                    uptrend = False
+                    new_sar = ep  # Trend değişiminde SAR, önceki EP olarak alınır.
+                    ep = low[i]  # Yeni EP downtrend için güncellenir.
+                    af = start
+            else:
+                new_sar = sar[i - 1] + af * (ep - sar[i - 1])
+                # Downtrend durumunda, yeni SAR değeri önceki iki mumun yüksek değeriyle sınırlandırılır.
+                new_sar = max(new_sar, high[i - 1], high[i - 2])
+                # Eğer güncel yüksek, hesaplanan SAR değerinin üzerine çıkarsa trend tersine döner.
+                if high[i] > new_sar:
+                    uptrend = True
+                    new_sar = ep  # Trend değişiminde SAR, önceki EP olarak alınır.
+                    ep = high[i]  # Yeni EP uptrend için güncellenir.
+                    af = start
 
-                # Trend devam ediyor mu kontrolü
+            # Mevcut trend devam ediyorsa, EP ve af güncellenir.
+            if uptrend:
                 if high[i] > ep:
                     ep = high[i]
                     af = min(af + increment, maximum)
-
-                # Trend değişimi kontrolü
-                if low[i] < new_sar:
-                    uptrend = False
-                    new_sar = ep
-                    ep = low[i]
-                    af = start
             else:
-                # SAR hesaplama
-                new_sar = sar[-1] + af * (ep - sar[-1]) if sar[-1] is not None else high[i - 1]
-
-                # Trend devam ediyor mu kontrolü
                 if low[i] < ep:
                     ep = low[i]
                     af = min(af + increment, maximum)
 
-                # Trend değişimi kontrolü
-                if high[i] > new_sar:
-                    uptrend = True
-                    new_sar = ep
-                    ep = high[i]
-                    af = start
-
-            # SAR'ın mevcut mumun en yüksek veya en düşük değerini aşmamasını sağla
-            new_sar = min(new_sar, high[i - 1]) if uptrend else max(new_sar, low[i - 1])
             sar.append(new_sar)
 
         return sar
@@ -748,50 +774,48 @@ class Indikator:
         :param lengthStoch: Stochastic hesaplaması için periyot (varsayılan: 14)
         :param smoothK: K hattı için hareketli ortalama periyodu (varsayılan: 3)
         :param smoothD: D hattı için hareketli ortalama periyodu (varsayılan: 3)
-        :return: Stochastic RSI'nın K ve D değerlerinin listesi
+        :return: Giriş verisi uzunluğu kadar, ilk kısımlar None; ardından hesaplanmış Stochastic RSI K ve D değerleri.
         """
         if len(close) < max(lengthRSI, lengthStoch, smoothK, smoothD):
             return [None] * len(close), [None] * len(close)
 
-        # RSI hesaplama
+        # RSI hesaplama (burada RSI fonksiyonunun çıktısının giriş uzunluğu kadar olduğunu varsayıyoruz)
         rsi = Indikator.RSI(close, length=lengthRSI)
 
-        # Stochastic K hesaplama
-        stoch_k = []
+        # Stochastic K için çıktı dizisini giriş uzunluğu kadar None ile başlatıyoruz
+        stoch_k = [None] * len(rsi)
         for i in range(len(rsi)):
             if i < lengthStoch - 1 or rsi[i] is None:
-                stoch_k.append(None)
+                stoch_k[i] = None
             else:
-                window = rsi[i - lengthStoch + 1:i + 1]
+                window = rsi[i - lengthStoch + 1: i + 1]
                 valid_values = [x for x in window if x is not None]
                 if len(valid_values) == lengthStoch:
                     min_rsi = min(valid_values)
                     max_rsi = max(valid_values)
-                    stoch_k.append(
-                        100 * (rsi[i] - min_rsi) / (max_rsi - min_rsi) if max_rsi != min_rsi else 0
-                    )
+                    stoch_k[i] = 100 * (rsi[i] - min_rsi) / (max_rsi - min_rsi) if max_rsi != min_rsi else 0
                 else:
-                    stoch_k.append(None)
+                    stoch_k[i] = None
 
-        # Smooth K (smoothK ile hareketli ortalama hesaplama)
-        k_values = [None] * (smoothK - 1)  # İlk smoothK - 1 değeri None
-        for i in range(smoothK - 1, len(stoch_k)):
-            window = stoch_k[i - smoothK + 1:i + 1]
-            valid_values = [x for x in window if x is not None]
-            if len(valid_values) == smoothK:
-                k_values.append(sum(valid_values) / smoothK)
+        # Smooth K hesaplaması: Giriş uzunluğu kadar None ile dolu bir dizi oluşturuyoruz
+        k_values = [None] * len(stoch_k)
+        for i in range(len(stoch_k)):
+            if i < smoothK - 1:
+                k_values[i] = None
             else:
-                k_values.append(None)
+                window = stoch_k[i - smoothK + 1: i + 1]
+                valid_values = [x for x in window if x is not None]
+                k_values[i] = sum(valid_values) / smoothK if len(valid_values) == smoothK else None
 
-        # Smooth D (smoothD ile hareketli ortalama hesaplama)
-        d_values = [None] * (smoothD - 1)  # İlk smoothD - 1 değeri None
-        for i in range(smoothD - 1, len(k_values)):
-            window = k_values[i - smoothD + 1:i + 1]
-            valid_values = [x for x in window if x is not None]
-            if len(valid_values) == smoothD:
-                d_values.append(sum(valid_values) / smoothD)
+        # Smooth D hesaplaması: Yine giriş uzunluğu kadar None ile dolu bir dizi oluşturuyoruz
+        d_values = [None] * len(k_values)
+        for i in range(len(k_values)):
+            if i < smoothD - 1:
+                d_values[i] = None
             else:
-                d_values.append(None)
+                window = k_values[i - smoothD + 1: i + 1]
+                valid_values = [x for x in window if x is not None]
+                d_values[i] = sum(valid_values) / smoothD if len(valid_values) == smoothD else None
 
         return k_values, d_values
 
@@ -843,8 +867,8 @@ class Indikator:
             return [None] * len(src), [None] * len(src)
 
         # SMA hesaplama
-        sma = np.convolve(src, np.ones(length) / length, mode='valid')
-        sma = [None] * (length - 1) + sma.tolist()  # SMA'yı hizalamak için başa None ekle
+        sma_values = np.convolve(src, np.ones(length) / length, mode='valid')
+        sma = [None] * (length - 1) + sma_values.tolist()  # Çıktının uzunluğu girdiyle aynı
 
         # Mutlak fark hesaplama
         abs_diff = [None if i == 0 or sma[i] is None or sma[i - 1] is None else abs(sma[i] - sma[i - 1]) for i in
@@ -865,16 +889,25 @@ class Indikator:
         # Signal Moving Average hesaplama
         ma = [None] * len(src)
         os = [None] * len(src)  # Yön sinyali
-        for i in range(1, len(src)):
-            if r2[i] is not None and r2[i] > 0.5:
-                os[i] = np.sign(src[i - 1] - sma[i - 1]) if sma[i - 1] is not None else os[i - 1]
-                ma[i] = r2[i] * sma[i] + (1 - r2[i]) * (ma[i - 1] if ma[i - 1] is not None else sma[i])
+
+        # İlk 'length-1' indeks None olarak kalıyor; ilk hesaplama index = length-1'te başlar.
+        for i in range(length - 1, len(src)):
+            if i == (length - 1):
+                # İlk hesaplama için başlangıç değeri, SMA değerini kullanıyoruz.
+                ma[i] = sma[i]
+                # İlk yön için, kendisinden önce veri olmadığı için 0 (veya nötr) atanabilir.
+                os[i] = 0
             else:
-                os[i] = os[i - 1]
-                if ma[i - 1] is not None and abs_diff[i] is not None and os[i] is not None:
-                    ma[i] = ma[i - 1] - abs_diff[i] * os[i]
+                if r2[i] is not None and r2[i] > 0.5:
+                    # Eğer SMA değeri geçerliyse, önceki değeri kullanarak yönü hesapla.
+                    os[i] = np.sign(src[i - 1] - sma[i - 1]) if sma[i - 1] is not None else os[i - 1]
+                    ma[i] = r2[i] * sma[i] + (1 - r2[i]) * ma[i - 1]
                 else:
-                    ma[i] = ma[i - 1]  # Eğer önceki değer yoksa aynı değeri koru veya None bırak
+                    os[i] = os[i - 1]
+                    if ma[i - 1] is not None and abs_diff[i] is not None and os[i] is not None:
+                        ma[i] = ma[i - 1] - abs_diff[i] * os[i]
+                    else:
+                        ma[i] = ma[i - 1]
 
         # Renk sinyalleri (Yeşil: Pozitif trend, Kırmızı: Negatif trend)
         css = [None if o is None else (1 if o == 1 else -1) for o in os]
@@ -999,14 +1032,18 @@ class Indikator:
     @staticmethod
     def BBTrend(src, short_length=20, long_length=50, std_dev=2.0):
         """
-        BBTrend hesaplama fonksiyonu
+        BBTrend hesaplama fonksiyonu.
+        Giriş verisinin uzunluğu ile aynı uzunlukta sonuç üretir.
+        İlk veriler için yeterli veri yoksa değerler None döndürür.
         """
         if len(src) < max(short_length, long_length):
             return [None] * len(src)
 
         def BB(values, length, std_dev):
-            middle = pd.Series(values).rolling(length).mean()
-            std = pd.Series(values).rolling(length).std()
+            series = pd.Series(values)
+            # Sadece yeterli veri olduğunda hesaplama yapılır (min_periods parametresi ile)
+            middle = series.rolling(window=length, min_periods=length).mean()
+            std = series.rolling(window=length, min_periods=length).std()
             upper = middle + std_dev * std
             lower = middle - std_dev * std
             return middle, upper, lower
@@ -1014,6 +1051,10 @@ class Indikator:
         short_middle, short_upper, short_lower = BB(src, short_length, std_dev)
         long_middle, long_upper, long_lower = BB(src, long_length, std_dev)
 
+        # Hesaplama, sadece short_middle değeri mevcutsa uygulanır
         bb_trend = (abs(short_lower - long_lower) - abs(short_upper - long_upper)) / short_middle * 100
 
-        return bb_trend.tolist()
+        # pandas serisinin NaN değerlerini None'a çevirerek giriş verisi uzunluğunda bir liste oluşturuyoruz
+        bb_trend_list = [None if pd.isna(x) else x for x in bb_trend.tolist()]
+
+        return bb_trend_list
