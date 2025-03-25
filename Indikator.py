@@ -523,7 +523,7 @@ class Indikator:
         ilk periyotlarda yeterli veri olmadığı için None değerleri döndürür.
         """
         # ATR Hesaplama
-        atr = IndikatorTest.ATR(high, low, close, length=period)
+        atr = Indikator.ATR(high, low, close, length=period)
 
         # UpT ve DownT Hesaplama
         upT = [low[i] - (atr[i] * coeff) if atr[i] is not None else None for i in range(len(low))]
@@ -531,10 +531,10 @@ class Indikator:
 
         # Trend Yönü (RSI veya MFI Kullanımı)
         if use_volume and volume is not None:
-            mfi = IndikatorTest.MFI(high, low, close, volume, length=period)
+            mfi = Indikator.MFI(high, low, close, volume, length=period)
             trend_indicator = [mfi[i] >= 50 if mfi[i] is not None else None for i in range(len(mfi))]
         else:
-            rsi = IndikatorTest.RSI(close, length=period)
+            rsi = Indikator.RSI(close, length=period)
             trend_indicator = [rsi[i] >= 50 if rsi[i] is not None else None for i in range(len(rsi))]
 
         # AlphaTrend hesaplaması için sonuç listesi (giriş uzunluğu kadar None ile başlatılır)
