@@ -17,6 +17,8 @@ if not os.path.exists('Log'):
     os.makedirs('Log')
 if not os.path.exists('Trade_Durumu'):
     os.makedirs('Trade_Durumu')
+if not os.path.exists('Trade_Durumu_AI'):
+    os.makedirs('Trade_Durumu_AI')
 
 # Ortak format
 formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
@@ -88,6 +90,7 @@ class Trade:
         self.buy_bb_control = os.getenv('BUY_BB_CONTROL')
         self.durum_list=[]
         self.calisacak_periyotlar= json.loads(os.getenv("CALISACAK_PERIYOTLAR"))
+        self.calisacak_periyotlar_ai = json.loads(os.getenv("CALISACAK_PERIYOTLAR_AI"))
     def kaydet(self):
         durum = {
             'islem_acik': self.islem_acik,
@@ -121,6 +124,41 @@ class Trade:
                 self.destek = durum['destek']
                 self.direnc = durum['direnc']
                 self.durum_list = durum['durum_list']
+
+    def kaydetAI(self):
+        durum = {
+            'islem_acik': self.islem_acik,
+            'alinan_coin': self.alinan_coin,
+            'alim_fiyati': self.alim_fiyati,
+            'adet': self.adet,
+            'nakit': self.nakit,
+            'sell_strategy': self.sell_strategy.__name__ if self.sell_strategy else None,
+            'periyot': self.periyot,
+            'mum_sayisi':self.mum_sayisi,
+            'highest_price':self.highest_price,
+            'destek':self.destek,
+            'direnc':self.direnc,
+            'durum_list':self.durum_list
+        }
+        with open(f'Trade_Durumu_AI/trade_durumu_{self.periyot}_{self.alinan_coin}.json', 'w') as f:
+            json.dump(durum, f)
+    def yukleAI(self):
+        if os.path.exists(f'Trade_Durumu_AI/trade_durumu_{self.periyot}_{self.alinan_coin}.json'):
+            with open(f'Trade_Durumu_AI/trade_durumu_{self.periyot}_{self.alinan_coin}.json', 'r') as f:
+                durum = json.load(f)
+                self.islem_acik = durum['islem_acik']
+                self.alinan_coin = durum['alinan_coin']
+                self.alim_fiyati = durum['alim_fiyati']
+                self.adet = durum['adet']
+                self.nakit = durum['nakit']
+                self.sell_strategy = getattr(Stratejiler, durum['sell_strategy']) if durum['sell_strategy'] else None
+                self.periyot = durum['periyot']
+                self.mum_sayisi = durum['mum_sayisi']
+                self.highest_price = durum['highest_price']
+                self.destek = durum['destek']
+                self.direnc = durum['direnc']
+                self.durum_list = durum['durum_list']
+
     def TradeEt(self, periyot, gercek,nakit,temp_trade=False):
         self.gercek = gercek  # Gerçek işlem bilgisi kaydedildi
         self.nakit=nakit
@@ -189,6 +227,77 @@ class Trade:
                 if not self.islem_acik:
                     time.sleep(10)
                     self.araclar.mum_olusmasini_bekle(periyot)
+    def TradeEtAI(self,coin, periyot, gercek, nakit, temp_trade=False):
+        self.gercek = gercek  # Gerçek işlem bilgisi kaydedildi
+        self.nakit = nakit
+        self.periyot = periyot
+        self.alinan_coin = coin
+        if self.periyot not in self.calisacak_periyotlar_ai:
+            trade.info(f"TradeAI {periyot} Calistirilmayacak !!! {gercek}")
+            exit(0)
+        if not temp_trade:
+            self.yukleAI()
+        trade.info(f"TradeAI {periyot} {coin} Calisiyor ... {gercek}")
+        print(f"TradeAI {periyot} {coin} Calisiyor ... {gercek}", time.ctime())
+        coinlist = self.binance.coin_list()
+        self.araclar.mum_olusmasini_bekle(periyot)
+
+        with ThreadPoolExecutor(max_workers=len(coinlist)) as executor:
+            while True:
+                # Eğer bir işlem zaten açılmışsa, satış sinyali bekle
+                if self.islem_acik:
+                    self.satis_sinyali_bekle(periyot, temp_trade)
+                    if os.path.exists(f"Trade_Durumu/bitir_{periyot}_{coin}"):
+                        if self.mail_gonder == "True":
+                            self.araclar.mail_gonder(f"TradeAI {periyot} {coin} durduruldu",
+                                                     "Son işlem kapatıldı ve trade durduruldu")
+                        if self.telegram_mesaj_gonder == "True":
+                            self.araclar.telegram_mesaj_gonder(
+                                f"❌ TradeAI {periyot} {coin} son işlem kapatıldı ve trade durduruldu")
+                        self.calisacak_periyotlar_ai = json.loads(os.getenv("CALISACAK_PERIYOTLAR_AI"))
+                        try:
+                            self.calisacak_periyotlar_ai.remove(periyot)
+                        except:
+                            trade.error(f"CALISACAK_PERIYOTLAR_AI dan {periyot} kaldirilamadi !")
+                        yeni_deger = str(self.calisacak_periyotlar_ai).replace("\'", "\"")
+                        env_files = glob(".env*")
+                        env_files = env_files[0]
+                        self.araclar.change_env_variable(env_files, "CALISACAK_PERIYOTLAR_AI", yeni_deger)
+                        exit(0)
+                else:
+                    coinlist = [coin]
+                    ai_name = getattr(Stratejiler, 'AI')
+                    self.strategys = {'1m':[ai_name],'15m':[ai_name],'1h':[ai_name],'4h':[ai_name],'1d':[ai_name]}
+                    try:
+                        sahip_olduklarim = self.binance.sahip_olduklarim()
+                    except:
+                        trade.error("Sahip olduklarim cekilirken hata olustu")
+                        continue
+
+                    # Sahip olunan coinleri hariç tutarak işlem yapılacak coin listesini güncelle
+                    coinlist = self.araclar.listeden_sahip_olduklarimi_cikar(coinlist, sahip_olduklarim)
+                    future_to_coin = {
+                        executor.submit(self.alim_sinyali_kontrol, coin, periyot, self.strategys, self.nakit,
+                                        temp_trade): coin
+                        for coin in coinlist}
+                    for future in as_completed(future_to_coin):
+                        try:
+                            result = future.result()
+                            if result:  # Eğer bir işlem açılmışsa, döngüden çık
+                                break
+                        except Exception as e:
+                            hata = traceback.format_exc()
+                            trade.error(f"Bir hata olustu: {hata}")
+                            if self.mail_gonder == "True":
+                                self.araclar.mail_gonder(f"HATA | TradeAI {periyot}", f"{hata}")
+                            if self.telegram_mesaj_gonder == "True":
+                                self.araclar.telegram_mesaj_gonder(f"❗ HATA | TradeAI {periyot} \n {e}")
+                            time.sleep(5)
+
+                # Mum oluşmasını bekler
+                if not self.islem_acik:
+                    time.sleep(10)
+                    self.araclar.mum_olusmasini_bekle(periyot)
     def alim_sinyali_kontrol(self, coin, periyot, strategys,nakit,temp_trade=False):
         limit=5
         while True:
@@ -230,7 +339,7 @@ class Trade:
                                 bb_control = (bb_mid[-1] is not None and close[-1] < bb_mid[-1]) or self.buy_bb_control == "False"
                                 buy_result.info(f"{periyot} {strategy.__name__} {coin} {buy_control} {direnc_control} {ema_control} {bb_control}")
                             elif strategy.__name__ == 'AI':
-                                buy_control = (strategy_result[-1] == 'BUY')
+                                buy_control = (strategy_result == 'BUY')
                                 direnc_control = True
                                 ema_control = True
                                 bb_control = True
@@ -249,7 +358,10 @@ class Trade:
                                 self.islem_acik = True  # İşlem açıldı
                                 self.sell_strategy = strategy  # Kullanılan strateji
                                 if not temp_trade:
-                                    self.kaydet()
+                                    if self.sell_strategy.__name__ == 'AI':
+                                        self.kaydetAI()
+                                    else:
+                                        self.kaydet()
                                 trade.info(f"AL | {coin} alındı, Adet: {self.adet}, Fiyat: {close[-1]}")
                                 islemgecmisi.info(
                                     f"{strateji_adi} {periyot} AL | {coin} alındı, Adet: {self.adet}, Fiyat: {close[-1]}")
@@ -296,7 +408,6 @@ class Trade:
                     if self.gercek and mevcut_adedim <= minqty:
                         self.manul_sell(self.alinan_coin, periyot, close, str(self.sell_strategy.__name__),self.alim_fiyati)
                         self.islem_acik = False
-                        self.alinan_coin = None
                         self.alim_fiyati = None
                         self.direnc = None
                         self.destek = None
@@ -304,8 +415,14 @@ class Trade:
                         self.mum_sayisi = 0
                         self.durum_list = []
                         if not temp_trade:
-                            self.kaydet()
-                        open(f"bitir_{periyot}","w")
+                            if self.sell_strategy.__name__ == 'AI':
+                                self.kaydetAI()
+                            else:
+                                self.kaydet()
+                        if self.sell_strategy.__name__ == 'AI':
+                            open(f"bitir_{periyot}_{self.alinan_coin}", "w")
+                        else:
+                            open(f"bitir_{periyot}","w")
                         break
                 except Exception as e:
                     trade.error(f"Kontrol işleminde hata: {e}")
@@ -381,7 +498,6 @@ class Trade:
                 try:
                     self.sell(self.alinan_coin, periyot, close, str(self.sell_strategy.__name__), self.alim_fiyati)
                     self.islem_acik = False
-                    self.alinan_coin = None
                     self.alim_fiyati = None
                     self.direnc=None
                     self.destek=None
@@ -389,7 +505,10 @@ class Trade:
                     self.mum_sayisi = 0
                     self.durum_list = []
                     if not temp_trade:
-                        self.kaydet()
+                        if self.sell_strategy.__name__ == 'AI':
+                            self.kaydetAI()
+                        else:
+                            self.kaydet()
                     break  # Satış yapıldı, döngüden çık
                 except Exception as e:
                     trade.error(
@@ -405,7 +524,6 @@ class Trade:
                 try:
                     self.stop_lose(self.alinan_coin, periyot, close, str(self.sell_strategy.__name__), self.alim_fiyati)
                     self.islem_acik = False
-                    self.alinan_coin = None
                     self.alim_fiyati = None
                     self.destek = None
                     self.direnc = None
@@ -413,7 +531,10 @@ class Trade:
                     self.mum_sayisi = 0
                     self.durum_list = []
                     if not temp_trade:
-                        self.kaydet()
+                        if self.sell_strategy.__name__ == 'AI':
+                            self.kaydetAI()
+                        else:
+                            self.kaydet()
                     break  # Satış yapıldı, döngüden çık
                 except Exception as e:
                     trade.error(f"STOP-LOSE işleminde hata: {e} \n [{periyot}] [{self.alinan_coin}]")
@@ -428,7 +549,6 @@ class Trade:
                 try:
                     self.take_profit_sell(self.alinan_coin, periyot, close, str(self.sell_strategy.__name__), self.alim_fiyati)
                     self.islem_acik = False
-                    self.alinan_coin = None
                     self.alim_fiyati = None
                     self.destek = None
                     self.direnc = None
@@ -436,7 +556,10 @@ class Trade:
                     self.mum_sayisi = 0
                     self.durum_list=[]
                     if not temp_trade:
-                        self.kaydet()
+                        if self.sell_strategy.__name__ == 'AI':
+                            self.kaydetAI()
+                        else:
+                            self.kaydet()
                     break  # Satış yapıldı, döngüden çık
                 except Exception as e:
                     trade.error(f"TAKE-PROFIT işleminde hata: {e} \n [{periyot}] [{self.alinan_coin}]")
@@ -450,7 +573,10 @@ class Trade:
 
             self.mum_sayisi = self.mum_sayisi + 1
             if not temp_trade:
-                self.kaydet()
+                if self.sell_strategy.__name__ == 'AI':
+                    self.kaydetAI()
+                else:
+                    self.kaydet()
             other_strategy = self.strategys[periyot].copy()
             try:
                 other_strategy.remove(self.sell_strategy)
