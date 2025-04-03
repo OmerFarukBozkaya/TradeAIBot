@@ -500,7 +500,7 @@ def test_model():
     model = load_model(f'Data/Model/{on_ek}tradeai_model.keras')
     le = joblib.load(f'Data/Model/{on_ek}label_encoder.pkl')
 
-    data = load_data(nrows=2506000,mrows=2500000)
+    data = load_data(nrows=6000,mrows=1)
     data = data.iloc[:,:]
 
     X, X_scaled, y, y_encoded, scaler, le = preprocess_data(data,le=le, scaler=scaler)
