@@ -1,3 +1,4 @@
+import AI
 from Binance import Binance
 from Backtest import Backtest
 from IndikatorTest import IndikatorTest
@@ -42,6 +43,7 @@ def main ():
     21)Coin aylik sonuc
     22)Trade aylik hedef kontrolu
     23)Tek pozisyon kapat
+    24)AI
     """)
     com = input("Ne yapılacak :")
     if com == "0":
@@ -229,6 +231,11 @@ def main ():
         a = time.time()
         periyot=input("Periyot: ")
         binance.tek_pozisyon_kapat(periyot)
+        b = time.time()
+        print(araclar.saniye_to_hms(b - a))
+    elif com == "24":
+        a = time.time()
+        AI.main()
         b = time.time()
         print(araclar.saniye_to_hms(b - a))
 
