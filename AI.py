@@ -1,133 +1,209 @@
 import numpy as np
 import pandas as pd
 import os
-
+import time
 from keras_tuner import RandomSearch
-from tensorflow.python.keras.layers import GlobalAveragePooling1D
 
 import Araclar
 os.environ['TF_ENABLE_ONEDNN_OPTS'] = '0'
 import matplotlib.pyplot as plt
-
+import plotly.express as px
+from ydata_profiling import ProfileReport
 import joblib
 import seaborn as sns
-import keras_tuner as kt
+
 from keras.src.layers import MultiHeadAttention, LayerNormalization
 
 from sklearn.preprocessing import StandardScaler, LabelEncoder, label_binarize
 from sklearn.utils.class_weight import compute_class_weight
-from sklearn.ensemble import RandomForestClassifier
 from sklearn.metrics import (confusion_matrix, classification_report, precision_score, recall_score, f1_score, roc_curve, auc )
 from sklearn.decomposition import PCA
 
-from tensorflow.keras.models import Sequential, load_model,Model
+import tensorflow as tf
+from tensorflow.keras.models import load_model,Model
 from tensorflow.keras.layers import GRU, Dense, Dropout, Conv1D, MaxPooling1D, Flatten, BatchNormalization, Bidirectional, Input, Conv1D, BatchNormalization, MaxPooling1D, Bidirectional, LSTM, Dropout, Dense, Multiply, Permute, Lambda, Flatten, Add, Activation, Concatenate
 from tensorflow.keras.optimizers import Adam
-from tensorflow.keras.regularizers import l2
-from tensorflow.keras.callbacks import EarlyStopping
-import tensorflow.keras.backend as K
-
-from tcn import TCN
 
 # Ayarı değiştir
 pd.set_option('display.max_columns', None)
-drop_columns = ['timestamp', 'open', 'high', 'low', 'fark', 'rsi', 'ema21', 'ema7', 'sma50', 'sma200',
-                'macd_val', 'macd_signal', 'bb_bot', 'bb_mid', 'bb_top', 'tso_val', 'local_min_max',
-                'ma_cross', 'dmo', 'vmzi', 'adx', 'bb_adx', 'macd', 'squeeze_momentum', 'tso','volatility']
-timestep = 200
 
-def create_model_best_parametre():
-    # <Veri yükleme>
-    data = pd.read_csv('Data/btcusd_1-min_data_indicators_strategys.csv')
-    data = data.iloc[-6000:, :]  # Son 2000 veriyi al
-    data = data.astype(np.float32)
-    # </Veri yükleme>
+# Global sabitler
+""" close & indikator """
+#DROP_COLUMNS = ['timestamp', 'open', 'high', 'low','macd','vmzi','tso','bb_rsi','fdi', 'bb_close','ma_cross','dmo','bb_adx','ema_stochastic','cci_atr','signal_moving_avarage','super_trend','squeeze_momentum','bbtrend_macddema','local_min_max']
+DROP_COLUMNS = None
 
-    # <Kullanılacak özellikler ve hedef değişken>
-    x = data.drop(drop_columns, axis=1)
-    y = data['local_min_max']
-    y.replace({1:'BUY',-1:'SELL',0:'False'},inplace=True)
+features = ['close','adx', 'sma50', 'sma200','ema21','ema7','parabolic_sar','super_trend_val','alpha_trend','bb_trend',
+            'sma_diff','signal_moving_avarage_50','bb_bot', 'bb_mid', 'bb_top']
+#features = None
 
+""" Tüm colonlar
+[
+# Fiyat verileri
+
+'timestamp', 'open', 'close', 'high', 'low', 
+# İndikatör
+
+## Trend
+'adx', 'sma50', 'sma200','ema21','ema7','parabolic_sar','super_trend_val','alpha_trend','bb_trend',
+'sma_diff','signal_moving_avarage_50','bb_bot', 'bb_mid', 'bb_top',
+
+## Momentum
+'rsi','macd_val', 'macd_signal','macd_dema_macd', 'macd_dema_signal','stochastic_rsi_k', 'stochastic_rsi_d','cci', 'momentum',
+
+## Volatilite
+'atr','bb_bot', 'bb_mid', 'bb_top', 'volatility', 
+
+## Ortalama geri dönüş
+'fark', 'log_return', 
+
+## Diger
+'tso_val',
+  
+# Strategy
+'macd', 'vmzi', 'tso', 'bb_rsi', 'fdi', 'bb_close', 'ma_cross', 'dmo','bb_adx', 'ema_stochastic', 'cci_atr', 
+'signal_moving_avarage','super_trend', 'squeeze_momentum', 'bbtrend_macddema',
+]
+
+['close','adx', 'sma50', 'sma200','ema21','ema7','parabolic_sar','super_trend_val','alpha_trend','bb_trend',
+'sma_diff','signal_moving_avarage_50','bb_bot', 'bb_mid', 'bb_top']
+"""
+TIMESTEP = 20
+
+# =============================================================================
+# Yardımcı Fonksiyonlar
+# =============================================================================
+def data_frame_info(data):
     """
-    # <Yeni özellikler>
-    # 1. Log Getiri: Bir önceki kapanışa göre logaritmik değişim
-    x['log_return'] = np.log(x['close'] / x['close'].shift(1))
-
-    # 2. Volatilite: Örneğin 20 periyotluk log getirilerin standart sapması
-    x['volatility'] = x['log_return'].rolling(window=20).std()
-
-    x=x.dropna()
-    # </Yeni özellikler>
+    Aldığı dataframe hakkında bilgileri listeler.
+    :param data: pandas.DataFrame()
+    :return:
     """
-    # </Kullanılacak özellikler ve hedef değişken>
+    print('=' * 40, ' Veri seti hakkında bilgiler ', '=' * 40)
 
-    # <Hedef değişkeni encode et>
-    le = LabelEncoder()
-    y = le.fit_transform(y)
-    # </Hedef değişkeni encode et>
+    print('=' * 40, ' Sütun isimleri, kaç tane eksik veri var, veri tipleri vb. ','=' * 40 )
+    print(data.info())
+    print('=' * 40, ' Her sütundaki eşsiz (unique) değer sayısını ','=' * 40 )
+    print(data.nunique())
+    print('=' * 40, ' Her sütundaki eksik değerleri ', '=' * 40)
+    print(data.isnull().sum())
+    print('=' * 40, ' Her sütunun veri tipini ','=' * 40)
+    print(data.dtypes)
+    print('=' * 40, ' Local_Min_Max frekans ', '=' * 40)
+    print(data['local_min_max'].value_counts().sort_index())
 
-    # <Özellik korelasyon matrisi>
-    plt.figure(figsize=(12, 10))
-    sns.heatmap(x.corr(), annot=True, fmt='.2f', cmap='coolwarm')
-    plt.show()
-    # </Özellik korelasyon matrisi>
+    if input('Rapor oluşturulsun mu : (1: Evet, Diğer: Hayır)')=='1':
+        profile = ProfileReport(data, explorative=True)
+        profile.to_file("Data/data_frame_rapor.html")
+        data_frame_info(data)
 
-    # <Normalizasyon>
-    scaler = StandardScaler()
-    X_scaled = scaler.fit_transform(x)
-    # </Normalizasyon>
+def load_data(file_path='Data/btcusd_1-min_data_indicators_strategys.csv', nrows=None,mrows=None):
+    """
+    Belirtilen CSV dosyasını yükler ve istenirse son n satırı alır.
+    :param file_path: string : CSV dosyasının konumu.
+    :param nrows: int : Sondan başlanacak şekilde kaç satır alınacak.
+    :return: pandas.DataFrame() : Okunan dosya her colonun veri tipi np.float32'ye dönüştürülerek dataframe şeklinde geri döndürülür.
+    """
+    data = pd.read_csv(file_path)
+    if nrows and mrows is None:
+        data = data.iloc[-nrows:, :]
+    elif mrows and nrows:
+        data = data.iloc[-nrows:-mrows,:]
+    return data
 
-    # <Dimensionality Reduction>
-    from sklearn.decomposition import PCA
+def preprocess_data(data, drop_columns=DROP_COLUMNS,features=features, target_col='local_min_max',le=None,scaler=None):
+    """
+    Veriyi özellikler (X) ve hedef (y) olarak ayırır; hedefi encode eder ve özellikleri normalize eder.
+    :param data: pandas.DataFrame() : İşlenecek dataframe.
+    :param drop_columns: list : Dataframe'den çıkarılacak colonlar.
+    :param target_col: string : Tahmin edilecek colon adı.
+    :return: pandas.core.frame.DataFrame , numpy.ndarray, numpy.ndarray, scaler, le : Özellik dataframesi , Ölçeklenmiş özellik numpy.ndarray , Encode edilmiş hedef numpy.ndarray , scaler nesnesi , encode nesnesi
+    """
+    if drop_columns is not None:
+        print('X drop edildi')
+        X = data.drop(drop_columns, axis=1)
+    elif features is not None:
+        print('X seçildi')
+        X = data[features]
+    else:
+        print('Hiçbir colon seçilmedi !!!')
+        X = data['close','rsi']
 
-    pca = PCA(n_components=0.95)  # Varyansın %95'ini koruyacak bileşen sayısı
-    X_pca = pca.fit_transform(X_scaled)
+    y = data[target_col].copy()
+    y_decoded = y.replace({1: 'BUY', -1: 'SELL', 0: 'False'})
 
-    print("Özellik sayısı (orijinal):", x.shape[1])
-    print("Özellik sayısı (PCA sonrası):", X_pca.shape[1])
+    # Hedef etiketleri encode et
+    if le is None:
+        le = LabelEncoder()
+        y_encoded = le.fit_transform(y_decoded)
+    else:
+        y_encoded = le.transform(y_decoded)
 
-    pca = PCA(n_components=X_pca.shape[1])
-    X_pca2 = pca.fit_transform(X_scaled)
 
-    ## PCA bileşenlerinin yükleri
-    loadings = pca.components_.T  # Her sütun bir PCA bileşenidir, her satır ise orijinal bir özellik
-    loadings_df = pd.DataFrame(loadings, index=x.columns, columns=[f'PC{i + 1}' for i in range(X_pca.shape[1])])
+    # Özellikleri normalize et
+    if scaler is None:
+        scaler = StandardScaler()
+        X_scaled = scaler.fit_transform(X)
+    else:
+        X_scaled = scaler.transform(X)
 
-    feature_importance = loadings_df.abs().sum(axis=1)
 
-    ## Özellikleri en önemliden en önemsiz'e doğru sırala
-    feature_importance_sorted = feature_importance.sort_values(ascending=False)
+    return X, X_scaled,y, y_encoded, scaler, le
 
-    print(feature_importance_sorted)
-    # </Dimensionality Reduction>
-
-    # <Class weight hesaplama>
-    class_weights = compute_class_weight('balanced', classes=np.unique(y), y=y)
-    class_weight_dict = {i: class_weights[i] for i in range(len(class_weights))}
-    # </Class weight hesaplama>
-
-    # <Zaman serisi penceresi (120 zaman adımı geriye bak)>
-    timestep = 200
-    X_sequences = []
-    y_sequences = []
-
+def create_sequences(X_scaled, y, timestep=TIMESTEP):
+    """
+    Zaman serisi verilerini pencerelemeye yarayan fonksiyon.
+    :param X_scaled: numpy.ndarray : Özellik arrayi
+    :param y: numpy.ndarray : Hedef arrayi
+    :param timestep: int : Pencere uzunluğu
+    :return: np.array , np.array : Pencereler haline getirilmiş özellik np.array'i , Pencereler haline getirilmiş hedef np.array'i
+    """
+    X_sequences, y_sequences = [], []
     for i in range(timestep, len(X_scaled)):
         X_sequences.append(X_scaled[i - timestep:i])
         y_sequences.append(y[i])
+    return np.array(X_sequences), np.array(y_sequences)
 
-    X_sequences, y_sequences = np.array(X_sequences), np.array(y_sequences)
-    # </Zaman serisi penceresi (120 zaman adımı geriye bak)>
+def plot_heatmap(data, title="Özellik Korelasyon Matrisi"):
+    """
+    Korelasyon matrisini hesaplar ve görselleştirir.
+    :param data: pandas.DataFrame : Korelasyon matrisi hesaplanacak data.
+    :param title: string : Grafik başlığı
+    :return:
+    """
+    plt.figure(figsize=(12, 10))
+    sns.heatmap(data.corr(), annot=True, fmt='.2f', cmap='coolwarm')
+    plt.title(title)
+    plt.show()
 
-    # <Veri setini bölme (%80 eğitim, %20 test)>
-    train_size = int(len(X_sequences) * 0.8)
-    X_train, X_test = X_sequences[:train_size], X_sequences[train_size:]
-    y_train, y_test = y_sequences[:train_size], y_sequences[train_size:]
-    # </Veri setini bölme (%80 eğitim, %20 test)>
+def perform_pca(X_scaled, original_columns):
+    """
+    PCA uygulayarak bileşen sayısını belirler ve özellik önem sıralamasını yazdırır.
+    :param X_scaled: numpy.ndarray : Ölçeklenmiş özellikler
+    :param original_columns: pandas.core.indexes.base.Index : colon isimleri
+    :return:
+    """
+    pca = PCA(n_components=0.98)
+    X_pca = pca.fit_transform(X_scaled)
+    print("Özellik sayısı (orijinal):", len(original_columns))
+    print("Özellik sayısı (PCA sonrası):", X_pca.shape[1])
 
-    # <Modelleme> Burada model oluşturulur ve modelin en iyi hangi parametrelerle çalıştığı tespit edilir.
+    loadings = pca.components_.T
+    loadings_df = pd.DataFrame(loadings, index=original_columns,
+                               columns=[f'PC{i+1}' for i in range(X_pca.shape[1])])
+    feature_importance = loadings_df.abs().sum(axis=1)
+    feature_importance_sorted = feature_importance.sort_values(ascending=False)
+    print(feature_importance_sorted)
+    return X_pca.shape[1], feature_importance_sorted
+
+def build_model_random_search(X_train_shape, timestep=TIMESTEP):
+    """
+    Modelin hiperparametre optimizasyonu için yapılandırılmasını sağlar.
+    :param X_train_shape: numpy.ndarray : Eğitim için kullanılacak özellik arrayi.
+    :param timestep: int : Pencere uzunluğu
+    :return: RandomSearch :
+    """
     def build_model(hp):
-        inputs = Input(shape=(timestep, X_train.shape[2]))
-
+        inputs = Input(shape=(timestep, X_train_shape[2]))
         # CNN Katmanı
         conv_filters = hp.Choice('conv_filters', values=[64, 128, 256])
         kernel_size = hp.Choice('kernel_size', values=[3, 5, 7])
@@ -141,7 +217,6 @@ def create_model_best_parametre():
         x = Bidirectional(GRU(gru_units1, return_sequences=True))(x)
         dropout_rate1 = hp.Float('dropout_rate1', 0.2, 0.5, step=0.1)
         x = Dropout(dropout_rate1)(x)
-
         gru_units2 = hp.Choice('gru_units2', values=[32, 64, 128])
         x = Bidirectional(GRU(gru_units2, return_sequences=True))(x)
 
@@ -149,7 +224,7 @@ def create_model_best_parametre():
         num_heads = hp.Choice('num_heads', values=[2, 4, 8])
         key_dim = hp.Choice('key_dim', values=[32, 64, 128])
         attention_output = MultiHeadAttention(num_heads=num_heads, key_dim=key_dim)(x, x)
-        x = LayerNormalization(epsilon=1e-6)(x + attention_output)  # Residual bağlantı
+        x = LayerNormalization(epsilon=1e-6)(x + attention_output)
 
         # Sınıflandırma Katmanları
         x = Flatten()(x)
@@ -165,73 +240,107 @@ def create_model_best_parametre():
         model.compile(loss='sparse_categorical_crossentropy', optimizer=optimizer, metrics=['accuracy'])
         return model
 
-    # Hiperparametre optimizasyonu
-    tuner = kt.RandomSearch(
+    tuner = RandomSearch(
         build_model, objective='val_accuracy', max_trials=20, executions_per_trial=1,
         directory='ktuner_dir', project_name='tradeai_model_tuning'
     )
+    return tuner
+
+def grafik_ciz_3d(data, x, y, z, target_col_name):
+    """
+    Aldığı parametreler doğrultusunda veriyi 3d olarak görselleştirir
+
+    :param data: pandas.DataFrame() : Tüm veriyi tutan dataframe
+    :param x: string : x ekseni için colon adı
+    :param y: string : y ekseni için colon adı
+    :param z: string : z ekseni için colon adı
+    :param target_col_name: string : Renk olarak sınıflandırılır . Benzersiz her değer için 1 renk atanır ve görselleştirilir.
+    :return:
+    """
+    df = pd.DataFrame({
+        x: data[x],
+        y: data[y],
+        z: data[z],
+        'target': data[target_col_name]
+    })
+    fig = px.scatter_3d(df, x=x, y=y, z=z, color='target')
+    fig.show()
+# =============================================================================
+# Model Oluşturma Fonksiyonları
+# =============================================================================
+def create_model_best_parametre():
+    """
+    En iyi hiperparametrelerin belirlenmesi ve modelin eğitilmesi.
+    Eğitilen model, kullanıcı tercihine bağlı olarak kaydedilir.
+    """
+    # Veri yükleme ve ön işleme
+    data = load_data(nrows=6000)
+    data = data.iloc[-6000:, :]
+    X, X_scaled, y_encoded, scaler, le = preprocess_data(data)
+    plot_heatmap(X)
+    perform_pca(X_scaled, X.columns)
+
+    # Sınıf ağırlıkları hesaplama
+    class_weights = compute_class_weight('balanced', classes=np.unique(y_encoded), y=y_encoded)
+    class_weight_dict = {i: class_weights[i] for i in range(len(class_weights))}
+
+    # Zaman serisi penceresi oluşturma
+    X_sequences, y_sequences = create_sequences(X_scaled, y_encoded)
+
+    # Veri setini bölme
+    train_size = int(len(X_sequences) * 0.8)
+    X_train, X_test = X_sequences[:train_size], X_sequences[train_size:]
+    y_train, y_test = y_sequences[:train_size], y_sequences[train_size:]
+
+    # Hiperparametre optimizasyonu ve model eğitimi
+    tuner = build_model_random_search(X_train.shape, timestep=TIMESTEP)
     tuner.search(X_train, y_train, epochs=50, batch_size=64, validation_split=0.2, verbose=1)
     best_hps = tuner.get_best_hyperparameters(num_trials=1)[0]
 
     print("En iyi hiperparametreler:")
     print(f"Conv Filters: {best_hps.get('conv_filters')}")
     print(f"Kernel Size: {best_hps.get('kernel_size')}")
-    print(f"LSTM Units 1: {best_hps.get('lstm_units')}")
-    print(f"LSTM Units 2: {best_hps.get('lstm_units2')}")
+    print(f"GRU Units 1: {best_hps.get('gru_units1')}")
+    print(f"GRU Units 2: {best_hps.get('gru_units2')}")
     print(f"Dense Units: {best_hps.get('dense_units')}")
-    print(f"Dropout Rate 1: {best_hps.get('dropout_rate')}")
+    print(f"Dropout Rate 1: {best_hps.get('dropout_rate1')}")
     print(f"Dropout Rate 2: {best_hps.get('dropout_rate2')}")
     print(f"Learning Rate: {best_hps.get('learning_rate')}")
 
-    # En iyi modeli al ve yeniden eğit
+    # En iyi modelin yeniden eğitilmesi
     model = tuner.hypermodel.build(best_hps)
     history = model.fit(X_train, y_train, epochs=50, batch_size=64, validation_split=0.2)
 
-    # Modelin eğitim geçmişini al
-    history_dict = history.history
+    # Eğitim geçmişini görselleştirme
+    loss_values = history.history["loss"]
+    val_loss_values = history.history["val_loss"]
+    acc_values = history.history["accuracy"]
+    val_acc_values = history.history["val_accuracy"]
+    epochs_range = range(1, len(loss_values) + 1)
 
-    # Eğitim ve doğrulama kayıpları
-    loss_values = history_dict["loss"]
-    val_loss_values = history_dict["val_loss"]
-
-    # Eğitim ve doğrulama doğrulukları
-    acc_values = history_dict["accuracy"]
-    val_acc_values = history_dict["val_accuracy"]
-
-    # Epoch sayısını belirle
-    epochs = range(1, len(loss_values) + 1)
-    # </Modelleme>
-
-    # <Görselleştirme>
-    # Kayıp grafiği
     plt.figure(figsize=(12, 5))
     plt.subplot(1, 2, 1)
-    plt.plot(epochs, loss_values, "bo-", label="Eğitim Kaybı")
-    plt.plot(epochs, val_loss_values, "ro-", label="Doğrulama Kaybı")
+    plt.plot(epochs_range, loss_values, "bo-", label="Eğitim Kaybı")
+    plt.plot(epochs_range, val_loss_values, "ro-", label="Doğrulama Kaybı")
     plt.xlabel("Epoch")
     plt.ylabel("Kayıp")
     plt.title("Eğitim ve Doğrulama Kaybı")
     plt.legend()
 
-
-    # Doğruluk grafiği
     plt.subplot(1, 2, 2)
-    plt.plot(epochs, acc_values, "bo-", label="Eğitim Doğruluğu")
-    plt.plot(epochs, val_acc_values, "ro-", label="Doğrulama Doğruluğu")
+    plt.plot(epochs_range, acc_values, "bo-", label="Eğitim Doğruluğu")
+    plt.plot(epochs_range, val_acc_values, "ro-", label="Doğrulama Doğruluğu")
     plt.xlabel("Epoch")
     plt.ylabel("Doğruluk")
     plt.title("Eğitim ve Doğrulama Doğruluğu")
     plt.legend()
-
     plt.show()
-    # </Görselleştirme>
 
-    # Modelin test doğruluğunu kontrol etme
+    # Modelin test verisi üzerindeki performansı
     test_loss, test_accuracy = model.evaluate(X_test, y_test)
     print(f'Test Accuracy: {test_accuracy:.4f}')
 
-    if (input("Kayit et : ") == "1"):
-        # Modelin kayit edilmesi
+    if input("Kaydetmek için '1' tuşlayın: ") == "1":
         os.makedirs('Data/Model', exist_ok=True)
         model.save('Data/Model/tradeai_model.keras')
         joblib.dump(scaler, 'Data/Model/scaler.pkl')
@@ -240,435 +349,177 @@ def create_model_best_parametre():
         exit(0)
 
 def create_model_best_model():
-    # Veri yükleme
-    data = pd.read_csv('Data/btcusd_1-min_data_indicators_strategys.csv')
-    data = data.iloc[-6000:, :]  # Son 6000 veri alınır
-    data = data.astype(np.float32)
+    """
+    Farklı model varyantlarını deneyip, en başarılı olanı seçer ve kaydeder.
+    """
+    # Veri yükleme ve ön işleme
+    data = load_data(nrows=2500000)
+    data = data.iloc[-2500000:, :]
+    X, X_scaled, y, y_encoded, scaler, le = preprocess_data(data)
 
-    # Kullanılmayacak sütunlar
+    # Veri hakkında bilgiler
+    print('1 : Özellik korelasyon matrisi\n2 : Confusion matrisi\n3 : ROC AUC hesaplama')
+    matris_hesaplamalar = input('(1,2,3 : Evet, diğer : Hayır) : ')
+    if  '1' in matris_hesaplamalar:
+        plot_heatmap(pd.concat([X, data['local_min_max']], axis=1), "Özellik Korelasyon Matrisi")
+        perform_pca(X_scaled, X.columns)
 
-    x = data.drop(drop_columns, axis=1)
-    y = data['local_min_max']
+        # Özellik önem sırası
+        from sklearn.feature_selection import mutual_info_classif
 
-    # Özellik korelasyon matrisi görselleştirme
-    plt.figure(figsize=(12, 10))
-    sns.heatmap(pd.concat([x, y], axis=1).corr(), annot=True, fmt='.2f', cmap='coolwarm')
-    plt.title("Özellik Korelasyon Matrisi")
-    plt.show()
+        mi_scores = mutual_info_classif(X_scaled, y)
+        mi_df = pd.DataFrame({'Özellik': X.columns, 'MI Skor': mi_scores})
+        mi_df.sort_values('MI Skor', ascending=False, inplace=True)
+        print(mi_df)
 
-    # Hedef değişkenin encode edilmesi
-    y.replace({1: 'BUY', -1: 'SELL', 0: 'False'}, inplace=True)
-    le = LabelEncoder()
-    y = le.fit_transform(y)
+        from sklearn.ensemble import RandomForestClassifier
 
-    # Normalizasyon
-    scaler = StandardScaler()
-    X_scaled = scaler.fit_transform(x)
+        model = RandomForestClassifier()
+        model.fit(X_scaled, y)
+        importance = model.feature_importances_
+        print(importance)
 
-    # Dimensionality Reduction (PCA) - örnek bilgi için
-    pca = PCA(n_components=0.95)
-    X_pca = pca.fit_transform(X_scaled)
-    print("Özellik sayısı (orijinal):", x.shape[1])
-    print("Özellik sayısı (PCA sonrası):", X_pca.shape[1])
-
-    pca = PCA(n_components=X_pca.shape[1])
-    X_pca2 = pca.fit_transform(X_scaled)
-
-    ## PCA bileşenlerinin yükleri
-    loadings = pca.components_.T  # Her sütun bir PCA bileşenidir, her satır ise orijinal bir özellik
-    loadings_df = pd.DataFrame(loadings, index=x.columns, columns=[f'PC{i + 1}' for i in range(X_pca.shape[1])])
-
-    feature_importance = loadings_df.abs().sum(axis=1)
-
-    ## Özellikleri en önemliden en önemsiz'e doğru sırala
-    feature_importance_sorted = feature_importance.sort_values(ascending=False)
-
-    print(feature_importance_sorted)
-
-    # Zaman serisi penceresi (örneğin, 120 adım)
-    X_sequences = []
-    y_sequences = []
-
-    for i in range(timestep, len(X_scaled)):
-        X_sequences.append(X_scaled[i - timestep:i])
-        y_sequences.append(y[i])
-
-    X_sequences, y_sequences = np.array(X_sequences), np.array(y_sequences)
-
-    # Veri setini %80 eğitim, %20 test olarak bölme
+    # Zaman serisi penceresi oluşturma
+    X_sequences, y_sequences = create_sequences(X_scaled, y_encoded)
     train_size = int(len(X_sequences) * 0.8)
     X_train, X_test = X_sequences[:train_size], X_sequences[train_size:]
     y_train, y_test = y_sequences[:train_size], y_sequences[train_size:]
 
-    # ------------------------- Farklı Model Varyantları -------------------------
-    def v0():
-        inputs = Input(shape=(timestep, X_train.shape[2]))
+    # y_train etiketlerinizin dağılımına göre ağırlıkları hesaplayın
+    classes = np.unique(y_train)
+    class_weights = compute_class_weight('balanced', classes=classes, y=y_train)
+    class_weight_dict = {i: weight for i, weight in zip(classes, class_weights)}
+    print("Class weights:", class_weight_dict)
 
-        # CNN Katmanı
-        x = Conv1D(filters=64, kernel_size=7, activation='relu', padding='same')(inputs)
-        x = BatchNormalization()(x)
-        x = MaxPooling1D(pool_size=2)(x)
+    # Model varyantları
+    def model_v6():
+        inputs = Input(shape=(TIMESTEP, X_train.shape[2]))
+        # Pozisyonel embedding: her zaman adımı için trainable bir embedding ekleniyor
+        pos_indices = tf.range(start=0, limit=TIMESTEP, delta=1)
+        pos_embedding = tf.keras.layers.Embedding(input_dim=TIMESTEP, output_dim=X_train.shape[2])(pos_indices)
+        # pos_embedding boyutu: (TIMESTEP, feature_dim) -> bunu tüm örneklere eklemek için broadcast edelim
+        x = inputs + pos_embedding
 
-        # GRU Katmanları
-        x = Bidirectional(GRU(128, return_sequences=True))(x)
-        x = Dropout(0.4)(x)
-        x = Bidirectional(GRU(128, return_sequences=True))(x)
-
-        # Attention Mekanizması
-        attention_output = MultiHeadAttention(num_heads=2, key_dim=31)(x, x)
-        x = LayerNormalization(epsilon=1e-6)(attention_output + x)  # Residual connection
-
-        # Sınıflandırma Katmanları
+        attn_output = MultiHeadAttention(num_heads=4, key_dim=64)(x, x)
+        x = Add()([x, attn_output])
+        x = LayerNormalization(epsilon=1e-6)(x)
         x = Flatten()(x)
-        x = Dense(32, activation='relu')(x)
-        x = Dropout(0.3)(x)
-        outputs = Dense(3, activation='softmax')(x)
-
-        model = Model(inputs, outputs)
-        model.compile(loss='sparse_categorical_crossentropy', optimizer=Adam(learning_rate=0.00021348),
-                      metrics=['accuracy'])
-        return model
-
-    def v1():
-        inputs = Input(shape=(timestep, X_train.shape[2]))
-        x = Conv1D(filters=128, kernel_size=5, activation='relu', padding='same')(inputs)
-        x = BatchNormalization()(x)
-        x = MaxPooling1D(pool_size=2)(x)
-
-        # Self-Attention Katmanı
-        attention_output = MultiHeadAttention(num_heads=4, key_dim=64)(x, x)
-        attention_output = LayerNormalization(epsilon=1e-6)(attention_output)
-        x = x + attention_output  # Residual Connection
-
-        x = Flatten()(x)
-        x = Dense(64, activation='relu')(x)
-        x = Dropout(0.4)(x)
-        x = Dense(3, activation='softmax')(x)
-
-        model = Model(inputs, x)
-        model.compile(loss='sparse_categorical_crossentropy', optimizer=Adam(learning_rate=0.0005),
-                      metrics=['accuracy'])
-        return model
-
-    def v2():
-        def transformer_block(x, num_heads=4, ff_dim=64, dropout=0.1):
-            # Self-attention bloğu
-            attn_output = MultiHeadAttention(num_heads=num_heads, key_dim=ff_dim)(x, x)
-            attn_output = Dropout(dropout)(attn_output)
-            x_attn = LayerNormalization(epsilon=1e-6)(x + attn_output)
-
-            # Feed-forward ağı bloğu
-            ffn_output = Dense(ff_dim, activation="relu")(x_attn)
-            ffn_output = Dense(int(x_attn.shape[-1]))(ffn_output)
-            x_out = LayerNormalization(epsilon=1e-6)(x_attn + ffn_output)
-            return x_out
-
-        inputs = Input(shape=(120, 64))
-        x_transformer = transformer_block(inputs)
-
-        # Debug: Tip kontrolü
-        print("Transformer block output type:", type(x_transformer))
-        print("x_transformer:", x_transformer)
-
-        x_pooled = GlobalAveragePooling1D()(x_transformer)
-        x_dense = Dense(64, activation="relu")(x_pooled)
-        outputs = Dense(3, activation="softmax")(x_dense)
-
-        model = Model(inputs, outputs)
-        model.compile(loss='sparse_categorical_crossentropy', optimizer=Adam(learning_rate=0.0005),
-                      metrics=['accuracy'])
-        return model
-
-    def v3():
-        inputs = Input(shape=(timestep, X_train.shape[2]))
-
-        # İki katmanlı Bidirectional LSTM
-        x = Bidirectional(LSTM(128, return_sequences=True))(inputs)
-        x = Dropout(0.3)(x)
-        x = Bidirectional(LSTM(128, return_sequences=True))(x)
-
-        # Self-Attention katmanı
-        attention = MultiHeadAttention(num_heads=4, key_dim=64)(x, x)
-        x = LayerNormalization(epsilon=1e-6)(x + attention)
-
-        # Sonuçların flatten edilmesi ve sınıflandırma
-        x = Flatten()(x)
-        x = Dense(64, activation='relu')(x)
+        x = Dense(128, activation='relu')(x)
         x = Dropout(0.4)(x)
         outputs = Dense(3, activation='softmax')(x)
-
         model = Model(inputs, outputs)
-        model.compile(loss='sparse_categorical_crossentropy', optimizer=Adam(learning_rate=0.0005),
+        model.compile(loss='sparse_categorical_crossentropy',
+                      optimizer=Adam(learning_rate=0.0001),
                       metrics=['accuracy'])
         return model
-
-    # Modelleri bir sözlükte saklama
-    models = {
-        'Model v0': v0(),
-        'Model v1': v1(),
-        #'Model v2': v2(),
-        #'Model v3': v3()
+    models={
+        'model v6':model_v6()
     }
-    def best_model_1_1():
-        inputs = Input(shape=(timestep, X_train.shape[2]))
-        x = Conv1D(filters=128, kernel_size=5, activation='relu', padding='same')(inputs)
-        x = BatchNormalization()(x)
-        x = MaxPooling1D(pool_size=2)(x)
 
-        # Self-Attention Katmanı
-        attention_output = MultiHeadAttention(num_heads=4, key_dim=64)(x, x)
-        attention_output = LayerNormalization(epsilon=1e-6)(attention_output)
-        x = x + attention_output  # Residual Connection
-
-        x = Flatten()(x)
-        x = Dense(64, activation='relu')(x)
-        x = Dropout(0.4)(x)
-        x = Dense(3, activation='softmax')(x)
-
-        model = Model(inputs, x)
-        model.compile(loss='sparse_categorical_crossentropy', optimizer=Adam(learning_rate=0.0005),
-                      metrics=['accuracy'])
-        return model
-    def best_model_1_2():
-        inputs = Input(shape=(timestep, X_train.shape[2]))
-
-        # CNN Katmanı
-        x = Conv1D(filters=128, kernel_size=5, activation='relu', padding='same')(inputs)
-        x = BatchNormalization()(x)
-        x = MaxPooling1D(pool_size=2)(x)
-
-        # GRU Katmanları
-        x = Bidirectional(GRU(128, return_sequences=True))(x)
-        x = Dropout(0.3)(x)
-        x = Bidirectional(GRU(64, return_sequences=True))(x)
-
-        # Attention Mekanizması
-        attention_output = MultiHeadAttention(num_heads=4, key_dim=64)(x, x)
-        x = LayerNormalization(epsilon=1e-6)(attention_output + x)  # Residual connection
-
-        # Sınıflandırma Katmanları
-        x = Flatten()(x)
-        x = Dense(64, activation='relu')(x)
-        x = Dropout(0.4)(x)
-        outputs = Dense(3, activation='softmax')(x)
-
-        model = Model(inputs, outputs)
-        model.compile(loss='sparse_categorical_crossentropy', optimizer=Adam(learning_rate=0.0005),
-                      metrics=['accuracy'])
-        return model
-
-    # ------------------------- Model Eğitim, Değerlendirme ve ROC Grafikleri -------------------------
-
-    results = {}  # Model doğruluklarını saklamak için
-
+    results = {}
     for name, model in models.items():
         print(f"\n=== {name} Modeli Eğitiliyor ===")
-        history = model.fit(X_train, y_train, epochs=50, batch_size=64, validation_split=0.2, verbose=1)
-
+        model.summary()
+        bas_fit=time.perf_counter()
+        history = model.fit(X_train, y_train, epochs=200, batch_size=64, validation_split=0.2, verbose=1,class_weight=class_weight_dict)
+        son_fit=time.perf_counter()
         test_loss, test_accuracy = model.evaluate(X_test, y_test, verbose=0)
         results[name] = test_accuracy
-        print(f"{name} Test Accuracy: {test_accuracy:.4f}")
-
-        # Tahminler
+        print(f"=============================================\n"
+              f"{name} Test Accuracy: {test_accuracy:.4f}\n"
+              f"{name} Train time: {Araclar.Araclar.saniye_to_hms(son_fit-bas_fit)}\n"
+              f"=============================================")
+        # Tahminler ve metrikler
         y_pred = model.predict(X_test)
         y_pred_classes = np.argmax(y_pred, axis=1)
-
-        # Label Encoder'ı ters çevirerek gerçek etiketlere ulaş
         true_labels = le.inverse_transform(y_test)
         predicted_labels = le.inverse_transform(y_pred_classes)
 
-        # Confusion Matrix
         cm = confusion_matrix(true_labels, predicted_labels, labels=le.classes_)
+        if '2' in matris_hesaplamalar:
+            plt.figure(figsize=(8, 6))
+            sns.heatmap(cm, annot=True, fmt="d", cmap="Blues",
+                        xticklabels=le.classes_, yticklabels=le.classes_)
+            plt.xlabel('Predicted')
+            plt.ylabel('Actual')
+            plt.title(f"{name} - Confusion Matrix")
+            plt.show()
 
-        # Classification Report
         cr = classification_report(true_labels, predicted_labels, target_names=le.classes_, output_dict=True)
-
-        # Confusion Matrix Görselleştirme
-        plt.figure(figsize=(8, 6))
-        sns.heatmap(cm, annot=True, fmt="d", cmap="Blues", xticklabels=le.classes_,
-                    yticklabels=le.classes_)
-        plt.xlabel('Predicted')
-        plt.ylabel('Actual')
-        plt.title(f"{name} - Confusion Matrix")
-        plt.show()
-
-        # Classification Report'u DataFrame olarak yazdır
         cr_df = pd.DataFrame(cr).transpose()
         print(f"\n{name} - Classification Report:")
         print(cr_df)
 
-        # ROC Eğrisi Hesaplama (Çok sınıflı için OneVsRest yaklaşımı)
         n_classes = 3
         y_test_bin = label_binarize(y_test, classes=list(range(n_classes)))
-
-        fpr = dict()
-        tpr = dict()
-        roc_auc = dict()
-
+        fpr, tpr, roc_auc = {}, {}, {}
         for i in range(n_classes):
             fpr[i], tpr[i], _ = roc_curve(y_test_bin[:, i], y_pred[:, i])
             roc_auc[i] = auc(fpr[i], tpr[i])
 
-        # Class isimlerini geri çevirme
         class_names = le.inverse_transform(list(range(n_classes)))
+        if '3' in matris_hesaplamalar:
+            plt.figure()
+            for i in range(n_classes):
+                plt.plot(fpr[i], tpr[i], label=f'Class {class_names[i]} (AUC = {roc_auc[i]:0.2f})')
+            plt.plot([0, 1], [0, 1], 'k--')
+            plt.xlabel('False Positive Rate')
+            plt.ylabel('True Positive Rate')
+            plt.title(f'ROC Curve - {name}')
+            plt.legend(loc="lower right")
+            plt.show()
 
-        # ROC eğrisini çizme
-        plt.figure()
-        for i in range(n_classes):
-            plt.plot(fpr[i], tpr[i], label=f'Class {class_names[i]} (AUC = {roc_auc[i]:0.2f})')
-        plt.plot([0, 1], [0, 1], 'k--')
-        plt.xlabel('False Positive Rate')
-        plt.ylabel('True Positive Rate')
-        plt.title(f'ROC Curve - {name}')
-        plt.legend(loc="lower right")
-        plt.show()
-
-        # Ek değerlendirme raporu
         print(f"\n{name} için Ek Değerlendirme Raporu:")
         print(f"Test Loss: {test_loss:.4f}")
         print(f"Test Accuracy: {test_accuracy:.4f}")
-        # İsterseniz burada ek metrikler (precision, recall, f1-score vb.) de raporlayabilirsiniz.
 
-    # ------------------------- Modelleri Doğruluklarına Göre Sıralama -------------------------
     sorted_results = sorted(results.items(), key=lambda x: x[1], reverse=True)
     print("\nModeller başarı oranlarına göre sıralandı:")
     for name, acc in sorted_results:
         print(f"{name}: {acc:.4f}")
 
-    # Eğer modeli kaydetmek isterseniz (örneğin en iyi modeli):
     best_model_name = sorted_results[0][0]
     print(f"\nEn iyi model: {best_model_name} (Accuracy: {results[best_model_name]:.4f})")
     if input("Modeli kaydetmek ister misiniz? (1: Evet, diğer: Hayır): ") == "1":
         os.makedirs('Data/Model', exist_ok=True)
-        models[best_model_name].save(f'Data/Model/tradeai_model.keras')
-        joblib.dump(scaler, f'Data/Model/scaler.pkl')
-        joblib.dump(le, f'Data/Model/label_encoder.pkl')
+        models[best_model_name].save('Data/Model/tradeai_model.keras')
+        joblib.dump(scaler, 'Data/Model/scaler.pkl')
+        joblib.dump(le, 'Data/Model/label_encoder.pkl')
     else:
-        exit(0)
+        print('Kayit edilmedi !!!')
 
-def test_model_eski():
-    # Önceden eğitilmiş bileşenlerin yüklenmesi
-    on_ek=input('Model on eki: ')
+# =============================================================================
+# Test ve Tahmin Fonksiyonları
+# =============================================================================
+def test_model():
+    """
+    Kaydedilmiş modelin test verileri üzerinde değerlendirilmesi ve metriklerin raporlanması.
+    """
+    on_ek = input('Model on eki: ')
     scaler = joblib.load(f'Data/Model/{on_ek}scaler.pkl')
     model = load_model(f'Data/Model/{on_ek}tradeai_model.keras')
     le = joblib.load(f'Data/Model/{on_ek}label_encoder.pkl')
 
-    # Veri yükleme
-    data = pd.read_csv('Data/btcusd_1-min_data_indicators_strategys.csv')
-    data = data.iloc[-1000000:, :]  # Son 2000 veriyi al
-    data = data.astype(np.float32)
+    data = load_data(nrows=2506000,mrows=2500000)
+    data = data.iloc[:,:]
 
-    # Kullanılacak özellikler ve hedef değişken
-    x = data.drop(drop_columns, axis=1)
-    y = data['local_min_max']
-    y.replace({1: 'BUY', -1: 'SELL', 0: 'False'}, inplace=True)
+    X, X_scaled, y, y_encoded, scaler, le = preprocess_data(data,le=le, scaler=scaler)
 
-    # Hedef değişkeni encode et
-    y = le.fit_transform(y)
-
-    # Normalizasyon
-    X_scaled = scaler.fit_transform(x)
-
-    # Zaman serisi penceresi (60 zaman adımı geriye bak)
-    timestep = 120
-    X_sequences = []
-    y_sequences = []
-
-    for i in range(timestep, len(X_scaled)):
-        X_sequences.append(X_scaled[i - timestep:i])
-        y_sequences.append(y[i])
-
-    X_sequences, y_sequences = np.array(X_sequences), np.array(y_sequences)
-
-    # Veri setini bölme (%80 eğitim, %20 test)
+    X_sequences, y_sequences = create_sequences(X_scaled, y_encoded)
     train_size = int(len(X_sequences) * 0.8)
     X_train, X_test = X_sequences[:train_size], X_sequences[train_size:]
     y_train, y_test = y_sequences[:train_size], y_sequences[train_size:]
 
-    # Modelin test doğruluğunu kontrol etme
-    test_loss, test_accuracy = model.evaluate(X_test, y_test)
-    print(f'Test Accuracy: {test_accuracy:.4f}')
-
-    # Test verileri için tahmin yap
-    y_pred_probs = model.predict(X_test)  # Model olasılık tahminleri döndürür
-    y_pred = np.argmax(y_pred_probs, axis=1)  # En yüksek olasılığı alan sınıfı seç
-
-    # Tahmin ve gerçek değerleri geri dönüştür
-    y_test_labels = le.inverse_transform(y_test)  # Gerçek değerleri orijinal hale getir
-    y_pred_labels = le.inverse_transform(y_pred)  # Modelin tahminlerini orijinal hale getir
-
-    # Konfüzyon matrisi hesapla
-    cm = confusion_matrix(y_test_labels, y_pred_labels, labels=['BUY', 'SELL', 'False'])
-    # Konfüzyon matrisini görselleştir
-    plt.figure(figsize=(6, 5))
-    sns.heatmap(cm, annot=True, fmt="d", cmap="Blues", xticklabels=['BUY', 'SELL', 'False'],
-                yticklabels=['BUY', 'SELL', 'False'])
-    plt.xlabel('Tahmin Edilen')
-    plt.ylabel('Gerçek Değer')
-    plt.title('Konfüzyon Matrisi')
-    plt.show()
-
-def test_model():
-    # Önceden eğitilmiş bileşenlerin yüklenmesi
-    on_ek=input('Model on eki: ')
-    scaler = joblib.load(f'Data/Model/{on_ek}scaler.pkl')
-    model = load_model(f'Data/Model/{on_ek}tradeai_model.keras')
-    le = joblib.load(f'Data/Model/{on_ek}label_encoder.pkl')
-
-    # Test verilerinin yüklenmesi ve hazırlanması
-    data = pd.read_csv('Data/btcusd_1-min_data_indicators_strategys.csv')
-    data = data.iloc[-12000:-6000,:]
-
-    """
-    print(data.info()) # Sütun isimleri, kaç tane eksik veri var, veri tipleri vb.
-    print(data[kategorik_col].nunique()) # Her sütundaki eşsiz (unique) değer sayısını gösterir
-    print(data.isnull().sum())  # Her sütundaki eksik değerleri gösterir
-    print(data.dtypes)  # Her sütunun veri tipini gösterir
-    """
-
-    # Bu sütunları float32'ye çevir
-    data = data.astype(np.float32)
-
-    # Özelliklerin ve hedefin seçilmesi
-    X = data.drop(drop_columns, axis=1)
-    y = data['local_min_max']
-    y.replace({1:'BUY',-1:'SELL',0:'False'},inplace=True)
-
-    # Etiket kodlaması (Eğitim sırasında öğrenilen parametrelerle)
-
-    try:
-        y_encoded = le.transform(y)
-    except ValueError as e:
-        print(f"Label encoding hatası: {e}")
-        return
-
-    # Özelleklerin normalizasyonu (Eğitim scaler'ı kullanarak)
-    X_scaled = scaler.transform(X)
-
-    # Zaman serisi penceresi oluşturma
-    X_sequences = []
-    y_sequences = []
-
-    for i in range(timestep, len(X_scaled)):
-        X_sequences.append(X_scaled[i - timestep:i])
-        y_sequences.append(y_encoded[i])
-
-    X_test = np.array(X_sequences)
-    y_test = np.array(y_sequences)
-
-    # Model değerlendirme
     test_loss, test_accuracy = model.evaluate(X_test, y_test, verbose=0)
     print(f"\n{'=' * 40}")
     print(f"Test Doğruluğu: {test_accuracy:.4f}")
     print(f"Test Kaybı: {test_loss:.4f}")
     print(f"{'=' * 40}\n")
 
-    # Tahminlerin oluşturulması
     y_pred = np.argmax(model.predict(X_test), axis=1)
     y_test_labels = le.inverse_transform(y_test)
     y_pred_labels = le.inverse_transform(y_pred)
 
-    # Detaylı metrikler
     print("Sınıflandırma Raporu:")
     print(classification_report(
         y_test_labels,
@@ -677,7 +528,6 @@ def test_model():
         digits=4
     ))
 
-    # Precision, Recall, F1 Score
     precision = precision_score(y_test, y_pred, average='weighted')
     recall = recall_score(y_test, y_pred, average='weighted')
     f1 = f1_score(y_test, y_pred, average='weighted')
@@ -687,78 +537,109 @@ def test_model():
     print(f"Recall: {recall:.4f}")
     print(f"F1 Score: {f1:.4f}")
 
-    # Normalleştirilmiş Konfüzyon Matrisi
-    cm = confusion_matrix(y_test_labels, y_pred_labels, labels=le.classes_)
+    df_results = pd.DataFrame({
+        "Gerçek Değerler": y_test_labels,
+        "Tahmin Edilen Değerler": y_pred_labels,
+    })
+    df_results["Durum"] = df_results.apply(lambda row: "OK" if row["Gerçek Değerler"] == row["Tahmin Edilen Değerler"] else "XX", axis=1)
 
+    # Tahmin sonucu
+    print(model.summary())
+    print(df_results)
+    df_results.to_csv("Data/test_sonuclari.csv", index=False)
+
+    # Örnek zaman dizisi (Gerçek zaman verin varsa burada kullanabilirsiniz)
+    time_series = range(len(y_test_labels))  # Örneğin veri sırası olabilir
+
+    # Renkleri belirleme fonksiyonu
+    def get_color(label):
+        if label == "BUY":
+            return "green"
+        elif label == "SELL":
+            return "red"
+        else:
+            return "blue"
+
+    # Renkleri belirleme
+    actual_colors = [get_color(label) for label in y_test_labels]
+    pred_colors = [get_color(label) for label in y_pred_labels]
+
+    close_prices = X_test[:, -1, 0]
+
+    # --- GERÇEK DEĞERLER GRAFİĞİ ---
+    plt.figure(figsize=(12, 5))
+    for i in range(len(close_prices) - 1):
+        plt.plot(time_series[i:i + 2], close_prices[i:i + 2], color=actual_colors[i])  # Çizgiyi çizer
+    plt.scatter(time_series, close_prices, c=actual_colors, label="Gerçek Değerler", alpha=0.7, edgecolors='black')
+    plt.title("Gerçek Değerler Grafiği")
+    plt.xlabel("Zaman")
+    plt.ylabel("Kapanış (Close) Fiyatı")
+    plt.legend()
+
+    # --- TAHMİN EDİLEN DEĞERLER GRAFİĞİ ---
+    plt.figure(figsize=(12, 5))
+    for i in range(len(close_prices) - 1):
+        plt.plot(time_series[i:i + 2], close_prices[i:i + 2], color=pred_colors[i])  # Çizgiyi çizer
+    plt.scatter(time_series, close_prices, c=pred_colors, label="Tahmin Edilen Değerler", alpha=0.7, edgecolors='black')
+    plt.title("Tahmin Edilen Değerler Grafiği")
+    plt.xlabel("Zaman")
+    plt.ylabel("Kapanış (Close) Fiyatı")
+    plt.legend()
+    plt.show()
+
+    cm = confusion_matrix(y_test_labels, y_pred_labels, labels=le.classes_)
     plt.figure(figsize=(10, 8))
-    sns.heatmap(
-        cm,
-        annot=True,
-        fmt=".2f",
-        cmap="Greens",
-        xticklabels=le.classes_,
-        yticklabels=le.classes_
-    )
+    sns.heatmap(cm, annot=True, fmt=".2f", cmap="Greens",
+                xticklabels=le.classes_, yticklabels=le.classes_)
     plt.title("Konfüzyon Matrisi")
     plt.xlabel("Tahmin Edilen Etiketler")
     plt.ylabel("Gerçek Etiketler")
     plt.show()
 
-    # Sınıf Dağılım Görselleştirmesi
-    plt.figure(figsize=(8, 5))
-    sns.countplot(x=y_test_labels, order=le.classes_)
-    plt.title("Test Verisindeki Sınıf Dağılımı")
-    plt.xlabel("İşlem Sinyalleri")
-    plt.ylabel("Adet")
-    plt.show()
-
-def predict_single_row(input_df):
+def predict_single_row(input_df, window_size=TIMESTEP):
     """
-
-    :param input_df: pandas.DataFrame()
-    :return:
+    Belirtilen pencere boyutuna göre tek bir örnek üzerinden tahmin gerçekleştirir.
+    :param input_df: pandas.DataFrame : Eğitim verisine uygun bir veri kümesi
+    :param window_size: int : Pencere boyutu
+    :return: str : Tahmin edilen sınıf etiketi
     """
-    # Model ve scaler'ı yükle
-    scaler = joblib.load('Data/scaler.pkl')
-    model = load_model('Data/tradeai_model.keras')
-    le = joblib.load('Data/label_encoder.pkl')
+    if len(input_df) < window_size:
+        raise ValueError(
+            f"Girdi veri çerçevesinin uzunluğu ({len(input_df)}) belirtilen pencere boyutundan ({window_size}) küçük olamaz.")
 
-    # Normalizasyon
-    input_scaled = scaler.transform(input_df)
+    scaler = joblib.load('Data/Model/scaler.pkl')
+    model = load_model('Data/Model/tradeai_model.keras')
+    le = joblib.load('Data/Model/label_encoder.pkl')
 
-    # Modelin beklediği şekle getirme (120 zaman adımı gerekiyor)
-    input_sequence = np.tile(input_scaled, (timestep, 1))  # 120 zaman adımı olacak şekilde kopyala
-    input_sequence = np.expand_dims(input_sequence, axis=0)  # Model için (1, 120, feature_sayısı) şekline getir
+    input_scaled = scaler.transform(input_df[-window_size:])
+    input_sequence = np.expand_dims(input_scaled, axis=0)
 
-    # Tahmin yap
     prediction = model.predict(input_sequence)
     predicted_class = np.argmax(prediction)
+    predicted_class_label = le.inverse_transform([predicted_class])[0]
 
-    # Etiketleri geri çevir
-    predicted_class_label = le.inverse_transform([predicted_class])
     return predicted_class_label
 
-if __name__=='__main__':
-    #Araclar.Araclar.create_dataset()
-    print("1: create_model_best_parametre()\n2: create_model_best_model()\n3: test_model()")
-    menu_num=list(input("Menu: "))
-    for num in menu_num:
-        if num=='1':
+# =============================================================================
+# Ana Menü
+# =============================================================================
+def main():
+    """
+    Uygulama için ana menü.
+    """
+    print("0: Araclar.Araclar.create_dataset()\n1: create_model_best_parametre()\n2: create_model_best_model()\n3: test_model()")
+    menu_input = input("Menu: ")
+    for num in menu_input:
+        if num == '0':
+            Araclar.Araclar.create_dataset()
+        elif num == '1':
             create_model_best_parametre()
-        elif num=='2':
+        elif num == '2':
             create_model_best_model()
-        elif num=='3':
+        elif num == '3':
             test_model()
         else:
-            print('Hatali kod !')
+            print('Hatalı kod!')
 
-    """
-    # Tahmini al
-    data = pd.read_csv('Data/btcusd_1-min_data_indicators_strategys.csv')
-    data = data.iloc[-500:-499, :]  # Son 2000 veriyi al
-    data = data.astype(np.float32)
-    print(data)
-    sample_input=data
-    prediction_result = predict_single_row(sample_input)
-    print("Tahmin Sonucu:", prediction_result)
-    """
+if __name__ == '__main__':
+    main()
