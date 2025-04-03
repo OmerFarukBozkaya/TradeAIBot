@@ -24,8 +24,8 @@ from matplotlib.widgets import Cursor
 import logging
 from logging.handlers import RotatingFileHandler
 
-if not os.path.exists('Data'):
-    os.makedirs('Data')
+# Klasör kontrolü
+os.makedirs('Data/Strategy', exist_ok=True)
 
 # Ortak format
 formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
@@ -180,6 +180,7 @@ class Araclar:
         low = data['low']
         close = data['close']
         acilis = data['open']
+        fark = list(pd.DataFrame(close).iloc[:,0]-pd.DataFrame(acilis).iloc[:,0])
         opendate = data['opendate']
         rsi = indikator.RSI(close)
         ema21 = indikator.EMA(close, 21)
@@ -198,6 +199,7 @@ class Araclar:
             'high': high,
             'low': low,
             'close': close,
+            'fark': fark,
             'rsi': rsi,
             'ema21': ema21,
             'ema7': ema7,
@@ -288,6 +290,178 @@ class Araclar:
         path = 'Data/veriler_strategys.xlsx'
         os.makedirs(os.path.dirname(path), exist_ok=True)
         df.to_excel(path, index=False)
+
+    @staticmethod
+    def create_dataset():
+        # 1. Veri yükleme optimizasyonu
+        bas_veri_yukle = time.perf_counter()
+        data = pd.read_csv(
+            'Data/btcusd_1-min_data.csv',
+            usecols=['Timestamp', 'Open', 'Close', 'High', 'Low']
+        )
+        son_veri_yukle = time.perf_counter()
+        print(f"Veri yukleme süresi: {Araclar.saniye_to_hms(son_veri_yukle - bas_veri_yukle)}")
+
+        # Tarih dönüşümü ve gereksiz sütunları düşürme
+        bas_hesapla = time.perf_counter()
+        data['timestamp'] = pd.to_datetime(data['Timestamp'], unit='s')
+        data.drop(columns=['Timestamp'], inplace=True)  # Timestamp artık gereksiz
+
+        # Bellek dostu veri tipi dönüşümleri
+        data['Open'] = data['Open'].astype('float32')
+        data['Close'] = data['Close'].astype('float32')
+        data['High'] = data['High'].astype('float32')
+        data['Low'] = data['Low'].astype('float32')
+
+        # Tarih bazlı sütunlar
+        data['yil'] = data['timestamp'].dt.year.astype('int16')
+        data['ay'] = data['timestamp'].dt.month.astype('int8')
+        data['gun'] = data['timestamp'].dt.day.astype('int8')
+        data['saat'] = data['timestamp'].dt.hour.astype('int8')
+        data['dakika'] = data['timestamp'].dt.minute.astype('int8')
+
+        # Fiyat farkı hesaplama
+        data['fark'] = (data['Close'] - data['Open']).astype('float32')
+
+        # NumPy dizileri ile işlem
+        close_np = data['Close'].values.astype('float32')
+        high_np = data['High'].values.astype('float32')
+        low_np = data['Low'].values.astype('float32')
+
+        # 4. Indikatör hesaplamaları optimizasyonu
+        print("Hesaplaniyor...")
+
+        bb = np.array(Indikator.BB(close_np),dtype='float32')
+        macd = np.array(Indikator.MACD(close_np),dtype='float32')
+        log_return = np.log(data['Close'] / data['Close'].shift(1))
+        stochastic_rsi = np.array(Indikator.StochasticRSI(close_np),dtype='float32')
+        macd_dema = np.array(Indikator.MACD_DEMA(close_np),dtype='float32')
+
+        hesaplamalar = {
+            # INDIKATOR
+            'rsi': np.array(Indikator.RSI(close_np),dtype='float32'),
+            'ema21': np.array(Indikator.EMA(close_np, 21),dtype='float32'),
+            'ema7': np.array(Indikator.EMA(close_np, 7),dtype='float32'),
+            'atr': np.array(Indikator.ATR(high_np, low_np, close_np),dtype='float32'),
+            'adx': np.array(Indikator.ADX(high_np, low_np, close_np),dtype='float32'),
+            'sma50': np.array(Indikator.SMA(close_np, 50),dtype='float32'),
+            'sma200': np.array(Indikator.SMA(close_np, 200),dtype='float32'),
+            'macd_val': macd[0],
+            'macd_signal': macd[1],
+            'bb_bot': bb[0],
+            'bb_mid': bb[1],
+            'bb_top': bb[2],
+            'log_return': log_return,
+            'volatility': log_return.rolling(window=20).std(),
+
+            'momentum' : np.array(Indikator.Momentum(close_np),dtype='float32'),
+            'alpha_trend' : np.array(Indikator.Alpha_Trend(high_np, low_np, close_np),dtype='float32'),
+            'super_trend_val' : np.array(Indikator.Super_Trend(high_np, low_np, close_np)[0],dtype='float32'),
+            'parabolic_sar' : np.array(Indikator.ParabolicSAR(high_np, low_np),dtype='float32'),
+            'stochastic_rsi_k' : stochastic_rsi[0],
+            'stochastic_rsi_d' : stochastic_rsi[0],
+            'signal_moving_avarage_50' : np.array(Indikator.SignalMovingAverage(close_np,50)[0],dtype='float32'),
+            'macd_dema_macd' : macd_dema[0],
+            'macd_dema_signal' : macd_dema[1],
+            'bb_trend' : np.array(Indikator.BBTrend(close_np),dtype='float32'),
+
+            # STRATEGY
+
+            #'macd': np.array(Stratejiler.MACD(high_np, low_np, close_np),dtype='object'),
+            #'vmzi': np.array(Stratejiler.VMZI(high_np, low_np, close_np),dtype='object'),
+            #'bb_rsi': np.array(Stratejiler.BB_RSI(high_np, low_np, close_np),dtype='object'),
+            #'fdi': np.array(Stratejiler.FDI(high_np, low_np, close_np),dtype='object'),
+            #'bb_close': np.array(Stratejiler.BB_Close(high_np, low_np, close_np),dtype='object'),
+            #'ma_cross': np.array(Stratejiler.MA_Cross(high_np, low_np, close_np),dtype='object'),
+            #'dmo': np.array(Stratejiler.DMO(high_np, low_np, close_np),dtype='object'),
+            #'bb_adx': np.array(Stratejiler.BB_ADX(high_np, low_np, close_np),dtype='object'),
+            #'ema_stochastic': np.array(Stratejiler.EMA_StochasticRSI(high_np, low_np, close_np),dtype='object'),
+            #'cci_atr': np.array(Stratejiler.CCI_ATR(high_np, low_np, close_np),dtype='object'),
+            #'signal_moving_avarage': np.array(Stratejiler.SignalMovingAvarage(high_np, low_np, close_np),dtype='object'),
+            #'super_trend': np.array(Stratejiler.Super_Trend(high_np, low_np, close_np),dtype='object'),
+            #'squeeze_momentum': np.array(Stratejiler.SqueezeMomentum(high_np, low_np, close_np),dtype='object'),
+            #'bbtrend_macddema': np.array(Stratejiler.BBTrend_MACDDEMA(high_np, low_np, close_np),dtype='object'),
+            'local_min_max': np.array(Stratejiler.Local_Min_Max(high_np, low_np, close_np),dtype='object')
+
+        }
+        son_hesapla = time.perf_counter()
+        print(f"Hesaplama süresi: {Araclar.saniye_to_hms(son_hesapla - bas_hesapla)} ")
+        # 5. Strateji hesaplamaları optimizasyonu
+        print("Dataframe oluşturuluyor ...")
+
+        # 6. DataFrame oluşturma optimizasyonu
+        last_data = pd.DataFrame({
+            'timestamp': data['timestamp'],
+            'yil': data['yil'] ,
+            'ay':data['ay'] ,
+            'gun':data['gun'] ,
+            'saat':data['saat'] ,
+            'dakika':data['dakika'],
+            'open': data['Open'],
+            'close': data['Close'],
+            'high': data['High'],
+            'low': data['Low'],
+            'fark': data['fark'],
+            **hesaplamalar,
+        })
+
+        # Ön işleme
+        print("On isleme")
+
+        last_data['sma_diff'] = last_data['sma50'] - last_data['sma200']
+        last_data['local_min_max'] = last_data['local_min_max'].replace({'BUY':1,'SELL':-1,False: 0})
+        last_data['local_min_max'].astype('float32')
+
+        # Save
+        print("Kaydet")
+        path = 'Data/btcusd_1-min_data_indicators_strategys.csv'
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        last_data.to_csv(path, index=False,float_format='%.5f')
+
+        print("İşlem tamamlandı!")
+        print(last_data)
+        print(f"Toplam satır sayısı: {len(last_data)}")
+        print(f"Toplam sütun sayısı: {len(last_data.columns)}")
+        print(f"Bellek kullanımı: {last_data.memory_usage(deep=True).sum() / 1024 ** 2:.2f} MB")
+
+    @staticmethod
+    def modify_dataset():
+        data = pd.read_csv('Data/btcusd_1-min_data_indicators_strategys.csv')
+        data = data.drop(['local_min_max'],axis=1)
+
+        high_np = data['high'].values
+        low_np = data['low'].values
+        close_np = data['close'].values
+
+        print('Hesaplaniyor ...')
+        stochastic_rsi = Indikator.StochasticRSI(close_np)
+        macd_dema = Indikator.MACD_DEMA(close_np)
+        ek_ozellikler = {
+            'momentum': Indikator.Momentum(close_np),
+            'cci': Indikator.CCI(high_np, low_np, close_np),
+            'alpha_trend': Indikator.Alpha_Trend(high_np, low_np, close_np),
+            'super_trend_val': Indikator.Super_Trend(high_np, low_np, close_np)[0],
+            'parabolic_sar': Indikator.ParabolicSAR(high_np, low_np),
+            'stochastic_rsi_k': stochastic_rsi[0],
+            'stochastic_rsi_d': stochastic_rsi[0],
+            'signal_moving_avarage_50': Indikator.SignalMovingAverage(close_np, 50)[0],
+            'macd_dema_macd': macd_dema[0],
+            'macd_dema_signal': macd_dema[1],
+            'bb_trend': Indikator.BBTrend(close_np),
+            'local_min_max': Stratejiler.Local_Min_Max(high_np, low_np, close_np)
+        }
+        print('Hesaplamalar tamamlandi')
+
+        for ozellik in ek_ozellikler.keys():
+            data[ozellik] = ek_ozellikler[ozellik]
+        data = data.dropna()
+        data.replace({'BUY': 1, 'SELL': -1, False: 0}, inplace=True)
+        data = data.astype(np.float32)
+
+        print("Kaydet")
+        path = 'Data/btcusd_1-min_data_indicators_strategys_modify.csv'
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        data.to_csv(path, index=False)
 
     @staticmethod
     def mum_olusmasini_bekle(periyot):
