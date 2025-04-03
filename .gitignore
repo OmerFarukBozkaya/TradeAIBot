@@ -7,3 +7,4 @@ Trade_Durumu
 .env*
 scaler.pkl
 tradeai_model.keras
+Trade_Durumu_AI
