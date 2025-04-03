@@ -44,6 +44,7 @@ def main ():
     22)Trade aylik hedef kontrolu
     23)Tek pozisyon kapat
     24)AI
+    25)Trade AI
     """)
     com = input("Ne yapılacak :")
     if com == "0":
@@ -238,7 +239,16 @@ def main ():
         AI.main()
         b = time.time()
         print(araclar.saniye_to_hms(b - a))
-
+    elif com == "25":
+        coin = input("Coin:")
+        periyot = input("Periyot (15m,1h,4h,1d):")
+        gercek = input("Gercek:") == "True"
+        nakit = float(input("Nakit:").replace(",", "."))
+        temp_trade = input("Temp Trade:") == "True"
+        a = time.time()
+        trade.TradeEtAI(coin, periyot, gercek, nakit, temp_trade)
+        b = time.time()
+        print(araclar.saniye_to_hms(b - a))
 if __name__ == "__main__":
     main()
 
