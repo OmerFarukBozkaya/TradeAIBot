@@ -2,7 +2,6 @@ from Indikator import Indikator
 from Binance import Binance
 import pandas as pd
 import numpy as np
-from AI import predict_single_row
 
 class Stratejiler:
     static_stop_lose_value = 0.025
@@ -378,13 +377,14 @@ class Stratejiler:
         signals = []
 
         # Tüm indikatörlerin bir defa hesaplanması
-        result = Indikator.local_min_max(close, close, 14)
+        result = Indikator.local_min_max(close, close, 13)
+        adx = Indikator.ADX(high, low, close)
 
         # Her fiyat noktası için sinyal hesaplama
         for i in range(len(high)):
-            if result[i] is None:  # local_min[i] is None or local_max[i] is None or adx[i] is None or bb_mid[i] is None or ema50[i] is None
+            if result[i] is None or adx[i] is None:  # local_min[i] is None or local_max[i] is None or adx[i] is None or bb_mid[i] is None or ema50[i] is None
                 signals.append(None)
-            elif close[i] > result[i]:  # and adx[i]>30 and close[i]<bb_mid[i] and close[i]>ema50[i]
+            elif close[i] > result[i] and adx[i]>25:  # and adx[i]>30 and close[i]<bb_mid[i] and close[i]>ema50[i]
                 signals.append("BUY")
             elif close[i] < result[i]:
                 signals.append("SELL")
@@ -491,32 +491,31 @@ class Stratejiler:
 
     @staticmethod
     def AI(high,low,close):
-        n=1
-        # Hesaplamalar
-        log_return = np.log(pd.DataFrame({'close':close}) / pd.DataFrame({'close':close}).shift(1))
-        indicators = {
-            'atr': Indikator.ATR(high, low, close)[-n],
-            'log_return': log_return[-n],
-            'volatility': log_return.rolling(window=20).std()[-n]
+        from AI import predict_single_row
+        bb = np.array(Indikator.BB(close), dtype='float32')
+        hesaplamalar = {
+            # INDIKATOR
+            'adx': np.array(Indikator.ADX(high, low, close), dtype='float32'),
+            'sma50': np.array(Indikator.SMA(close, 50), dtype='float32'),
+            'sma200': np.array(Indikator.SMA(close, 200), dtype='float32'),
+            'ema21': np.array(Indikator.EMA(close, 21), dtype='float32'),
+            'ema7': np.array(Indikator.EMA(close, 7), dtype='float32'),
+            'parabolic_sar': np.array(Indikator.ParabolicSAR(high, low), dtype='float32'),
+            'super_trend_val': np.array(Indikator.Super_Trend(high, low, close)[0], dtype='float32'),
+            'alpha_trend': np.array(Indikator.Alpha_Trend(high, low, close), dtype='float32'),
+            'bb_trend': np.array(Indikator.BBTrend(close), dtype='float32'),
+            'sma_diff': np.array(np.nan, dtype='float32'),
+            'signal_moving_avarage_50': np.array(Indikator.SignalMovingAverage(close, 50)[0], dtype='float32'),
+            'bb_bot': bb[0],
+            'bb_mid': bb[1],
+            'bb_top': bb[2],
         }
-        strategies = {
-            'vama': Stratejiler.VAMA(high, low, close)[-n],
-            'bb_rsi': Stratejiler.BB_RSI(high, low, close)[-n],
-            'fdi': Stratejiler.FDI(high, low, close)[-n],
-            'bb_close': Stratejiler.BB_Close(high, low, close)[-n],
-            'ema_stochastic': Stratejiler.EMA_StochasticRSI(high, low, close)[-n],
-            'cci_atr': Stratejiler.CCI_ATR(high, low, close)[-n],
-            'signal_moving_avarage': Stratejiler.SignalMovingAvarage(high, low, close)[-n],
-            'super_trend': Stratejiler.Super_Trend(high, low, close)[-n],
-            'bbtrend_macddema': Stratejiler.BBTrend_MACDDEMA(high, low, close)[-n]
-        }
-
-        # DataFrame oluşturma
-        df = pd.DataFrame({
-            'close': close,
-            **indicators,
-            **strategies
+        # 6. DataFrame oluşturma optimizasyonu
+        last_data = pd.DataFrame({
+            'close': np.array(close, dtype='float32'),
+            **hesaplamalar,
         })
+        last_data['sma_diff'] = last_data['sma50'] - last_data['sma200']
+        last_data.dropna()
 
-        signal=predict_single_row(df)
-        return [str(signal)]
+        return predict_single_row(last_data.iloc[-20:, :])
