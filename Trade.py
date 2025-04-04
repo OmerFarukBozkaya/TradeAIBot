@@ -458,7 +458,7 @@ class Trade:
                 if self.sell_strategy.__name__ == "Alpha_Trend":
                     sell_strategy_result = self.sell_strategy(high, low, close,vol)[-2]
                 elif self.sell_strategy.__name__ == 'AI':
-                    sell_strategy_result = self.sell_strategy(high, low, close)[-1]
+                    sell_strategy_result = self.sell_strategy(high, low, close)
                 else:
                     sell_strategy_result = self.sell_strategy(high, low, close)[-2]
 
