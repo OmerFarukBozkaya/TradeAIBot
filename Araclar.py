@@ -572,17 +572,16 @@ class Araclar:
     @staticmethod
     def get_strategys():
         # Data klasörünün mevcut olup olmadığını kontrol et ve oluştur
-        os.makedirs("Data", exist_ok=True)
         default_strategys = {"15m": ["BB_RSI","BB_ADX","FDI"],"1d": ["MA_Cross","MACD","DMO"],"1h": ["TSO","BB_ADX","BB_RSI"],"4h": ["VMZI","DMO","FDI"]}
 
         # Dosya kontrolü
-        if not os.path.exists('Data/strategys.json'):
+        if not os.path.exists('Data/Strategy/strategys.json'):
             # Varsayılan dosyayı oluştur
-            with open('Data/strategys.json', 'w') as f:
+            with open('Data/Strategy/strategys.json', 'w') as f:
                 json.dump(default_strategys, f, indent=4)
             print("Varsayılan strategys.json oluşturuldu.")
             
-        with open(f'Data/strategys.json', 'r') as f:
+        with open(f'Data/Strategy/strategys.json', 'r') as f:
             result = json.load(f)
             strategys = {}
             for period in result.keys():
