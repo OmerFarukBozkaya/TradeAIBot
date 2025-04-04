@@ -1,12 +1,6 @@
-# 1. Resmi Python görüntüsünü kullan
 FROM python:3.10
-
-# 3. Bağımlılıkları kopyala ve yükle
-COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
-
-# 4. Proje dosyalarını kopyala
-COPY . .
-
-# 5. Container çalıştırıldığında çalıştırılacak komutu belirle
+WORKDIR /app
+COPY . /app
+RUN pip install --upgrade pip
+RUN pip install -r requirements.txt
 CMD ["python", "main.py"]

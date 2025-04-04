@@ -1,0 +1,12 @@
+version: '3.8'
+services:
+  tradeai:
+    image: trade_ai
+    stdin_open: true
+    tty: true
+    volumes:
+      - ./Log:/app/Log
+      - ./Data:/app/Data
+      - ./Trade_Durumu:/app/Trade_Durumu
+      - ./Trade_Durumu_AI:/app/Trade_Durumu_AI
+      - ./.env:/app/.env
