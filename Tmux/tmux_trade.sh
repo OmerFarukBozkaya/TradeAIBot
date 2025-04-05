@@ -8,6 +8,8 @@ SCRIPT_PATH="./main.py"
 JSON_FILE="gercek.json"
 # Trade durumu json dosyalarının bulunduğu dizin
 TRADE_DURUMU_DIR="./Trade_Durumu_AI/"  # Kendi dizin yolunuzu yazın
+# Sanal ortam aktivasyon scriptinin yolu
+VENV_ACTIVATE="/home/omer/TradeAIBot/.venv/bin/activate"
 
 # Tarama ve Trade işlemleri için periyot listeleri
 PERIODS=("15m" "1h" "4h" "1d")
@@ -20,6 +22,9 @@ fi
 # Yeni bir tmux oturumu başlatın, ilk pencere otomatik olarak atanacak
 tmux new-session -d -s $SESSION_NAME
 
+# Sanal ortam aktivasyon komutu
+VENV_CMD="source $VENV_ACTIVATE && "
+
 # Trade işlemleri için tmux pencereleri aç
 for i in "${!PERIODS[@]}"; do
     period="${PERIODS[$i]}"
@@ -28,8 +33,9 @@ for i in "${!PERIODS[@]}"; do
     # Periyoda göre gercek.json dosyasından değer çekme
     REAL_VALUE=$(jq -r --arg period "$period" '.[$period]' $JSON_FILE)
 
-    # Yeni bir pencere aç ve Python script'ini çalıştır, girdileri doğrudan <<EOF ile ver
-    tmux new-window -t $SESSION_NAME:$((i+1)) -n "$window_name" "python3 $SCRIPT_PATH <<EOF
+    # Yeni bir pencere aç ve Python script'ini sanal ortamda çalıştır
+    tmux new-window -t $SESSION_NAME:$((i+1)) -n "$window_name" \
+        "$VENV_CMD python3 $SCRIPT_PATH <<EOF
 5
 $period
 $REAL_VALUE
@@ -41,23 +47,21 @@ done
 
 # Trade durumu json dosyalarını işle
 window_counter=${#PERIODS[@]}
-window_counter=$((window_counter+1))  # Mevcut pencere sayısını takip et
+window_counter=$((window_counter+1))
 
 # trade_durumu json dosyalarını bul ve işle
 for file in "$TRADE_DURUMU_DIR"/trade_durumu_*.json; do
     if [ -f "$file" ]; then
-        # Dosya adından periyot ve coin bilgisini çıkar
         filename=$(basename "$file" .json)
         IFS='_' read -ra ADDR <<< "$filename"
         periyot="${ADDR[2]}"
         coin="${ADDR[3]}"
 
-        # Periyoda göre gercek.json dosyasından değer çekme (AI versiyonu)
         REAL_VALUE=$(jq -r --arg period "${periyot}_AI" '.[$period] // "False"' "$JSON_FILE" 2>/dev/null || echo "False")
 
-        # Yeni bir pencere oluştur ve main.py'yi çalıştır
         window_name="Durum_${periyot}_${coin}"
-        tmux new-window -t $SESSION_NAME:$((window_counter)) -n "$window_name" "python3 $SCRIPT_PATH <<EOF
+        tmux new-window -t $SESSION_NAME:$((window_counter)) -n "$window_name" \
+            "$VENV_CMD python3 $SCRIPT_PATH <<EOF
 25
 $coin
 $periyot
@@ -71,22 +75,24 @@ EOF
     fi
 done
 
-# Yeni bir pencere oluştur, Strategys
-tmux new-window -t $SESSION_NAME:$((window_counter)) -n "Strategys" "python3 $SCRIPT_PATH <<EOF
+# Strategys penceresi
+tmux new-window -t $SESSION_NAME:$((window_counter)) -n "Strategys" \
+    "$VENV_CMD python3 $SCRIPT_PATH <<EOF
 13
 3d
 EOF
     bash"
 window_counter=$((window_counter+1))
 
-# Yeni bir pencere oluştur, Coinlist
-tmux new-window -t $SESSION_NAME:$((window_counter)) -n "Coinlist" "python3 $SCRIPT_PATH <<EOF
+# Coinlist penceresi
+tmux new-window -t $SESSION_NAME:$((window_counter)) -n "Coinlist" \
+    "$VENV_CMD python3 $SCRIPT_PATH <<EOF
 12
 1w
 EOF
     bash"
 
-# İlk açılan pencereyi kapat (otomatik açılan boş pencere)
+# İlk açılan pencereyi kapat
 tmux kill-window -t $SESSION_NAME:0
 
 # Oturumu ekranda aktif hale getir
