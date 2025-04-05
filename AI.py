@@ -26,6 +26,7 @@ from tensorflow.keras.optimizers import Adam
 
 # Ayarı değiştir
 pd.set_option('display.max_columns', None)
+os.makedirs('Data/Model', exist_ok=True)
 
 # Global sabitler
 """ close & indikator """

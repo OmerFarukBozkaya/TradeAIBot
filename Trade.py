@@ -371,6 +371,7 @@ class Trade:
                                     self.araclar.mail_gonder(f"AL | {strateji_adi} {periyot}",f"{coin} alındı, Adet: {self.adet}, Maliyet: {close[-1]} USDT")
                                 if self.telegram_mesaj_gonder=="True":
                                     self.araclar.telegram_mesaj_gonder(f"🟢 AL | {strateji_adi} {periyot}\n{coin} alındı, Adet: {self.adet}, Maliyet: {close[-1]} USDT")
+                                time.sleep(10)
                                 return True  # İşlem açıldı, döngüden çık
                             succes = True
                         except Exception as e:

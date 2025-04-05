@@ -15,3 +15,4 @@ seaborn
 tensorflow
 ydata_profiling
 openpyxl
+jq

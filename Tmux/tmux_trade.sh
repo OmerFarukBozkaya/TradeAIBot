@@ -59,7 +59,7 @@ for file in "$TRADE_DURUMU_DIR"/trade_durumu_*.json; do
 
         REAL_VALUE=$(jq -r --arg period "${periyot}_AI" '.[$period] // "False"' "$JSON_FILE" 2>/dev/null || echo "False")
 
-        window_name="Durum_${periyot}_${coin}"
+        window_name="TradeAI_${periyot}_${coin}"
         tmux new-window -t $SESSION_NAME:$((window_counter)) -n "$window_name" \
             "$VENV_CMD python3 $SCRIPT_PATH <<EOF
 25
