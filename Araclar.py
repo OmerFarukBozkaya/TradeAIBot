@@ -26,6 +26,7 @@ from logging.handlers import RotatingFileHandler
 
 # Klasör kontrolü
 os.makedirs('Data/Strategy', exist_ok=True)
+os.makedirs('Log', exist_ok=True)
 
 # Ortak format
 formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')

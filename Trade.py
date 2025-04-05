@@ -69,6 +69,7 @@ class Trade:
             load_dotenv(selected_env_file)
         else:
             print(".env ile başlayan bir dosya bulunamadı.")
+            exit(-1)
         self.binance = Binance()
         self.araclar = Araclar()
         self.islem_acik = False  # İşlem durumu
