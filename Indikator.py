@@ -508,7 +508,9 @@ class Indikator:
         cci_values = Indikator.CCI(high, low, close)
         tso = []
         for i in range(len(close)):
-            if ema_short[i] > ema_long[i] and cci_values[i] > 0:
+            if ema_short[i] is None or ema_long[i] is None or cci_values[i] is None:
+                tso.append(None)
+            elif ema_short[i] > ema_long[i] and cci_values[i] > 0:
                 tso.append(1)
             elif ema_short[i] < ema_long[i] and cci_values[i] < 0:
                 tso.append(-1)

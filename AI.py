@@ -8,7 +8,7 @@ import Araclar
 os.environ['TF_ENABLE_ONEDNN_OPTS'] = '0'
 import matplotlib.pyplot as plt
 import plotly.express as px
-from ydata_profiling import ProfileReport
+
 import joblib
 import seaborn as sns
 
@@ -92,9 +92,9 @@ def data_frame_info(data):
     print(data['local_min_max'].value_counts().sort_index())
 
     if input('Rapor oluşturulsun mu : (1: Evet, Diğer: Hayır)')=='1':
+        from ydata_profiling import ProfileReport
         profile = ProfileReport(data, explorative=True)
         profile.to_file("Data/data_frame_rapor.html")
-        data_frame_info(data)
 
 def load_data(file_path='Data/btcusd_1-min_data_indicators_strategys.csv', nrows=None,mrows=None):
     """
