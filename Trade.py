@@ -248,7 +248,7 @@ class Trade:
                 # Eğer bir işlem zaten açılmışsa, satış sinyali bekle
                 if self.islem_acik:
                     self.satis_sinyali_bekle(periyot, temp_trade)
-                    if os.path.exists(f"Trade_Durumu/bitir_{periyot}_{coin}"):
+                    if os.path.exists(f"Trade_Durumu_AI/bitir_{periyot}_{coin}"):
                         if self.mail_gonder == "True":
                             self.araclar.mail_gonder(f"TradeAI {periyot} {coin} durduruldu",
                                                      "Son işlem kapatıldı ve trade durduruldu")

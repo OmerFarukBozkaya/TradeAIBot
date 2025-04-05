@@ -14,3 +14,4 @@ scikit_learn
 seaborn
 tensorflow
 ydata_profiling
+openpyxl
