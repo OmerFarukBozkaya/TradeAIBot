@@ -9,7 +9,7 @@ JSON_FILE="gercek.json"
 # Trade durumu json dosyalarının bulunduğu dizin
 TRADE_DURUMU_DIR="./Trade_Durumu_AI/"  # Kendi dizin yolunuzu yazın
 # Sanal ortam aktivasyon scriptinin yolu
-VENV_ACTIVATE="/home/omer/TradeAIBot/.venv/bin/activate"
+VENV_ACTIVATE="./.venv/bin/activate"
 
 # Tarama ve Trade işlemleri için periyot listeleri
 PERIODS=("15m" "1h" "4h" "1d")

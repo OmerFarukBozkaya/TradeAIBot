@@ -11,11 +11,17 @@ SCRIPT="./data_recorder.py"
 # Tmux oturum adı
 SESSION="DataRecorder"
 
+# Sanal ortam aktivasyon scriptinin yolu
+VENV_ACTIVATE="./.venv/bin/activate"
+
 # Tmux oturumunu oluştur (eğer yoksa)
 tmux has-session -t $SESSION 2>/dev/null
 if [ $? != 0 ]; then
     tmux new-session -d -s $SESSION
 fi
+
+# Sanal ortam aktivasyon komutu
+VENV_CMD="source $VENV_ACTIVATE && "
 
 # Her coin-periyot çifti için ayrı pencere aç
 for pair in "${pairs[@]}"
@@ -30,3 +36,6 @@ do
 done
 
 echo "Tüm işlemler başlatıldı. İzlemek için: tmux attach -t $SESSION"
+
+# İlk açılan pencereyi kapat
+tmux kill-window -t $SESSION_NAME:0
