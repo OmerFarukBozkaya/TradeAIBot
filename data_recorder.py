@@ -19,6 +19,7 @@ def csv_baslat(binance: Binance, coin: str, periyod: str, dosya_yolu: str) -> No
 
 def csv_guncelle(binance: Binance, coin: str, periyod: str, dosya_yolu: str) -> None:
     yeni_veri = pd.DataFrame(binance.get_coin_data(coin, periyod, 1000))
+    yeni_veri = yeni_veri.iloc[:-1,:]
     mevcut_veri = pd.read_csv(dosya_yolu) if os.stat(dosya_yolu).st_size > 0 else pd.DataFrame()
 
     if not mevcut_veri.empty:
