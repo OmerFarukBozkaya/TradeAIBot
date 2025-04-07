@@ -12,9 +12,7 @@ SCRIPT="./data_recorder.py"
 SESSION="DataRecorder"
 
 # Sanal ortam aktivasyon scriptinin yolu
-# Script'in bulunduğu dizini bul
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-VENV_ACTIVATE="$SCRIPT_DIR/.venv/bin/activate"
+VENV_ACTIVATE="/home/$(whoami)/TradeAIBot/.venv/bin/activate"
 
 # Tmux oturumunu oluştur (eğer yoksa)
 tmux has-session -t $SESSION 2>/dev/null

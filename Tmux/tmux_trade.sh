@@ -9,9 +9,7 @@ JSON_FILE="gercek.json"
 # Trade durumu json dosyalarının bulunduğu dizin
 TRADE_DURUMU_DIR="./Trade_Durumu_AI/"  # Kendi dizin yolunuzu yazın
 # Sanal ortam aktivasyon scriptinin yolu
-# Script'in bulunduğu dizini bul
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-VENV_ACTIVATE="$SCRIPT_DIR/.venv/bin/activate"
+VENV_ACTIVATE="/home/$(whoami)/TradeAIBot/.venv/bin/activate"
 
 # Tarama ve Trade işlemleri için periyot listeleri
 PERIODS=("15m" "1h" "4h" "1d")
