@@ -1,17 +1,18 @@
 #!/bin/bash
 
-# Coin - Periyot eşleşmeleri (tek tek tanımlı)
+# Coin - Periyot eşleşmeleri
 declare -a pairs=(
     "BTCUSDT_1h"
+    # Diğer coin-periyotlar buraya eklenebilir
 )
 
 # Python script dosyasının adı
-SCRIPT="./data_recorder.py"
+SCRIPT="data_recorder.py"
 
 # Tmux oturum adı
 SESSION="DataRecorder"
 
-# Sanal ortam aktivasyon scriptinin yolu
+# Dinamik kullanıcı adını al ve sanal ortam aktivasyon scripti yolunu ayarla
 VENV_ACTIVATE="/home/$(whoami)/TradeAIBot/.venv/bin/activate"
 
 # Tmux oturumunu oluştur (eğer yoksa)
@@ -19,9 +20,6 @@ tmux has-session -t $SESSION 2>/dev/null
 if [ $? != 0 ]; then
     tmux new-session -d -s $SESSION
 fi
-
-# Sanal ortam aktivasyon komutu
-VENV_CMD="source $VENV_ACTIVATE && "
 
 # Her coin-periyot çifti için ayrı pencere aç
 for pair in "${pairs[@]}"
@@ -31,11 +29,14 @@ do
 
     echo "Başlatılıyor: $WINDOW_NAME"
 
+    # Yeni pencere oluştur
     tmux new-window -t $SESSION -n "$WINDOW_NAME"
-    tmux send-keys -t $SESSION:"$WINDOW_NAME" "python3 $SCRIPT $coin $periyod" C-m
+
+    # Sanal ortamı aktive ederek script'i çalıştır
+    tmux send-keys -t $SESSION:"$WINDOW_NAME" "source $VENV_ACTIVATE && python3 $SCRIPT $coin $periyod" C-m
 done
 
-echo "Tüm işlemler başlatıldı. İzlemek için: tmux attach -t $SESSION"
+# İlk (boş) pencereyi kapat
+tmux kill-window -t $SESSION:0
 
-# İlk açılan pencereyi kapat
-tmux kill-window -t $SESSION_NAME:0
+echo "✅ Tüm işlemler başlatıldı. İzlemek için: tmux attach -t $SESSION"
