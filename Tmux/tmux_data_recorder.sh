@@ -3,6 +3,9 @@
 # Coin - Periyot eşleşmeleri
 declare -a pairs=(
     "BTCUSDT_1h"
+    "XRPUSDT_1h"
+    "BNBUSDT_1h"
+    "SOLUSDT_1h"
     # Diğer coin-periyotlar buraya eklenebilir
 )
 
