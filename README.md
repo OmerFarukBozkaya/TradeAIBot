@@ -30,13 +30,20 @@ TELEGRAM_API_TOKEN="<TELEGRAM_API_TOKEN>"
 TELEGRAM_CHAT_ID="<TELEGRAM_CHAT_ID>"
 MAIL_GONDER="True"
 TELEGRAM_MESAJ_GONDER="True"
-BUY_MA_CONTROL="True"
-BUY_BB_CONTROL="True"
+BUY_MA_CONTROL="False"
+BUY_BB_CONTROL="False"
 STRATEGY_LIMIT_15M="7"
 STRATEGY_LIMIT_1H="15"
 STRATEGY_LIMIT_4H="15"
 STRATEGY_LIMIT_1D="70"
-STRATEGY_LIMIT_CHECK="True"
+STRATEGY_LIMIT_CHECK="False"
+DINAMIK_STOP_LOSE="False"
+STATIC_STOP_LOSE="False"
+DESTEK_STOP_LOSE="False"
+TAKE_PROFIT="True"
+CALISACAK_PERIYOTLAR=["15m","1h","1d"]
+UPDATE_STRATEGYS_CHECK="False"
+CALISACAK_PERIYOTLAR_AI=["1m","15m","1h","1d"]
 ````
 
 4. Coinlist oluştur. Bunu ``python main.py`` komutunu çalıştırdıktan sonra ``10``. seçenek ile bunu oluşturabilirsin.
@@ -45,21 +52,65 @@ STRATEGY_LIMIT_CHECK="True"
 7. Bu adımların sonunda tüm fonksiyonel özellikleri sorunsuz bir şekilde çalışacaktır.
 8. Servis oluşturmak için aşağıdaki kodlari ``nano /etc/systemd/system/trade.service`` bu konumdaki dosyaya yaz.
 
-````.service
+trade.service
+````
 [Unit]
-Description=Trade false icin tmux baslatan script
-After=multi-user.target
+Description=Trade AI Bot Tmux Session Starter
+After=network.target
 
 [Service]
-Type=oneshot
-RemainAfterExit=yes
-User=<user>
-ExecStart=/bin/bash -c 'tmux new-session -d -s Trade "/bin/bash /home/<user>/TradeAIBot/Tmux/tmux_trade.sh"'
-WorkingDirectory=/home/<user>/TradeAIBot
+Type=forking
+User=<USER>
+WorkingDirectory=/home/<USER>/TradeAIBot
+Environment=TERM=xterm-256color
+Environment=DISPLAY=:0
+ExecStart=/usr/bin/tmux new-session -d -s Trade /bin/bash -c '/home/<USER>/TradeAIBot/Tmux/tmux_trade.sh'
+Restart=no
+StandardOutput=journal
+StandardError=journal
 
 [Install]
 WantedBy=multi-user.target
 ````
+ip.service
+````
+[unit]
+Description="ip adresini surekli kontrol eden ve degistiginde bildiren servis"
+After=network.target
+
+[Service]
+ExecStart=/home/<USER>/TradeAIBot/.venv/bin/python /home/<USER>/TradeAIBot/ip.py
+Restart=on-failure
+User=<USER>
+WorkingDirectory=/home/<USER>/TradeAIBot
+StandardOutput=inherit
+StandardError=inherit
+Environment=PYTHONUNBUFFERED=1
+
+[Install]
+WantedBy=multi-user.target
+````
+data_recorder.service
+````
+[Unit]
+Description=DataRecorder Tmux Session Starter
+After=network.target
+
+[Service]
+Type=forking
+User=<USER>
+WorkingDirectory=/home/<USER>/TradeAIBot
+Environment=TERM=xterm-256color
+Environment=DISPLAY=:0
+ExecStart=/usr/bin/tmux new-session -d -s DataRec /bin/bash -c '/home/<USER>/TradeAIBot/Tmux/tmux_data_recorder.sh'
+Restart=no
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target
+````
+
 9. Tmux'un çalışabilmesi için ``chmod +x Tmux/tmux_trade.sh`` komutunu çalıştır.
 10. ``sudo systemctl daemon-reload`` daha sonrasında bu komutu çalıştır.
 11. Servisi entkinleştirmek için ``sudo systemctl enable trade.service`` bu komutu çalıştır.
