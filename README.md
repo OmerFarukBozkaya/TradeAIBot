@@ -6,115 +6,124 @@ Bu proje, kripto paralar ve hisse senetleri üzerinde analiz yaparak otomatik al
 
 0. ``ssh-keygen`` ile oluşturulan anahtarın public olanını github'a kayıt et.
 1. Projeyi yerel dizine çek ``git clone git@github.com:IcedFire34/TradeAIBot.git``
-2. Projenin gereksinimlerini yükle ``pip install -r requirements.txt``
+2. venv oluştur ``python -m venv .venv``.
+3. Windowsda ``.venv\Scripts\activate`` . Linuxda ``source venv_adi/bin/activate`` ile ortamı aktif et. Sanal ortamdan çıkmak için ``deactivate`` ile çık.
+4. Paketleri yüklemek için :
+   ```
+   sudo apt update
+   sudo apt upgrade
+   sudo apt install python3-dev python3-pip build-essential cmake gcc g++ -y
+   pip install -r requirements.txt
+   ```
+5. env dosyasını oluştur ve gerekli bilgileri gir.
 
-````
-pip install python-binance
-pip install pandas
-pip install matplotlib
-pip install openpyxl
-pip install python-dotenv
-sudo apt-get install jq
-````
+    ```
+    BINANCE_API_KEY="<API_KEY>"
+    BINANCE_API_SECRET="<API_SECRET_KEY>"
+    GONDERICI_EMAIL="<FROM_MAIL>"
+    GONDERICI_EMAIL_SIFRE="<FROM_MAIL_PASS>"
+    ALICI_EMAIL="<TO_MAIL>"
+    CRYPTOPANIC_TOKEN="<TOKEN>"
+    TELEGRAM_API_TOKEN="<TELEGRAM_API_TOKEN>"
+    TELEGRAM_CHAT_ID="<TELEGRAM_CHAT_ID>"
+    MAIL_GONDER="True"
+    TELEGRAM_MESAJ_GONDER="True"
+    BUY_MA_CONTROL="False"
+    BUY_BB_CONTROL="False"
+    STRATEGY_LIMIT_15M="7"
+    STRATEGY_LIMIT_1H="15"
+    STRATEGY_LIMIT_4H="15"
+    STRATEGY_LIMIT_1D="70"
+    STRATEGY_LIMIT_CHECK="False"
+    DINAMIK_STOP_LOSE="False"
+    STATIC_STOP_LOSE="False"
+    DESTEK_STOP_LOSE="False"
+    TAKE_PROFIT="True"
+    CALISACAK_PERIYOTLAR=["15m","1h","1d"]
+    UPDATE_STRATEGYS_CHECK="False"
+    CALISACAK_PERIYOTLAR_AI=["1m","15m","1h","1d"]
+    ```
 
-3. .env dosyasını oluştur ve gerekli bilgileri gir.
+6. Coinlist oluştur. Bunu ``python main.py`` komutunu çalıştırdıktan sonra ``10``. seçenek ile bunu oluşturabilirsin.
+7. Strategylerin güncel analizini yap. Bunu ``python main.py`` komutunu çalıştırdıktan sonra ``1``. seçenek ile bunu yapabilirsin.
+8. Analiz sonuçlarınından strategys.json oluştur. Bunu ``python main.py`` komutunu çalıştırdıktan sonra ``14``. seçenek ile bunu oluşturabilirsin.
+9. Bu adımların sonunda tüm fonksiyonel özellikleri sorunsuz bir şekilde çalışacaktır.
+10. Servisin çalıştıracağı tmux dosyaları için tmux yüklemek gerek.
+    ``` 
+    sudo apt update
+    sudo apt install tmux
+    ``` 
+    Tmux yüklendikten sonra aşağıdaki kodlari 
+    ```
+    nano /etc/systemd/system/trade.service
+    nano /etc/systemd/system/ip.service
+    nano /etc/systemd/system/data_recorder.service
+    ``` 
+    bu konumdaki dosyayalara yazarak servisi oluştur.
 
-````.env
-BINANCE_API_KEY="<API_KEY>"
-BINANCE_API_SECRET="<API_SECRET_KEY>"
-GONDERICI_EMAIL="<FROM_MAIL>"
-GONDERICI_EMAIL_SIFRE="<FROM_MAIL_PASS>"
-ALICI_EMAIL="<TO_MAIL>"
-CRYPTOPANIC_TOKEN="<TOKEN>"
-TELEGRAM_API_TOKEN="<TELEGRAM_API_TOKEN>"
-TELEGRAM_CHAT_ID="<TELEGRAM_CHAT_ID>"
-MAIL_GONDER="True"
-TELEGRAM_MESAJ_GONDER="True"
-BUY_MA_CONTROL="False"
-BUY_BB_CONTROL="False"
-STRATEGY_LIMIT_15M="7"
-STRATEGY_LIMIT_1H="15"
-STRATEGY_LIMIT_4H="15"
-STRATEGY_LIMIT_1D="70"
-STRATEGY_LIMIT_CHECK="False"
-DINAMIK_STOP_LOSE="False"
-STATIC_STOP_LOSE="False"
-DESTEK_STOP_LOSE="False"
-TAKE_PROFIT="True"
-CALISACAK_PERIYOTLAR=["15m","1h","1d"]
-UPDATE_STRATEGYS_CHECK="False"
-CALISACAK_PERIYOTLAR_AI=["1m","15m","1h","1d"]
-````
+    trade.service
+    ````
+    [Unit]
+    Description=Trade AI Bot Tmux Session Starter
+    After=network.target
 
-4. Coinlist oluştur. Bunu ``python main.py`` komutunu çalıştırdıktan sonra ``10``. seçenek ile bunu oluşturabilirsin.
-5. Strategylerin güncel analizini yap. Bunu ``python main.py`` komutunu çalıştırdıktan sonra ``1``. seçenek ile bunu yapabilirsin.
-6. Analiz sonuçlarınından strategys.json oluştur. Bunu ``python main.py`` komutunu çalıştırdıktan sonra ``14``. seçenek ile bunu oluşturabilirsin.
-7. Bu adımların sonunda tüm fonksiyonel özellikleri sorunsuz bir şekilde çalışacaktır.
-8. Servis oluşturmak için aşağıdaki kodlari ``nano /etc/systemd/system/trade.service`` bu konumdaki dosyaya yaz.
+    [Service]
+    Type=forking
+    User=<USER>
+    WorkingDirectory=/home/<USER>/TradeAIBot
+    Environment=TERM=xterm-256color
+    Environment=DISPLAY=:0
+    ExecStart=/usr/bin/tmux new-session -d -s Trade /bin/bash -c '/home/<USER>/TradeAIBot/Tmux/tmux_trade.sh'
+    Restart=no
+    StandardOutput=journal
+    StandardError=journal
 
-trade.service
-````
-[Unit]
-Description=Trade AI Bot Tmux Session Starter
-After=network.target
+    [Install]
+    WantedBy=multi-user.target
+    ````
+    ip.service
+    ````
+    [unit]
+    Description="ip adresini surekli kontrol eden ve degistiginde bildiren servis"
+    After=network.target
 
-[Service]
-Type=forking
-User=<USER>
-WorkingDirectory=/home/<USER>/TradeAIBot
-Environment=TERM=xterm-256color
-Environment=DISPLAY=:0
-ExecStart=/usr/bin/tmux new-session -d -s Trade /bin/bash -c '/home/<USER>/TradeAIBot/Tmux/tmux_trade.sh'
-Restart=no
-StandardOutput=journal
-StandardError=journal
+    [Service]
+    ExecStart=/home/<USER>/TradeAIBot/.venv/bin/python /home/<USER>/TradeAIBot/ip.py
+    Restart=on-failure
+    User=<USER>
+    WorkingDirectory=/home/<USER>/TradeAIBot
+    StandardOutput=inherit
+    StandardError=inherit
+    Environment=PYTHONUNBUFFERED=1
 
-[Install]
-WantedBy=multi-user.target
-````
-ip.service
-````
-[unit]
-Description="ip adresini surekli kontrol eden ve degistiginde bildiren servis"
-After=network.target
+    [Install]
+    WantedBy=multi-user.target
+    ````
+    data_recorder.service
+    ````
+    [Unit]
+    Description=DataRecorder Tmux Session Starter
+    After=network.target
 
-[Service]
-ExecStart=/home/<USER>/TradeAIBot/.venv/bin/python /home/<USER>/TradeAIBot/ip.py
-Restart=on-failure
-User=<USER>
-WorkingDirectory=/home/<USER>/TradeAIBot
-StandardOutput=inherit
-StandardError=inherit
-Environment=PYTHONUNBUFFERED=1
+    [Service]
+    Type=forking
+    User=<USER>
+    WorkingDirectory=/home/<USER>/TradeAIBot
+    Environment=TERM=xterm-256color
+    Environment=DISPLAY=:0
+    ExecStart=/usr/bin/tmux new-session -d -s DataRec /bin/bash -c '/home/<USER>/TradeAIBot/Tmux/tmux_data_recorder.sh'
+    Restart=no
+    StandardOutput=journal
+    StandardError=journal
 
-[Install]
-WantedBy=multi-user.target
-````
-data_recorder.service
-````
-[Unit]
-Description=DataRecorder Tmux Session Starter
-After=network.target
+    [Install]
+    WantedBy=multi-user.target
+    ````
 
-[Service]
-Type=forking
-User=<USER>
-WorkingDirectory=/home/<USER>/TradeAIBot
-Environment=TERM=xterm-256color
-Environment=DISPLAY=:0
-ExecStart=/usr/bin/tmux new-session -d -s DataRec /bin/bash -c '/home/<USER>/TradeAIBot/Tmux/tmux_data_recorder.sh'
-Restart=no
-StandardOutput=journal
-StandardError=journal
-
-[Install]
-WantedBy=multi-user.target
-````
-
-9. Tmux'un çalışabilmesi için ``chmod +x Tmux/tmux_trade.sh`` komutunu çalıştır.
-10. ``sudo systemctl daemon-reload`` daha sonrasında bu komutu çalıştır.
-11. Servisi entkinleştirmek için ``sudo systemctl enable trade.service`` bu komutu çalıştır.
-12. Servisi başlatmak için ``sudo systemctl start trade.service`` bu komutu çalıştır.
+11. Tmux'un çalışabilmesi için ``chmod +x Tmux/tmux_trade.sh`` komutunu çalıştır.
+12. ``sudo systemctl daemon-reload`` daha sonrasında bu komutu çalıştır.
+13. Servisi entkinleştirmek için ``sudo systemctl enable trade.service`` bu komutu çalıştır. 
+14. Servisi başlatmak için ``sudo systemctl start trade.service`` bu komutu çalıştır.
 
 ## Menüler
 
