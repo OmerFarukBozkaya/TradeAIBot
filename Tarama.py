@@ -9,13 +9,21 @@ from concurrent.futures import ThreadPoolExecutor
 import concurrent.futures
 import logging
 import os
+from logging.handlers import RotatingFileHandler
+from glob import glob
+from dotenv import load_dotenv
+import json
 
 if not os.path.exists('Log'):
     os.makedirs('Log')
 
 # İşlem geçmişi için ayrı bir logger oluştur
 tarama = logging.getLogger('tarama')
-handler = logging.FileHandler('Log/tarama.log')
+handler = RotatingFileHandler(
+    'Log/tarama.log',
+    maxBytes=25 * 1024 * 1024,  # 25 MB
+    backupCount=1              # 1 yedek dosya tut
+)
 handler.setLevel(logging.INFO)
 formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
 handler.setFormatter(formatter)
@@ -25,12 +33,25 @@ tarama.propagate = False
 class Tarama:
     @staticmethod
     def Tara(coinlist, periyot, mum_bekle=True):
-        binance = Binance()
-        araclar = Araclar()
+        env_files = glob(".env*")
+        if env_files:
+            # İlk bulunan dosyayı seç
+            selected_env_file = env_files[0]
+            # Seçilen dosyayı yükle
+            load_dotenv(selected_env_file)
+        else:
+            print(".env ile başlayan bir dosya bulunamadı.")
+        calisacak_periyotlar = json.loads(os.getenv("CALISACAK_PERIYOTLAR"))
+        
+        if periyot not in calisacak_periyotlar:
+            tarama.info(f"Tarama {periyot} Calistirilmayacak !!!")
+            exit(0)
 
         print(f"Tarama {periyot} Calisiyor ...", time.ctime())
         tarama.info(f"Tarama {periyot} Calisiyor ...")
 
+        binance = Binance()
+        araclar = Araclar()
         while True:
             try:
                 strategys = araclar.get_strategys()
@@ -39,41 +60,41 @@ class Tarama:
                 if mum_bekle:
                     araclar.mum_olusmasini_bekle(periyot)
 
-                # Coin verilerini paralel olarak çekme ve işleme
-                with concurrent.futures.ThreadPoolExecutor() as executor:
-                    future_to_coin = {
-                        executor.submit(Tarama.process_coin_data, binance, coin, periyot, strategys[periyot]): coin
-                        for coin in coinlist
-                    }
+                if len(strategys[periyot])>0:
+                    # Coin verilerini paralel olarak çekme ve işleme
+                    with concurrent.futures.ThreadPoolExecutor() as executor:
+                        future_to_coin = {
+                            executor.submit(Tarama.process_coin_data, binance, coin, periyot, strategys[periyot]): coin
+                            for coin in coinlist
+                        }
 
-                    # Sonuçları toplama
-                    for future in concurrent.futures.as_completed(future_to_coin):
-                        coin = future_to_coin[future]
-                        try:
-                            coin_results = future.result()
-                            for strategy_name, signal in coin_results.items():
-                                if signal == "BUY":
-                                    result[strategy_name]["BUY"].append(coin)
-                                elif signal == "SELL":
-                                    result[strategy_name]["SELL"].append(coin)
-                        except Exception as e:
-                            tarama.error(f"{coin} {strategy_name} için işlem hatası: {e}")
-                            print(f"{coin} {strategy_name} için işlem hatası: {e}")
-                            continue
+                        # Sonuçları toplama
+                        for future in concurrent.futures.as_completed(future_to_coin):
+                            coin = future_to_coin[future]
+                            try:
+                                coin_results = future.result()
+                                for strategy_name, signal in coin_results.items():
+                                    if signal == "BUY":
+                                        result[strategy_name]["BUY"].append(coin)
+                                    elif signal == "SELL":
+                                        result[strategy_name]["SELL"].append(coin)
+                            except Exception as e:
+                                tarama.error(f"{coin} {strategy_name} için işlem hatası: {e}")
+                                print(f"{coin} {strategy_name} için işlem hatası: {e}")
+                                continue
 
-                # E-posta gönderme
-                mesaj, gonder = "", False
-                for strategy in result.keys():
-                    if result[strategy]["BUY"] or result[strategy]["SELL"]:
-                        gonder = True
-                        mesaj += (f"{strategy}\n"
-                                  f"BUY:\n{result[strategy]['BUY']}\n"
-                                  f"SELL:\n{result[strategy]['SELL']}\n\n")
+                    # E-posta gönderme
+                    mesaj, gonder = "", False
+                    for strategy in result.keys():
+                        if result[strategy]["BUY"] or result[strategy]["SELL"]:
+                            gonder = True
+                            mesaj += (f"{strategy}\n"
+                                      f"BUY:\n{result[strategy]['BUY']}\n"
+                                      f"SELL:\n{result[strategy]['SELL']}\n\n")
 
-                if gonder:
-                    araclar.mail_gonder(f"Tarama | {periyot}", mesaj)
-                    tarama.info(f"{periyot} tarama mail gonderildi")
-
+                    if gonder:
+                        araclar.mail_gonder(f"Tarama | {periyot}", mesaj)
+                        tarama.info(f"{periyot} tarama mail gonderildi")
                 mum_bekle = True
                 time.sleep(10)
             except Exception:
@@ -93,12 +114,19 @@ class Tarama:
             high = np.array(data['high'])
             low = np.array(data['low'])
             close = np.array(data['close'])
+            vol=np.array(data['volume_usdt'])
 
             coin_results = {}
             for strategy in strategies:
-                calculate = strategy(high[:-1], low[:-1], close[:-1])[-1]
-                if calculate == "BUY" or calculate == "SELL":
-                    coin_results[strategy.__name__] = calculate
+                if strategy.__name__ == "Alpha_Trend":
+                    strategy_result = strategy(high, low, close, vol)
+                else:
+                    strategy_result = strategy(high, low, close)
+
+                if strategy_result[-1] == "BUY":
+                    coin_results[strategy.__name__] = "BUY"
+                elif strategy_result[-1] == "SELL":
+                    coin_results[strategy.__name__] = "SELL"
             return coin_results
         except Exception as e:
             print(f"Veri işleme hatası ({coin}): {e}")
@@ -114,8 +142,28 @@ class Tarama:
                               strategys.items()}
         result_table = pd.DataFrame(index=coinlist, columns=strategies_columns.keys())
 
-        def calculate_strategy(coin, period, strategy, high, low, close):
-            result = strategy(high, low, close)[-1]
+        def calculate_strategy(coin, period, strategy, high, low, close,vol):
+            if strategy.__name__ != "Alpha_Trend":
+                strategy_results = strategy(high, low, close)
+            else:
+                strategy_results = strategy(high, low, close,vol)
+
+            son_sell_index = 0
+            for i in range(len(strategy_results) - 1, -1, -1):
+                if strategy_results[i] == 'SELL':
+                    son_sell_index = i
+                    break
+            son_buy_index = 0
+            for i in range(len(strategy_results) - 1, -1, -1):
+                if strategy_results[i] == 'BUY':
+                    son_buy_index = i
+                    break
+            if (strategy_results[-2] == "BUY") and ("BUY" not in strategy_results[son_sell_index:-2]):
+                result = "BUY"
+            elif strategy_results[-2] == "SELL" and ("SELL" not in strategy_results[son_buy_index:-2]):
+                result = "SELL"
+            else:
+                result = False
             return 1 if result == "BUY" else -1 if result == "SELL" else 0
 
         # Her period ve coin için stratejileri hesapla ve ortalama sonuçları döndür
@@ -124,13 +172,14 @@ class Tarama:
             high = np.array(data['high'])
             low = np.array(data['low'])
             close = np.array(data['close'])
+            vol = np.array(data['volume_coin'])
             if high is None or low is None or close is None:
                 print(f"Veri çekiminde hata: Coin: {coin}, Periyot: {period}")
                 return period, np.nan  # Hata durumunda NaN dön
 
             results = []
             for strategy in strategys[period]:
-                result = calculate_strategy(coin, period, strategy, high, low, close)
+                result = calculate_strategy(coin, period, strategy, high, low, close,vol)
                 results.append(result)
 
             # Ortalama sonucu hesapla ve döndür

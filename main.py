@@ -1,3 +1,4 @@
+import AI
 from Binance import Binance
 from Backtest import Backtest
 from IndikatorTest import IndikatorTest
@@ -6,7 +7,9 @@ from Araclar import Araclar
 from Trade import Trade
 import time
 from raspi_status import raspi_status
+from Indikator import Indikator
 from Stratejiler import Stratejiler
+from StratejilerTest import StratejilerTest
 
 def main ():
     binance = Binance()
@@ -35,6 +38,13 @@ def main ():
     16)Destek direnc seviyeleri
     17)Tum pozisyonlari kapat
     18)Full nakite gec
+    19)Buy result analizi
+    20)Acik pozisyon grafigi
+    21)Coin aylik sonuc
+    22)Trade aylik hedef kontrolu
+    23)Tek pozisyon kapat
+    24)AI
+    25)Trade AI
     """)
     com = input("Ne yapılacak :")
     if com == "0":
@@ -47,7 +57,7 @@ def main ():
         # Hesaplamalar Yapılıyor
         backtest.paralel_hesaplama()
         # Analiz yapılıyor
-        Araclar.strategy_result_analyze()
+        araclar.strategy_result_analyze()
         b = time.time()
         print(araclar.saniye_to_hms(b - a))
     elif com == "2":
@@ -58,11 +68,17 @@ def main ():
     elif com == "3":
         periyot = input("Periyot (15m,1h,4h,1d):")
         coin = input("Coin:")
+        functions = [func for func in dir(StratejilerTest) if
+                     callable(getattr(StratejilerTest, func)) and not func.startswith("__")]
+        functions.remove("dinamik_stop_lose")
+        functions.remove("static_stop_lose")
+        functions.remove("destek_stop_lose")
+        print(functions)
         select_strategy = input("Gösterilecek strategy:")
         a = time.time()
         if select_strategy == "":
             select_strategy = None
-        backtest.Test(canli_veriler=True, periyot=periyot, coin=coin, selected_strategy_name=select_strategy)
+        backtest.Grafik_Ciz(coin=coin, periyot=periyot,selected_strategy_name=select_strategy)
         b = time.time()
         print(araclar.saniye_to_hms(b - a))
     elif com == "4":
@@ -136,12 +152,13 @@ def main ():
     elif com == "13":
         a = time.time()
         periyot = input("Periyot:")
-        Araclar.update_strategys(periyot)
+        araclar.update_strategys(periyot)
         b = time.time()
         print(araclar.saniye_to_hms(b-a))
     elif com == "14":
         a=time.time()
-        Araclar.strategy_analyze_save()
+        araclar=Araclar()
+        araclar.strategy_analyze_save()
         b=time.time()
         print(araclar.saniye_to_hms(b-a))
     elif com == "15":
@@ -160,26 +177,78 @@ def main ():
         a=time.time()
         coin=input("Coin:")
         periyot=input("Periyot:")
-        buy_price=input("Buy price:")
+        buy_price=float(input("Buy price:"))
         data=binance.get_coin_data(coin,periyot,1000)
         if buy_price=="":
             buy_price=data['close'][-1]
         low=data['low']
-        destek,direnc,liste=indikator_test.destek_direnc_hesapla(buy_price,low)
+        destek,direnc,liste=Indikator.destek_direnc_hesapla(buy_price,low)
         print(f"Destek:{destek}\nDirenc:{direnc}\n{liste}")
         b=time.time()
         print(araclar.saniye_to_hms(b-a))
     elif com == "17":
         a=time.time()
-        binance.tum_pozisyonlari_kapat()
+        emin_misin=input("Emin misin : ")=="Evet"
+        if emin_misin:
+            binance.tum_pozisyonlari_kapat()
+        else:
+            print("Islem gerceklesmedi !")
         b=time.time()
         print(araclar.saniye_to_hms(b-a))
     elif com == "18":
         a=time.time()
-        binance.full_nakite_gec()
+        emin_misin = input("Emin misin : ") == "Evet"
+        if emin_misin:
+            binance.full_nakite_gec()
+        else:
+            print("Islem gerceklesmedi !")
         b=time.time()
         print(araclar.saniye_to_hms(b-a))
-
+    elif com == "19":
+        a=time.time()
+        binance.buy_result_analyze()
+        b=time.time()
+        print(araclar.saniye_to_hms(b-a))
+    elif com == "20":
+        a = time.time()
+        periyot=input("Periyot: ")
+        Araclar.acik_pozisyonlarin_grafigi(periyot)
+        b = time.time()
+        print(araclar.saniye_to_hms(b - a))
+    elif com == "21":
+        a = time.time()
+        coin=input("Coin: ")
+        periyot = input("Periyot: ")
+        Araclar.coin_aylik_sonuc(coin,periyot)
+        b = time.time()
+        print(araclar.saniye_to_hms(b - a))
+    elif com == "22":
+        a = time.time()
+        hedef=int(input("Hedef: "))
+        binance.trade_aylik_hedef(hedef)
+        b = time.time()
+        print(araclar.saniye_to_hms(b - a))
+    elif com == "23":
+        a = time.time()
+        periyot=input("Periyot: ")
+        binance.tek_pozisyon_kapat(periyot)
+        b = time.time()
+        print(araclar.saniye_to_hms(b - a))
+    elif com == "24":
+        a = time.time()
+        AI.main()
+        b = time.time()
+        print(araclar.saniye_to_hms(b - a))
+    elif com == "25":
+        coin = input("Coin:")
+        periyot = input("Periyot (15m,1h,4h,1d):")
+        gercek = input("Gercek:") == "True"
+        nakit = float(input("Nakit:").replace(",", "."))
+        temp_trade = input("Temp Trade:") == "True"
+        a = time.time()
+        trade.TradeEtAI(coin, periyot, gercek, nakit, temp_trade)
+        b = time.time()
+        print(araclar.saniye_to_hms(b - a))
 if __name__ == "__main__":
     main()
 

@@ -1,4 +1,5 @@
 import json
+import time
 import traceback
 from binance.client import Client       #   pip install python-binance
 import requests
@@ -7,13 +8,27 @@ import concurrent.futures
 import math
 from dotenv import load_dotenv
 import os
+from glob import glob
+from datetime import datetime, timedelta
+import numpy as np
 
 class Binance:
     def __init__(self):
-        load_dotenv()
+        env_files = glob(".env*")
+        if env_files:
+            # İlk bulunan dosyayı seç
+            selected_env_file = env_files[0]
+            # Seçilen dosyayı yükle
+            load_dotenv(selected_env_file)
+        else:
+            print(".env ile başlayan bir dosya bulunamadı.")
         self.key = os.getenv('BINANCE_API_KEY')
         self.secret = os.getenv('BINANCE_API_SECRET')
-        self.client = Client(self.key, self.secret)
+        while True:
+            if Binance.internet_var_mi():
+                self.client = Client(self.key, self.secret)
+                break
+            time.sleep(10)
         self.base_url = "https://api.binance.com"
         self.session = requests.Session()
         adapter = requests.adapters.HTTPAdapter(pool_connections=100, pool_maxsize=300)
@@ -22,7 +37,7 @@ class Binance:
     def sahip_olduklarim(self):
         sahip_olduklarim = {}
         for i in self.client.get_account()["balances"]:
-            if ((float(i["free"]) == 0 and float(i["locked"]) == 0) or i["asset"]=="NFT" or i["asset"] == "BUSD"  or (
+            if ((float(i["free"]) == 0 and float(i["locked"]) == 0) or i["asset"]=="SOLO" or i["asset"]=="NFT" or i["asset"] == "BUSD"  or (
                     i["asset"] == "BNB" and (
                     ((float(i["free"]) + float(i["locked"])) * self.get_coin_data("BNBUSDT","4h",1)['close'][-1]) <= 10))):
                 continue
@@ -31,6 +46,18 @@ class Binance:
             else:
                 sahip_olduklarim[i["asset"] + "USDT"] = float(i["free"])
         return sahip_olduklarim
+
+    @staticmethod
+    def internet_var_mi():
+        try:
+            # Google'a bir istek göndererek internet bağlantısını kontrol ediyoruz
+            response = requests.get("https://api.binance.com", timeout=5)
+            # Eğer durum kodu 200 ise bağlantı başarılı
+            if response.status_code == 200:
+                return True
+        except (requests.ConnectionError, requests.Timeout):
+            return False
+        return False
     def al(self, coin, adet):
         order = self.client.order_market_buy(symbol=coin, quantity=adet)
     def sat(self, coin, adet):
@@ -202,16 +229,31 @@ class Binance:
                 mum_sayisi = float(line[-7])
                 if tarih not in gunluk_islem_sonucu:
                     gunluk_islem_sonucu[tarih]={}
-                    gunluk_islem_sonucu[tarih]['sonuc'] = 100  # Başlangıç değeri ekliyoruz
-                    gunluk_islem_sonucu[tarih]['adet'] = 0
-                    gunluk_islem_sonucu[tarih]['stop_adet'] = 0
+                if periyot not in gunluk_islem_sonucu[tarih]:
+                    gunluk_islem_sonucu[tarih][periyot] = {}
+                if strategy not in gunluk_islem_sonucu[tarih][periyot]:
+                    gunluk_islem_sonucu[tarih][periyot][strategy]= {}
+                    gunluk_islem_sonucu[tarih][periyot][strategy]['sonuc'] = 100
+                    gunluk_islem_sonucu[tarih][periyot][strategy]['adet'] = 0
+                    gunluk_islem_sonucu[tarih][periyot][strategy]['toplam_mum'] = 0
+                    gunluk_islem_sonucu[tarih][periyot][strategy]['ortalama_mum'] = 0
+                    gunluk_islem_sonucu[tarih][periyot][strategy]['karli_islem'] = 0
+                    gunluk_islem_sonucu[tarih][periyot][strategy]['karli_islem_toplam'] = 0
+                    gunluk_islem_sonucu[tarih][periyot][strategy]['karli_islem_ortalama'] = 0
+                    gunluk_islem_sonucu[tarih][periyot][strategy]['zararli_islem'] = 0
+                    gunluk_islem_sonucu[tarih][periyot][strategy]['zararli_islem_toplam'] = 0
+                    gunluk_islem_sonucu[tarih][periyot][strategy]['zararli_islem_ortalama'] = 0
+                    gunluk_islem_sonucu[tarih][periyot][strategy]['stop_adet']=0
                 # Kümülatif olarak yüzdelik artış işlemi
-                gunluk_islem_sonucu[tarih]['sonuc'] += gunluk_islem_sonucu[tarih]['sonuc'] * sonuc / 100
-                gunluk_islem_sonucu[tarih]['adet'] = gunluk_islem_sonucu[tarih]['adet'] + 1
+                gunluk_islem_sonucu[tarih][periyot][strategy]['sonuc'] += gunluk_islem_sonucu[tarih][periyot][strategy]['sonuc'] * sonuc / 100
+                gunluk_islem_sonucu[tarih][periyot][strategy]['adet'] = gunluk_islem_sonucu[tarih][periyot][strategy]['adet'] + 1
+                gunluk_islem_sonucu[tarih][periyot][strategy]['toplam_mum'] = gunluk_islem_sonucu[tarih][periyot][strategy]['toplam_mum'] + mum_sayisi
+                gunluk_islem_sonucu[tarih][periyot][strategy]['ortalama_mum'] = gunluk_islem_sonucu[tarih][periyot][strategy]['toplam_mum'] / gunluk_islem_sonucu[tarih][periyot][strategy]['adet']
+
 
                 if line[8] == "[STOP-LOSE]":
                     # Kümülatif olarak yüzdelik artış işlemi
-                    gunluk_islem_sonucu[tarih]['stop_adet'] = gunluk_islem_sonucu[tarih]['stop_adet'] + 1
+                    gunluk_islem_sonucu[tarih][periyot][strategy]['stop_adet'] = gunluk_islem_sonucu[tarih][periyot][strategy]['stop_adet'] + 1
 
                 if periyot not in strategy_islem_sonucu:
                     strategy_islem_sonucu[periyot]={}
@@ -237,10 +279,19 @@ class Binance:
                     strategy_islem_sonucu[periyot][strategy]['zararli_islem'] = strategy_islem_sonucu[periyot][strategy]['zararli_islem'] + 1
                     strategy_islem_sonucu[periyot][strategy]['zararli_islem_toplam'] = strategy_islem_sonucu[periyot][strategy]['zararli_islem_toplam'] + sonuc
                     strategy_islem_sonucu[periyot][strategy]['zararli_islem_ortalama'] = strategy_islem_sonucu[periyot][strategy]['zararli_islem_toplam'] / strategy_islem_sonucu[periyot][strategy]['zararli_islem']
+
+                    gunluk_islem_sonucu[tarih][periyot][strategy]['zararli_islem'] = gunluk_islem_sonucu[tarih][periyot][strategy]['zararli_islem'] + 1
+                    gunluk_islem_sonucu[tarih][periyot][strategy]['zararli_islem_toplam'] = gunluk_islem_sonucu[tarih][periyot][strategy]['zararli_islem_toplam'] + sonuc
+                    gunluk_islem_sonucu[tarih][periyot][strategy]['zararli_islem_ortalama'] = gunluk_islem_sonucu[tarih][periyot][strategy]['zararli_islem_toplam'] / gunluk_islem_sonucu[tarih][periyot][strategy]['zararli_islem']
                 else:
                     strategy_islem_sonucu[periyot][strategy]['karli_islem'] = strategy_islem_sonucu[periyot][strategy]['karli_islem'] + 1
                     strategy_islem_sonucu[periyot][strategy]['karli_islem_toplam'] = strategy_islem_sonucu[periyot][strategy]['karli_islem_toplam'] + sonuc
                     strategy_islem_sonucu[periyot][strategy]['karli_islem_ortalama'] = strategy_islem_sonucu[periyot][strategy]['karli_islem_toplam'] / strategy_islem_sonucu[periyot][strategy]['karli_islem']
+
+                    gunluk_islem_sonucu[tarih][periyot][strategy]['karli_islem'] = gunluk_islem_sonucu[tarih][periyot][strategy]['karli_islem'] + 1
+                    gunluk_islem_sonucu[tarih][periyot][strategy]['karli_islem_toplam'] = gunluk_islem_sonucu[tarih][periyot][strategy]['karli_islem_toplam'] + sonuc
+                    gunluk_islem_sonucu[tarih][periyot][strategy]['karli_islem_ortalama'] = gunluk_islem_sonucu[tarih][periyot][strategy]['karli_islem_toplam'] / gunluk_islem_sonucu[tarih][periyot][strategy]['karli_islem']
+
 
                 if periyot not in periyot_islem_sonucu:
                     periyot_islem_sonucu[periyot]={}
@@ -254,7 +305,10 @@ class Binance:
 
         print(f"Gunluk islem sonucu:")
         for i in gunluk_islem_sonucu.keys():
-            print(f"{i}: {(gunluk_islem_sonucu[i]['sonuc'])-100:.2f}% | {gunluk_islem_sonucu[i]['adet']} adet islem | {gunluk_islem_sonucu[i]['stop_adet']} adet stop.")
+            for j in gunluk_islem_sonucu[i].keys():
+                for k in gunluk_islem_sonucu[i][j].keys():
+                    print(f"{i} {j} {k}: {(gunluk_islem_sonucu[i][j][k]['sonuc']) - 100:.2f}% | {gunluk_islem_sonucu[i][j][k]['karli_islem']} adet kar. ortalama: {gunluk_islem_sonucu[i][j][k]['karli_islem_ortalama']:.2f}% | {gunluk_islem_sonucu[i][j][k]['zararli_islem']} adet zarar. ortalama: {gunluk_islem_sonucu[i][j][k]['zararli_islem_ortalama']:.2f}% | {gunluk_islem_sonucu[i][j][k]['adet']} adet islem | {gunluk_islem_sonucu[i][j][k]['ortalama_mum']:.2f} ortalama mum sayisi | {gunluk_islem_sonucu[i][j][k]['stop_adet']} adet stop oldu.")
+            print("--------------------GUN SONU--------------------")
         print(f"\nStrategy islem sonucu:")
         for i in strategy_islem_sonucu.keys():
             for j in strategy_islem_sonucu[i].keys():
@@ -292,3 +346,212 @@ class Binance:
             minQty = self.get_coin_minQTY(coin)
             adet = self.miktar_duzelt(mevcut_adedim, minQty)
             self.sat(coin, adet)
+
+    @staticmethod
+    def buy_result_analyze():
+        file = open("Log/buy_result.log", "r")
+
+        periyodik_sonuclar={}
+
+        for line in file.readlines():
+            line = line.split(" ")
+            tarih = line[0]
+            saat = line[1]
+            periyod=line[5]
+            strategy=line[6]
+            coin=line[7]
+            buy_control=line[8]=="True"
+            direnc_control=line[9]=="True"
+            ma_control=line[10]=="True"
+            bb_control=line[11].replace("\n","")=="True"
+
+            if tarih not in periyodik_sonuclar:
+                periyodik_sonuclar[f"{tarih}"]={}
+            if periyod not in periyodik_sonuclar[f"{tarih}"]:
+                periyodik_sonuclar[f"{tarih}"][periyod] = {}
+            if strategy not in periyodik_sonuclar[f"{tarih}"][periyod]:
+                periyodik_sonuclar[f"{tarih}"][periyod][strategy]={}
+                periyodik_sonuclar[f"{tarih}"][periyod][strategy]['buy_sayisi'] = 0           # Buy sinyali verenlerin sayisi
+                periyodik_sonuclar[f"{tarih}"][periyod][strategy]['buy_full_false'] = 0       # Tüm ek şartlar false
+                periyodik_sonuclar[f"{tarih}"][periyod][strategy]['buy_direnc_true'] = 0      # Sadece buy ve direnc true
+                periyodik_sonuclar[f"{tarih}"][periyod][strategy]['buy_direnc_ma_true'] = 0   # Sadece buy, direnc ve ma true
+                periyodik_sonuclar[f"{tarih}"][periyod][strategy]['buy_direnc_bb_true'] = 0   # Sadece buy, direnc ve bb true
+                periyodik_sonuclar[f"{tarih}"][periyod][strategy]['buy_full_true'] = 0        # Tüm şartlar true
+
+            if buy_control:
+                periyodik_sonuclar[f"{tarih}"][periyod][strategy]['buy_sayisi']=periyodik_sonuclar[f"{tarih}"][periyod][strategy]['buy_sayisi']+1
+            if buy_control and not direnc_control and not ma_control and not bb_control:
+                periyodik_sonuclar[f"{tarih}"][periyod][strategy]['buy_full_false']=periyodik_sonuclar[f"{tarih}"][periyod][strategy]['buy_full_false']+1
+            if buy_control and direnc_control and not ma_control and not bb_control:
+                periyodik_sonuclar[f"{tarih}"][periyod][strategy]['buy_direnc_true']=periyodik_sonuclar[f"{tarih}"][periyod][strategy]['buy_direnc_true']+1
+            if buy_control and direnc_control and ma_control and not bb_control:
+                periyodik_sonuclar[f"{tarih}"][periyod][strategy]['buy_direnc_ma_true']=periyodik_sonuclar[f"{tarih}"][periyod][strategy]['buy_direnc_ma_true']+1
+            if buy_control and direnc_control and not ma_control and bb_control:
+                periyodik_sonuclar[f"{tarih}"][periyod][strategy]['buy_direnc_bb_true']=periyodik_sonuclar[f"{tarih}"][periyod][strategy]['buy_direnc_bb_true']+1
+            if buy_control and direnc_control and ma_control and bb_control:
+                periyodik_sonuclar[f"{tarih}"][periyod][strategy]['buy_full_true']=periyodik_sonuclar[f"{tarih}"][periyod][strategy]['buy_full_true']+1
+
+        for i in periyodik_sonuclar.keys():
+            for j in periyodik_sonuclar[i].keys():
+                for k in periyodik_sonuclar[i][j].keys():
+                    print(f"{i} {j} {k} | Topalm BUY sinyal sayisi: {periyodik_sonuclar[i][j][k]['buy_sayisi']} | Sadece BUY verenler: {periyodik_sonuclar[i][j][k]['buy_full_false']} | Ek sartlar saglanmadi: {periyodik_sonuclar[i][j][k]['buy_direnc_true']} | Direnc ve MA saglandi: {periyodik_sonuclar[i][j][k]['buy_direnc_ma_true']} | Direnç ve BB saglandi: {periyodik_sonuclar[i][j][k]['buy_direnc_bb_true']} | Tum sartlar saglandi: {periyodik_sonuclar[i][j][k]['buy_full_true']}")
+
+    @staticmethod
+    def trade_aylik_hedef(hedef):
+        file = open("Log/islem_gecmisi.log", "r")
+        temp=(file.readline().strip().split(" "))[0].split("-")
+        strat_date=datetime(int(temp[0]),int(temp[1]),int(temp[2]))
+        end_date=datetime.now()
+        current_date=strat_date
+        aylik_islem_sonucu = {}
+        while current_date <= end_date:
+            key = f"{current_date.year} {current_date.month:02}"
+            aylik_islem_sonucu[key] = {}
+            for salt_periyot in ["15m", "1h", "1d"]:
+                aylik_islem_sonucu[key][salt_periyot] = {}
+                aylik_islem_sonucu[key][salt_periyot]['sonuc'] = 100
+                aylik_islem_sonucu[key][salt_periyot]['adet'] = 0
+                aylik_islem_sonucu[key][salt_periyot]['toplam_mum'] = 0
+                aylik_islem_sonucu[key][salt_periyot]['ortalama_mum'] = 0
+                aylik_islem_sonucu[key][salt_periyot]['karli_islem'] = 0
+                aylik_islem_sonucu[key][salt_periyot]['karli_islem_toplam'] = 0
+                aylik_islem_sonucu[key][salt_periyot]['karli_islem_ortalama'] = 0
+                aylik_islem_sonucu[key][salt_periyot]['zararli_islem'] = 0
+                aylik_islem_sonucu[key][salt_periyot]['zararli_islem_toplam'] = 0
+                aylik_islem_sonucu[key][salt_periyot]['zararli_islem_ortalama'] = 0
+                aylik_islem_sonucu[key][salt_periyot]['stop_adet'] = 0
+                aylik_islem_sonucu[key][salt_periyot]['take_profit_adet'] = 0
+            # Bir sonraki aya geç
+            next_month = current_date.month % 12 + 1
+            next_year = current_date.year + (current_date.month // 12)
+            current_date = datetime(next_year, next_month, 1)
+
+        for line in file.readlines():
+            line = line.split(" ")
+            tarih = line[0]
+            tarih=tarih.split("-")
+            yil=tarih[0]
+            ay=tarih[1]
+            gun=tarih[2]
+            saat = line[1]
+            strategy = line[5]
+            periyot = line[6]
+            islem = line[7]
+
+            if islem == "SAT":
+                sonuc = float(line[-1][:-2])  # Sonucu yüzde olarak alıyoruz
+                mum_sayisi = float(line[-7])
+                tarih = f"{yil} {ay}"
+                # Kümülatif olarak yüzdelik artış işlemi
+                aylik_islem_sonucu[tarih][periyot]['sonuc'] += aylik_islem_sonucu[tarih][periyot]['sonuc'] * sonuc / 100
+                aylik_islem_sonucu[tarih][periyot]['adet'] = aylik_islem_sonucu[tarih][periyot]['adet'] + 1
+                aylik_islem_sonucu[tarih][periyot]['toplam_mum'] = aylik_islem_sonucu[tarih][periyot]['toplam_mum'] + mum_sayisi
+                aylik_islem_sonucu[tarih][periyot]['ortalama_mum'] = aylik_islem_sonucu[tarih][periyot]['toplam_mum'] / aylik_islem_sonucu[tarih][periyot]['adet']
+
+                if line[8] == "[STOP-LOSE]":
+                    # Kümülatif olarak yüzdelik artış işlemi
+                    aylik_islem_sonucu[tarih][periyot]['stop_adet'] = aylik_islem_sonucu[tarih][periyot]['stop_adet'] + 1
+                elif line[8] == "[TAKE-PROFIT]":
+                    aylik_islem_sonucu[tarih][periyot]['take_profit_adet'] = aylik_islem_sonucu[tarih][periyot]['take_profit_adet'] + 1
+
+                if sonuc < 0:
+                    aylik_islem_sonucu[tarih][periyot]['zararli_islem'] = aylik_islem_sonucu[tarih][periyot]['zararli_islem'] + 1
+                    aylik_islem_sonucu[tarih][periyot]['zararli_islem_toplam'] = aylik_islem_sonucu[tarih][periyot]['zararli_islem_toplam'] + sonuc
+                    aylik_islem_sonucu[tarih][periyot]['zararli_islem_ortalama'] = aylik_islem_sonucu[tarih][periyot]['zararli_islem_toplam'] / aylik_islem_sonucu[tarih][periyot]['zararli_islem']
+                else:
+                    aylik_islem_sonucu[tarih][periyot]['karli_islem'] = aylik_islem_sonucu[tarih][periyot]['karli_islem'] + 1
+                    aylik_islem_sonucu[tarih][periyot]['karli_islem_toplam'] = aylik_islem_sonucu[tarih][periyot]['karli_islem_toplam'] + sonuc
+                    aylik_islem_sonucu[tarih][periyot]['karli_islem_ortalama'] = aylik_islem_sonucu[tarih][periyot]['karli_islem_toplam'] / aylik_islem_sonucu[tarih][periyot]['karli_islem']
+
+        total_profit_lose={"15m":100,"1h":100,"1d":100}
+        hedef_profit_lose={"15m":100,"1h":100,"1d":100}
+        for i in aylik_islem_sonucu.keys():
+            for j in aylik_islem_sonucu[i].keys():
+                succes="[XX]"
+                if (aylik_islem_sonucu[i][j]['sonuc']) - 100 > hedef:
+                    succes="[OK]"
+                total_profit_lose[j]= round(total_profit_lose[j] * ((((aylik_islem_sonucu[i][j]['sonuc']) - 100)/100)+1),2)
+                hedef_profit_lose[j]= round(hedef_profit_lose[j]*(1+(hedef/100)),2)
+
+                print(
+                    f"{i} {j} {(aylik_islem_sonucu[i][j]['sonuc']) - 100:.2f}% {succes}\n\t {aylik_islem_sonucu[i][j]['adet']} adet islem | {aylik_islem_sonucu[i][j]['ortalama_mum']:.2f} ortalama mum sayisi \n\t {aylik_islem_sonucu[i][j]['karli_islem']} adet kar. ortalama: {aylik_islem_sonucu[i][j]['karli_islem_ortalama']:.2f}% \n\t {aylik_islem_sonucu[i][j]['zararli_islem']} adet zarar. ortalama: {aylik_islem_sonucu[i][j]['zararli_islem_ortalama']:.2f}% \n\t {aylik_islem_sonucu[i][j]['stop_adet']} adet stop oldu. \n\t {aylik_islem_sonucu[i][j]['take_profit_adet']} adet take-profit.")
+
+            print("--------------------AY SONU--------------------")
+        print("\tSonuc \t\tHedef")
+        for i in total_profit_lose.keys():
+            succes="[XX]"
+            if total_profit_lose[i]>hedef_profit_lose[i]:
+                succes="[OK]"
+            print(f"{i}\t{total_profit_lose[i]-100:.2f}%\t\t{hedef_profit_lose[i]-100:.2f}%\t\t{succes}")
+
+    def tek_pozisyon_kapat(self,periyot):
+        dosya_yolu = f"Trade_Durumu/trade_durumu_{periyot}.json"
+        try:
+            with open(dosya_yolu, "r", encoding="utf-8") as json_dosya:
+                veri = json.load(json_dosya)
+                if veri["islem_acik"]:
+                    coin = veri["alinan_coin"]
+                    mevcut_adedim = self.sahip_olduklarim()[coin]
+                    minQty = self.get_coin_minQTY(coin)
+                    adet = self.miktar_duzelt(mevcut_adedim, minQty)
+                    self.sat(coin, adet)
+        except:
+            hata = traceback.format_exc()
+            print(f"HATA {dosya_yolu} dosyasinda hata {hata}")
+
+    @staticmethod
+    def hlc3(high, low, close):
+        # NumPy dizilerine dönüştürme (performansı artırır)
+        high = np.array(high)
+        low = np.array(low)
+        close = np.array(close)
+
+        # Ortalama hesaplama
+        return ((high + low + close) / 3).tolist()
+
+    @staticmethod
+    def hl2(high, low):
+        # NumPy dizilerine dönüştürme (performansı artırır)
+        high = np.array(high)
+        low = np.array(low)
+
+        # Ortalama hesaplama
+        return ((high + low) / 2).tolist()
+
+    @staticmethod
+    def ohlc4(open, high, low, close):
+        # NumPy dizilerine dönüştürme (performansı artırır)
+        open = np.array(open)
+        high = np.array(high)
+        low = np.array(low)
+        close = np.array(close)
+
+        # Ortalama hesaplama
+        return ((open + high + low + close) / 4).tolist()
+
+    @staticmethod
+    def heiken_ashi(data):
+        # Heiken Ashi hesaplama için Open, High, Low ve Close verilerini alır.
+        ha_data = {
+            'open': [],
+            'high': [],
+            'low': [],
+            'close': []
+        }
+
+        for i in range(len(data['close'])):
+            ha_close = (data['open'][i] + data['high'][i] + data['low'][i] + data['close'][i]) / 4
+            if i == 0:
+                ha_open = data['open'][i]  # İlk mum için aynı kalır.
+            else:
+                ha_open = (ha_data['open'][i - 1] + ha_data['close'][i - 1]) / 2
+
+            ha_high = max(data['high'][i], ha_open, ha_close)
+            ha_low = min(data['low'][i], ha_open, ha_close)
+
+            ha_data['open'].append(ha_open)
+            ha_data['high'].append(ha_high)
+            ha_data['low'].append(ha_low)
+            ha_data['close'].append(ha_close)
+
+        return ha_data

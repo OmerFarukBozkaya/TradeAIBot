@@ -4,4 +4,8 @@ __pycache__
 Data
 Log
 Trade_Durumu
-.env
+.env*
+.venv
+scaler.pkl
+tradeai_model.keras
+Trade_Durumu_AI

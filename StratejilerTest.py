@@ -1,5 +1,6 @@
 from Indikator import Indikator
-import pandas as pd
+from IndikatorTest import IndikatorTest
+from Binance import Binance
 import numpy as np
 
 class StratejilerTest:
@@ -7,13 +8,14 @@ class StratejilerTest:
     atr_factor_strong_trend = 2.0
     atr_factor_weak_trend = 1.2
     destek_stop_lose_tolerans = 0.01
+    take_profit_limit = 5
 
     @staticmethod
-    def dinamik_stop_lose(atr,adx,close, highest_price,i):
-        if highest_price is None or close[i] > highest_price:
-            highest_price = close[i]
+    def dinamik_stop_lose(atr,adx,close, highest_price):
+        if highest_price is None or close[-1] > highest_price:
+            highest_price = close[-1]
         # Piyasa modu belirleme
-        adx = adx[i]
+        adx = adx[-1]
         if adx is not None and adx < 20:
             return None, highest_price, None  # Yatay piyasada stop çalışmaz
 
@@ -24,13 +26,12 @@ class StratejilerTest:
             atr_factor = StratejilerTest.atr_factor_weak_trend
 
         # Stop seviyesi hesaplama
-        stop_seviyesi = highest_price - (atr[i] * atr_factor)
+        stop_seviyesi = highest_price - (atr[-1] * atr_factor)
 
-        if close[i] < stop_seviyesi:
+        if close[-1] < stop_seviyesi:
             return "STOP-LOSE", None, None
 
         return None, highest_price, stop_seviyesi
-
     @staticmethod
     def static_stop_lose(close, buy_price, i):
         if buy_price is not None and close[i] < (buy_price * (1 - StratejilerTest.static_stop_lose_value)):
@@ -81,7 +82,15 @@ class StratejilerTest:
             return None,None,"STOP-LOSE"
         else:
             return destek,direnc,None
-
+    @staticmethod
+    def take_profit(durum_list):
+        if len(durum_list[:-1]) != 0:
+            ortalama=sum(durum_list[:-1])/len(durum_list[:-1])
+        else:
+            ortalama=0
+        if ortalama > StratejilerTest.take_profit_limit and durum_list[-1]<ortalama:
+            return None,"TAKE-PROFIT"
+        return ortalama,False
     @staticmethod
     def MACD(high, low, close):
         # Sonuçları tutmak için liste
@@ -102,7 +111,14 @@ class StratejilerTest:
                 signals.append("SELL")
             else:
                 signals.append(False)
-        return signals
+        indicators={"main_indicators":None,
+                    "sub_indicators": [{"macd_values":macd_values,"macd_signal":macd_signal},
+                                       {"RSI":rsi_values},
+                                       {"ADX":adx_values}],
+                    "sub_horizontal_lines":[[{"name": "", "value": 0, "color": "black"}],
+                                            [{"name": "", "value": 50, "color": "black"},{"name": "", "value": 70, "color": "green"},{"name": "", "value": 30, "color": "red"}],
+                                            [{"name": "", "value": 25, "color": "black"}]]}
+        return signals,indicators
 
     @staticmethod   #   OK
     def VMZI(high, low, close):
@@ -123,7 +139,17 @@ class StratejilerTest:
                 signals.append("SELL")
             else:
                 signals.append(False)
-        return signals
+        indicators = {"main_indicators": None,
+                      "sub_indicators": [{"VMZI": vmzi},
+                                         {"ADX": adx},
+                                         {"RSI": rsi},
+                                         {"ATR": atr}],
+                      "sub_horizontal_lines":[[{"name": "", "value": 1.5, "color": "black"}],
+                                              [{"name": "", "value": 25, "color": "black"}],
+                                            [{"name": "", "value": 50, "color": "black"},{"name": "", "value": 70, "color": "green"},{"name": "", "value": 30, "color": "red"}],
+                                              []
+                                            ]}
+        return signals,indicators
 
     @staticmethod   #   OK
     def VAMA(high, low, close):
@@ -141,7 +167,10 @@ class StratejilerTest:
                 signals.append("SELL")
             else:
                 signals.append(False)
-        return signals
+        indicators = {"main_indicators": {"SMA50":sma_50,"VAMA": vama},
+                      "sub_indicators": None,
+                      "sub_horizontal_lines":[]}
+        return signals,indicators
 
     @staticmethod   #   OK
     def TSO(high, low, close):
@@ -160,7 +189,13 @@ class StratejilerTest:
                 signals.append("SELL")
             else:
                 signals.append(False)
-        return signals
+        indicators = {"main_indicators": None,
+                      "sub_indicators": [{"TSO": tso},{"ATR": atr}],
+                      "sub_horizontal_lines":[
+                          [{"name": "", "value": 0, "color": "black"}],
+                          []
+                                              ]}
+        return signals,indicators
 
     @staticmethod   #   OK
     def BB_RSI(high, low, close):
@@ -180,7 +215,15 @@ class StratejilerTest:
                 signals.append("SELL")
             else:
                 signals.append(False)
-        return signals
+        indicators = {"main_indicators": None,
+                      "sub_indicators": [
+                          {"RSI": rsi, "RSI_BB_DOWN": bb_rsi_down, "BB_RSI_MID":bb_rsi_mid, "BB_RSI_UP":bb_rsi_up},
+                          {"ATR": atr}],
+                      "sub_horizontal_lines":[
+                          [{"name": "", "value": 50, "color": "black"},{"name": "", "value": 70, "color": "green"},{"name": "", "value": 30, "color": "red"}],
+                          []
+                      ]}
+        return signals,indicators
 
     @staticmethod   #   OK
     def FDI(high, low, close):
@@ -202,7 +245,19 @@ class StratejilerTest:
                 signals.append("SELL")
             else:
                 signals.append(False)
-        return signals
+        indicators = {"main_indicators": None,
+                      "sub_indicators": [
+                          {"FDI":fdi},
+                          {"macd_values": macd_values, "macd_signal": macd_signal},
+                          {"RSI": rsi},
+                          {"ADX": adx}],
+                      "sub_horizontal_lines":[
+                          [{"name": "", "value": 0, "color": "black"}],
+                          [{"name": "", "value": 0, "color": "black"}],
+                          [{"name": "", "value": 50, "color": "black"},{"name": "", "value": 70, "color": "green"},{"name": "", "value": 30, "color": "red"}],
+                          [{"name": "", "value": 25, "color": "black"}]
+                                              ]}
+        return signals,indicators
 
     @staticmethod   #   OK
     def BB_Close(high, low, close):
@@ -221,28 +276,37 @@ class StratejilerTest:
                 signals.append("SELL")
             else:
                 signals.append(False)
-        return signals
+        indicators = {"main_indicators": {"BB_DOWN":bb_down,"BB_MID":bb_mid,"BB_UP":bb_up},
+                      "sub_indicators": [{"ATR": atr}],
+                      "sub_horizontal_lines":[[]]}
+        return signals,indicators
 
     @staticmethod   #   OK
-    def MA_Cross(high, low, close):
+    def EMA_Cross(high, low, close):
         signals=[]
 
-        ma_9 = Indikator.SMA(close, 9)
-        ma_50 = Indikator.SMA(close, 50)
+        ema_kisa = Indikator.EMA(close, 21)
+        ema_uzun = Indikator.EMA(close, 50)
         adx = Indikator.ADX(high, low, close)
         atr = Indikator.ATR(high, low, close)  # ATR eklendi
 
         # Her fiyat noktası için sinyal hesaplama
         for i in range(len(close)):
-            if ma_9[i] is None or ma_9[i-1] is None or ma_50[i] is None or ma_50[i-1] is None or adx[i] is None or atr[i] is None or atr[i-1] is None:
+            if ema_kisa[i] is None or ema_kisa[i-1] is None or ema_uzun[i] is None or ema_uzun[i-1] is None or adx[i] is None or atr[i] is None or atr[i-1] is None:
                 signals.append(None)
-            elif ma_9[i-1] < ma_50[i-1] and ma_9[i] > ma_50[i] and adx[i] > 25 and atr[i] > atr[i-1]:
+            elif ema_kisa[i-1] < ema_uzun[i-1] and ema_kisa[i] > ema_uzun[i] and adx[i] > 25 and atr[i] > atr[i-1]:
                 signals.append("BUY")
-            elif ((ma_9[i-1] > ma_50[i-1] and ma_9[i] < ma_50[i]) or (ma_50[i] * 0.99 > close[i])) and adx[i]>25 and atr[i] > atr[i-1]:
+            elif ((ema_kisa[i-1] > ema_uzun[i-1] and ema_kisa[i] < ema_uzun[i]) or (ema_kisa[i] * 0.99 > close[i])) and adx[i]>25 and atr[i] > atr[i-1]:
                 signals.append("SELL")
             else:
                 signals.append(False)
-        return signals
+        indicators = {"main_indicators": {"EMA_KISA":ema_kisa,"EMA_UZUN":ema_uzun},
+                      "sub_indicators": [{"ATR": atr},{"ADX": adx}],
+                      "sub_horizontal_lines":[
+                          [],
+                          [{"name": "", "value": 25, "color": "black"}]
+                                              ]}
+        return signals,indicators
 
     @staticmethod   #   OK
     def DMO(high, low, close):
@@ -264,7 +328,19 @@ class StratejilerTest:
                 signals.append("SELL")
             else:
                 signals.append(False)
-        return signals
+        indicators = {"main_indicators": {"BB_DOWN":bb_down,"BB_MID":bb_mid,"BB_UP":bb_up},
+                      "sub_indicators": [
+                          {"DMO":dmo},
+                          {"RSI": rsi},
+                          {"ADX": adx},
+                          {"ATR":atr}],
+                      "sub_horizontal_lines":[
+                          [{"name": "", "value": 1, "color": "black"}],
+                          [{"name": "", "value": 50, "color": "black"},{"name": "", "value": 70, "color": "green"},{"name": "", "value": 30, "color": "red"}],
+                          [{"name": "", "value": 25, "color": "black"}],
+                          []
+                                              ]}
+        return signals,indicators
 
     @staticmethod   #   OK
     def BB_ADX(high, low, close):
@@ -283,7 +359,13 @@ class StratejilerTest:
                 signals.append("SELL")
             else:
                 signals.append(False)
-        return signals
+        indicators = {"main_indicators": {"BB_DOWN": bb_down, "BB_MID": bb_mid, "BB_UP": bb_up},
+                      "sub_indicators": [{"ADX": adx}],
+                      "sub_horizontal_lines":[
+                          [{"name": "", "value": 30, "color": "black"}]
+                                              ]}
+        return signals,indicators
+
     @staticmethod
     def Alpha_Trend(high,low,close,vol):
         signals=[]
@@ -297,4 +379,250 @@ class StratejilerTest:
                 signals.append("SELL")
             else:
                 signals.append(False)
-        return signals
+        indicators = {"main_indicators": {"Alpha_Trend": alpha_trend},
+                      "sub_indicators": None,
+                      "sub_horizontal_lines":None}
+        return signals,indicators
+
+    @staticmethod
+    def EMA_StochasticRSI(high, low, close):
+        signals = []
+
+        ema_50 = Indikator.EMA(close, 50)
+        stoch_k, stoch_d = Indikator.StochasticRSI(close)
+
+        for i in range(len(close)):
+            if ema_50[i] is None or stoch_k[i] is None or stoch_d[i] is None:
+                signals.append(None)
+            elif close[i] > ema_50[i] and stoch_k[i] > stoch_d[i]:
+                signals.append("BUY")
+            elif close[i] < ema_50[i] and stoch_k[i] < stoch_d[i]:
+                signals.append("SELL")
+            else:
+                signals.append(False)
+
+        indicators = {"main_indicators": {"EMA50": ema_50},
+                      "sub_indicators": [{"%K": stoch_k,"%D": stoch_d}],
+                      "sub_horizontal_lines": [
+                          [{"name": "", "value": 50, "color": "yellow"},{"name": "", "value": 30, "color": "red"},{"name": "", "value": 70, "color": "green"}]
+                      ]}
+
+        return signals,indicators
+
+    @staticmethod
+    def CCI_ATR(high, low, close):
+        signals = []
+
+        cci = Indikator.CCI(high, low, close)
+        atr = Indikator.ATR(high, low, close)
+
+        for i in range(len(close)):
+            if cci[i] is None or atr[i] is None or atr[i - 1] is None:
+                signals.append(None)
+            elif cci[i] > 100 and atr[i] > atr[i - 1]:
+                signals.append("BUY")
+            elif cci[i] < 0 and atr[i] < atr[i - 1]:
+                signals.append("SELL")
+            else:
+                signals.append(False)
+        indicators = {"main_indicators": None,
+                      "sub_indicators": [{"CCI": cci},{"ATR": atr}],
+                      "sub_horizontal_lines": [[]]}
+
+        return signals,indicators
+
+    @staticmethod
+    def Local_Min_Max(high,low,close):
+        # Sonuçları tutmak için liste
+        signals = []
+
+        # Tüm indikatörlerin bir defa hesaplanması
+        result,local_min,local_max = IndikatorTest.local_min_max(close, close,13)
+        adx = IndikatorTest.ADX(high, low, close)
+
+        # Her fiyat noktası için sinyal hesaplama
+        for i in range(len(high)):
+            if result[i] is None or adx[i] is None:  # local_min[i] is None or local_max[i] is None or adx[i] is None or bb_mid[i] is None or ema50[i] is None
+                signals.append(None)
+            elif close[i] > result[i] and adx[i]>25: #and adx[i]>30 and close[i]<bb_mid[i] and close[i]>ema50[i]
+                signals.append("BUY")
+            elif close[i] < result[i]:
+                signals.append("SELL")
+            else:
+                signals.append(False)
+        indicators = {"main_indicators": {"MIN":local_min,"MAX":local_max,"RESAULT":result},
+                      "sub_indicators": [],
+                      "sub_horizontal_lines": [[]]}
+        return signals, indicators
+
+    @staticmethod
+    def SignalMovingAvarage(high,low,close):
+        # Sonuçları tutmak için liste
+        signals = []
+
+        # Tüm indikatörlerin bir defa hesaplanması
+        ma,css = IndikatorTest.SignalMovingAverage(close,50)
+        adx=Indikator.ADX(high, low, close)
+
+        # Her fiyat noktası için sinyal hesaplama
+        for i in range(len(high)):
+            if ma[i] is None or adx[i] is None:
+                signals.append(None)
+            elif css[i]==1 and adx[i]>25:
+                signals.append("BUY")
+            elif css[i]==-1:
+                signals.append("SELL")
+            else:
+                signals.append(False)
+        indicators = {"main_indicators": {"MA": ma},
+                      "sub_indicators": [{"SIGNAL":css}],
+                      "sub_horizontal_lines": [[{"name": "", "value": 0, "color": "black"}]]}
+        return signals, indicators
+
+    @staticmethod
+    def Super_Trend(high,low,close):
+        signals = []
+        supertrend, direction = Indikator.Super_Trend(high, low, close)
+        for i in range(len(close)):
+            if direction[i] is None:
+                signals.append(None)
+            elif direction[i] == 1:
+                signals.append("BUY")
+            elif direction[i] == -1:
+                signals.append("SELL")
+            else:
+                signals.append(False)
+        indicators = {"main_indicators": {"Super_Trend": supertrend},
+                      "sub_indicators": [{"Direction": direction}],
+                      "sub_horizontal_lines":[
+                          [{"name": "", "value": 0, "color": "black"}]
+                                              ]}
+        return signals,indicators
+
+    @staticmethod
+    def SqueezeMomentum(high, low, close):
+        """
+        Squeeze Momentum indikatörüne dayalı bir strateji.
+        """
+        signals = []
+
+        # İndikatör hesaplamaları
+        momentum, momentum_state, squeeze_state = IndikatorTest.SqueezeMomentumIndicator(close, high, low)
+        adx=Indikator.ADX(high, low, close)
+        rsi=IndikatorTest.RSI(close)
+        bb_down,bb_mid,bb_up=Indikator.BB(close)
+        ema50=Indikator.EMA(close,50)
+
+
+        # Sinyal üretimi
+        for i in range(len(close)):
+            if momentum[i] is None or squeeze_state[i] is None or ema50[i] is None:
+                signals.append(None)
+            elif squeeze_state[i] == 1 and momentum[i]>0 and close[i]>ema50[i]:
+                signals.append("BUY")  # Squeeze On ve pozitif momentum artışı
+            elif squeeze_state[i] == -1 and momentum[i]<0 and close[i]<ema50[i]:
+                signals.append("SELL")  # Squeeze Off ve negatif momentum artışı
+            else:
+                signals.append(False)
+
+        # Göstergeler ve yatay çizgiler
+        indicators = {
+            "main_indicators": None,
+            "sub_indicators": [{"Momentum State": momentum_state}, {"Squeeze State": squeeze_state}],
+            "sub_horizontal_lines": [
+                [{"name": "Zero Line", "value": 0, "color": "black"}]
+            ],
+        }
+
+        return signals, indicators
+
+    @staticmethod
+    def SMC_Strategy(high, low, close):
+        """
+        Gelişmiş SMC stratejisi: Momentum ve Trend gücü dahil
+        """
+        smc = IndikatorTest.SMC(high, low, close)
+        highs, lows = smc["highs"], smc["lows"]
+        msb_up, msb_down = smc["msb_up"], smc["msb_down"]
+        fvg_up, fvg_down = smc["fvg_up"], smc["fvg_down"]
+
+        # Momentum ve trend gücü indikatörleri
+        rsi = IndikatorTest.RSI(close)
+        adx = IndikatorTest.ADX(high, low, close)
+        ema_kisa = IndikatorTest.EMA(Binance.hlc3(high, low, close),50)
+        ema_uzun = IndikatorTest.EMA(Binance.hlc3(high, low, close),200)
+
+        signals = []
+        for i in range(len(close)):
+            if msb_up[i] and adx[i] > 25 and ema_uzun[i] is not None and ema_kisa[i] is not None and ema_kisa[i]<close[i] and ema_uzun[i]<ema_kisa[i]:
+                signals.append("BUY")
+            elif msb_down[i] and adx[i] > 25:
+                signals.append("SELL")
+            else:
+                signals.append(None)
+
+        indicators = {
+            "main_indicators": {"Highs": highs, "Lows": lows,"EMA_Kisa":ema_kisa, "EMA_Uzun": ema_uzun},
+            "sub_indicators": [{"RSI": rsi}, {"ADX": adx}],
+            "sub_horizontal_lines": [[{"name": "50", "value": 50, "color": "black"},{"name": "70", "value": 70, "color": "green"},{"name": "30", "value": 30, "color": "red"}],[{"name": "25", "value": 25, "color": "green"}]]
+        }
+
+        return signals, indicators
+
+    @staticmethod
+    def E_A_S_Y(high,low,close):
+        signals=[]
+
+        ema_low_5=Indikator.EMA(low,8)
+        ema_high_5=Indikator.EMA(high,8)
+
+        ema_close_20=Indikator.EMA(close,34)
+        rsi=Indikator.RSI(low)
+        atr=Indikator.ATR(high, low, close)
+        adx=Indikator.ADX(high, low, close)
+        macd,macd_signal=Indikator.MACD(close)
+        bb_alt,bb_mid,bb_ust=Indikator.BB(close)
+
+        for i in range(len(close)):
+            if ema_high_5[i] is None or ema_low_5[i] is None:
+                signals.append(None)
+                continue
+            if close[i]>ema_high_5[i] :
+                signals.append("BUY")
+            elif close[i]<ema_low_5[i]:
+                signals.append("SELL")
+            else:
+                signals.append(False)
+
+        indicators = {"main_indicators": {"EMA_LOW_5":ema_low_5,"EMA_HIGH_5":ema_high_5,"EMA_CLOSE_20":ema_close_20},
+                      "sub_indicators": [{"ADX":adx}],
+                      "sub_horizontal_lines": [[{"name": "", "value": 30, "color": "green"}]]}
+
+        return signals,indicators
+
+    @staticmethod
+    def BBTrend_MACDDEMA(high,low,close):
+        signals = [None]
+
+        bb_trend = IndikatorTest.BBTrend(close,30)
+        macd,signal,_ =  IndikatorTest.MACD_DEMA(close)
+
+        # Her fiyat noktası için sinyal hesaplama
+        for i in range(1,len(close)):
+            if macd[i-1] is None or signal[i-1] is None or bb_trend[i] is None:
+                signals.append(None)
+            elif macd[i]<0 and signal[i]<0 and macd[i-1]<signal[i-1] and macd[i]>signal[i] and bb_trend[i]>0:
+                signals.append("BUY")
+            elif macd[i]>0 and signal[i]>0 and macd[i]<signal[i] and bb_trend[i]<0:
+                signals.append("SELL")
+            else:
+                signals.append(False)
+        indicators = {"main_indicators": None,
+                      "sub_indicators": [
+                          {"BB_Trend": bb_trend},
+                          {"MACD": macd,"SIGNAL":signal}],
+                      "sub_horizontal_lines": [
+                          [{"name": "", "value": 0, "color": "black"}],
+                          [{"name": "", "value": 0, "color": "black"}]
+                      ]}
+        return signals, indicators
