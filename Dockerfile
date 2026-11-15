@@ -26,6 +26,8 @@ RUN mkdir -p Data Log state Trade_Durumu Trade_Durumu_AI
 EXPOSE 8080
 
 HEALTHCHECK --interval=30s --timeout=5s --retries=3 \
-    CMD python -c "import urllib.request; urllib.request.urlopen('http://localhost:8080/api/health')" || exit 1
+    CMD python -c "import os, urllib.request; urllib.request.urlopen('http://localhost:%s/api/health' % os.getenv('TRADEAI_PORT', '8080'))" || exit 1
 
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8080"]
+# Port `.env` içindeki TRADEAI_PORT'tan gelir (varsayılan 8080).
+# exec: uvicorn PID 1 olarak kalsın, sinyaller doğru iletilsin.
+CMD ["sh", "-c", "exec uvicorn app.main:app --host 0.0.0.0 --port \"${TRADEAI_PORT:-8080}\""]

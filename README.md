@@ -33,11 +33,15 @@ Kripto para analizi, backtest, tarama ve otomatik alım-satım için **web aray�
    docker compose up -d --build
    ```
 
-4. Tarayıcıda açın: <http://localhost:8080>
+4. Tarayıcıda açın: <http://localhost:8080> (portu değiştirdiyseniz
+   `.env` içindeki `TRADEAI_PORT` değerini kullanın, ör. <http://localhost:8089>)
 
 5. İlk girişten sonra **Ayarlar → Şifre değiştir** ile şifreyi güncelleyin.
 
-> Varsayılan olarak uygulama yalnızca `127.0.0.1:8080` adresine yayınlanır. Dışarı açmak için `docker-compose.yml` içindeki port satırını bilinçli olarak değiştirin ve HTTPS kullanın.
+> Port **`.env` → `TRADEAI_PORT`** ile belirlenir (varsayılan `8080`). Hem container
+> içindeki uvicorn hem host port eşlemesi bu değeri kullanır; değiştirdikten sonra
+> `docker compose up -d` yeterlidir (yeniden derleme gerekmez). Uygulama yalnızca
+> `127.0.0.1` adresine yayınlanır; dışarı açmak için HTTPS kullanın.
 
 ### AI profili (opsiyonel)
 
@@ -1154,7 +1158,7 @@ ve altyapı içindir; normal kullanımda panelden değiştirilir:
 |----------|----------|
 | `ADMIN_USER` / `ADMIN_PASSWORD` | İlk yönetici hesabı |
 | `TRADEAI_SECRET_KEY` | Oturum ve gizli ayar şifrelemesi |
-| `TRADEAI_PORT` | Web portu |
+| `TRADEAI_PORT` | Web portu (varsayılan 8080; `docker-compose.yml` host eşlemesi ve healthcheck aynı değeri kullanır) |
 | `LIVE_TRADING_ENABLED` | Canlı işlem başlangıç izni (panelden değiştirilir) |
 | `PAPER_FEE` / `PAPER_SLIPPAGE` | Test modu maliyetleri |
 | `DEFAULT_CASH` | Yeni bot varsayılan nakdi |
