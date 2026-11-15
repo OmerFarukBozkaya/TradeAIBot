@@ -102,6 +102,7 @@ p { margin: 0 0 10px; }
 .mono { font-family: var(--mono); }
 .error { color: var(--red); font-size: 13px; margin-top: 10px; white-space: pre-wrap; }
 .mt { margin-top: 14px; }
+hr.sep { border: 0; border-top: 1px solid var(--line); margin: 16px 0; }
 
 /* ---------- Login ---------- */
 .overlay {

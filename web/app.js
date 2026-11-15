@@ -4398,8 +4398,8 @@ function renderAnalysisResult(type, job) {
 /* İşlem geçmişi                                                       */
 /* ------------------------------------------------------------------ */
 async function renderTrades(root) {
-  const [trades, summary, positions, stats] = await Promise.all([
-    api("/trades?limit=200"), api("/summary"), api("/positions?status=open"), api("/stats"),
+  const [trades, summary, positions, stats, bots] = await Promise.all([
+    api("/trades?limit=200"), api("/summary"), api("/positions?status=open"), api("/stats"), api("/bots"),
   ]);
   const total = summary.total || {};
   const t = stats.totals || {};
@@ -4449,14 +4449,54 @@ async function renderTrades(root) {
       <div style="overflow:auto"><table><thead><tr><th>Zaman</th><th>Bot</th><th>Coin</th><th>Yön</th><th>Adet</th><th>Fiyat</th><th>K/Z</th><th>Mod</th><th>Neden</th></tr></thead><tbody>
       ${trades.map((tr) => `<tr><td class="mono">${esc(fmtIso(tr.created_at))}</td><td>${esc(tr.bot_id || "—")}</td><td>${esc(tr.coin)}</td><td>${tr.side === "BUY" ? '<span class="tag green">AL</span>' : '<span class="tag red">SAT</span>'}</td><td>${fmt(tr.quantity, 8)}</td><td>${fmt(tr.price, 8)}</td><td>${tr.pnl_pct == null ? "—" : pct(tr.pnl_pct)}</td><td>${esc(tr.mode)}</td><td>${tradeReason(tr.reason)}</td></tr>`).join("") || '<tr><td colspan="9" class="muted">Henüz işlem yok.</td></tr>'}
       </tbody></table></div>
+    </div>
+
+    <div class="card danger-card mt">
+      <h3 style="margin:0">İstatistikleri sıfırla</h3>
+      <p class="muted small" style="margin:4px 0 0">
+        İşlem geçmişi, K/Z grafikleri, sinyal/olay kayıtları, kapanmış pozisyonlar ve bitmiş iş
+        kayıtları silinir; botların birikmiş K/Z sayacı sıfırlanır.
+        <b>Açık pozisyonlar ve nakit korunur</b>; botlar durdurulur (sonra Botlar sayfasından başlatılır).
+      </p>
+      <div class="row mt">
+        ${field("Bot", `<select id="tr-reset-bot">
+          <option value="">Tüm botlar</option>
+          ${(bots || []).map((b) => `<option value="${esc(b.id)}">${esc(b.name)}</option>`).join("")}
+        </select>`)}
+        ${field("Şifre", `<input id="tr-reset-pass" type="password">`)}
+        ${field("Onay metni", `<input id="tr-reset-confirm" placeholder="SIFIRLA">`)}
+        <button class="danger" id="tr-reset-btn" type="button">İstatistikleri sıfırla</button>
+      </div>
     </div>`;
+
+  $("#tr-reset-btn").addEventListener("click", async () => {
+    const confirmText = $("#tr-reset-confirm").value.trim();
+    if (confirmText.toUpperCase() !== "SIFIRLA") { toast("Onay metni 'SIFIRLA' olmalı", true); return; }
+    const botId = $("#tr-reset-bot").value;
+    const ok = await confirmDialog(
+      "İstatistikleri sıfırla",
+      `İstatistikler silinecek (${botId ? "seçili bot" : "tüm botlar"}). Açık pozisyonlar ve nakit korunur; botlar durdurulur. Emin misin?`,
+      "Sıfırla",
+      true,
+    );
+    if (!ok) return;
+    try {
+      const body = { password: $("#tr-reset-pass").value, confirm: confirmText };
+      if (botId) body.bot_id = botId;
+      const res = await api("/settings/danger/reset-stats", { method: "POST", body });
+      const d = res.deleted || {};
+      toast(`Sıfırlandı (${res.scope === "all" ? "tüm botlar" : res.scope}): ` +
+        Object.entries(d).map(([k, v]) => `${k} ${v}`).join(", "));
+      route();
+    } catch (e) { toast(e.message, true); }
+  });
 }
 
 /* ------------------------------------------------------------------ */
 /* Ayarlar                                                             */
 /* ------------------------------------------------------------------ */
 async function renderSettings(root) {
-  const [settings, coinlist] = await Promise.all([api("/settings"), api("/settings/coinlist")]);
+  const [settings, coinlist, bots] = await Promise.all([api("/settings"), api("/settings/coinlist"), api("/bots")]);
   const app = settings.app;
   const groups = settings.groups || [];
 
@@ -4543,11 +4583,23 @@ async function renderSettings(root) {
             <h3>Tehlikeli işlemler</h3>
             <p class="muted">Bu işlemler gerçek hesapta emir gönderir. Dikkatli kullan.</p>
             ${field("Şifre", `<input id="dg-pass" type="password">`)}
-            ${field("Onay metni", `<input id="dg-confirm" placeholder="KAPAT / NAKIT">`)}
+            ${field("Onay metni", `<input id="dg-confirm" placeholder="KAPAT / NAKIT / SIFIRLA">`)}
             <div class="row">
               <button class="danger" data-danger="close-all" type="button">Tüm pozisyonları kapat</button>
               <button class="danger" data-danger="full-cash" type="button">Full nakite geç</button>
             </div>
+            <hr class="sep">
+            <h3>İstatistikleri sıfırla</h3>
+            <p class="muted small">
+              İşlem geçmişi, K/Z grafikleri, sinyal ve olay kayıtları, kapanmış pozisyonlar ve
+              bitmiş iş kayıtları silinir; botların birikmiş K/Z sayacı sıfırlanır.
+              <b>Açık pozisyonlar ve nakit korunur.</b> Botlar durdurulur, sonra Botlar sayfasından başlatılır.
+            </p>
+            ${field("Bot", `<select id="dg-bot">
+              <option value="">Tüm botlar</option>
+              ${(bots || []).map((b) => `<option value="${esc(b.id)}">${esc(b.name)}</option>`).join("")}
+            </select>`)}
+            <button class="danger mt" data-danger="reset-stats" type="button">İstatistikleri sıfırla</button>
           </div>
         </div>`;
       $("#pw-save").addEventListener("click", async () => {
@@ -4556,17 +4608,35 @@ async function renderSettings(root) {
           toast("Şifre değiştirildi"); $("#pw-old").value = ""; $("#pw-new").value = "";
         } catch (e) { toast(e.message, true); }
       });
+      const DANGER_CONFIRM = { "close-all": "KAPAT", "full-cash": "NAKIT", "reset-stats": "SIFIRLA" };
       $$("[data-danger]").forEach((btn) => btn.addEventListener("click", async () => {
-        const confirmText = prompt("Onay metnini yazın (KAPAT veya NAKIT):");
+        const action = btn.dataset.danger;
+        const isReset = action === "reset-stats";
+        const expected = DANGER_CONFIRM[action] || "KAPAT";
+        const confirmText = prompt(`Onay metnini yazın (${expected}):`, isReset ? "SIFIRLA" : "");
         if (!confirmText) return;
-        const ok = await confirmDialog("Gerçek emir gönderilecek", "Bu işlem gerçek hesapta emir gönderir. Emin misin?", "Gönder", true);
+        const ok = await confirmDialog(
+          isReset ? "İstatistikleri sıfırla" : "Gerçek emir gönderilecek",
+          isReset
+            ? "İşlem geçmişi ve tüm K/Z istatistikleri silinecek. Açık pozisyonlar ve nakit korunur; botlar durdurulur. Emin misin?"
+            : "Bu işlem gerçek hesapta emir gönderir. Emin misin?",
+          isReset ? "Sıfırla" : "Gönder",
+          true,
+        );
         if (!ok) return;
         try {
-          const res = await api(`/settings/danger/${btn.dataset.danger}`, {
-            method: "POST",
-            body: { password: $("#dg-pass").value, confirm: confirmText },
-          });
-          toast(`${res.results.length} işlem sonucu alındı`);
+          const body = { password: $("#dg-pass").value, confirm: confirmText };
+          const botSelect = $("#dg-bot");
+          if (isReset && botSelect && botSelect.value) body.bot_id = botSelect.value;
+          const res = await api(`/settings/danger/${action}`, { method: "POST", body });
+          if (isReset) {
+            const d = res.deleted || {};
+            toast(`Sıfırlandı (${res.scope === "all" ? "tüm botlar" : res.scope}): ` +
+              Object.entries(d).map(([k, v]) => `${k} ${v}`).join(", "));
+            route();
+          } else {
+            toast(`${res.results.length} işlem sonucu alındı`);
+          }
         } catch (e) { toast(e.message, true); }
       }));
       return;

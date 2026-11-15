@@ -1079,6 +1079,29 @@ yazılır; yalnızca geçerli ZIP (en az `tradeai.db` veya `Data/`) kabul edilir
 (19 test: içerik, DB bütünlüğü, güvenlik yedeği, bot durdurma, zip-slip,
 kendi kendini yedeklememe, minimal kapsam, yükleme doğrulama/limit/çakışma).
 
+## İstatistikleri sıfırlama
+
+**Ayarlar → Güvenlik → Tehlikeli işlemler** ve **İşlem geçmişi** sayfasındaki
+**İstatistikleri sıfırla** düğmesi, birikmiş istatistikleri temizler. Şifre ve
+`SIFIRLA` onay metni zorunludur; tüm botlar için ya da tek bir bot seçilerek yapılır.
+
+Silinenler:
+
+| Veri | Açıklama |
+|---|---|
+| İşlem geçmişi | `trades` → K/Z, kazanma oranı, coin/bot grafikleri sıfırlanır |
+| Kapanmış pozisyonlar | `positions` (`status<>'open'`) |
+| K/Z grafik verileri | `pnl_snapshots` |
+| Sinyal geçmişi | `signal_events` |
+| Olay/log geçmişi | `events` |
+| Bitmiş iş kayıtları | `jobs` (yalnızca tüm botlar sıfırlanırken) |
+
+Korunanlar: **açık pozisyonlar ve nakit**, stratejiler, ayarlar, coin listeleri.
+Botların birikmiş K/Z sayacı (`total_realized_pnl`) 0'lanır; sayacın yeniden
+yazılmaması için hedef botlar **durdurulur** ve sonra Botlar sayfasından başlatılır.
+Sıfırlama işlemi denetim için tek bir olay kaydı bırakır. Davranış
+`tests/test_reset_stats.py` ile korunur.
+
 ## Performans
 Ölçümler gerçek motorla yapıldı (250.000 mumluk backtest, Docker içinde):
 

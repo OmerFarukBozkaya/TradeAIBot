@@ -27,6 +27,10 @@ class DangerBody(BaseModel):
     coin: Optional[str] = None
 
 
+class ResetStatsBody(DangerBody):
+    bot_id: Optional[str] = None
+
+
 def _require_password(password: str) -> None:
     user = db.row("SELECT id FROM users ORDER BY id LIMIT 1")
     if not user or not verify_user_password(int(user["id"]), password):
@@ -379,3 +383,88 @@ async def close_position(body: DangerBody):
     if body.confirm.strip() != "KAPAT":
         raise HTTPException(400, "Onay metni 'KAPAT' olmalı")
     return {"results": _sell_all(body.coin.upper())}
+
+
+def _reset_statistics(bot_id: Optional[str] = None) -> Dict[str, Any]:
+    """İşlem/K-Z istatistiklerini sıfırlar.
+
+    Silinenler: işlem geçmişi, kapanmış pozisyon kayıtları, K/Z grafik verileri,
+    sinyal geçmişi, olay/log geçmişi ve (tüm botlarda) bitmiş iş kayıtları.
+    Açık pozisyonlar ve nakit korunur. Sayaçların yeniden yazılmaması için
+    hedef botlar durdurulur ve `total_realized_pnl` sıfırlanır.
+    """
+    from app import bot_state
+    from app.supervisor import supervisor
+
+    targets = [bot_id] if bot_id else [r["id"] for r in db.rows("SELECT id FROM bots")]
+
+    # 1) Çalışan botları durdur (aksi hâlde sayaç yeniden yazılır, yeni işlem girer).
+    stopped: List[str] = []
+    for bid in targets:
+        try:
+            supervisor.stop(bid, timeout=10)
+            stopped.append(bid)
+        except Exception:
+            pass
+
+    def where_for(extra: str = "") -> tuple[str, tuple]:
+        if bot_id:
+            clause, params = " WHERE bot_id=?", (bot_id,)
+            if extra:
+                clause += " AND " + extra
+            return clause, params
+        return (" WHERE " + extra if extra else ""), ()
+
+    specs = (
+        ("trades", "trades", ""),
+        ("positions", "positions", "status<>'open'"),
+        ("pnl_snapshots", "pnl_snapshots", ""),
+        ("signals", "signal_events", ""),
+        ("events", "events", ""),
+    )
+
+    deleted: Dict[str, int] = {}
+    for label, table, extra in specs:
+        clause, params = where_for(extra)
+        row = db.row(f"SELECT COUNT(*) AS c FROM {table}{clause}", params)
+        deleted[label] = int(row["c"]) if row else 0
+        db.execute(f"DELETE FROM {table}{clause}", params)
+
+    # 2) Bitmiş iş kayıtları (tek bot sıfırlamasında dokunulmaz).
+    if not bot_id:
+        row = db.row(
+            "SELECT COUNT(*) AS c FROM jobs WHERE status NOT IN ('queued','running')"
+        )
+        deleted["jobs"] = int(row["c"]) if row else 0
+        db.execute("DELETE FROM jobs WHERE status NOT IN ('queued','running')")
+
+    # 3) Bot sayaçlarını sıfırla ve durdurulmuş işaretle.
+    for bid in targets:
+        try:
+            state = bot_state.load_state(bid)
+            if state:
+                state["total_realized_pnl"] = 0.0
+                bot_state.save_state(bid, state)
+        except Exception:
+            pass
+        db.execute(
+            "UPDATE bots SET status='stopped', pid=NULL, updated_at=? WHERE id=?",
+            (db.utcnow(), bid),
+        )
+
+    scope = bot_id or "all"
+    db.log_event(
+        None,
+        "İstatistikler sıfırlandı (" + ("tüm botlar" if not bot_id else str(bot_id)) + "): "
+        + ", ".join(f"{k}={v}" for k, v in deleted.items()),
+        "warning",
+    )
+    return {"ok": True, "scope": scope, "deleted": deleted, "stopped": stopped}
+
+
+@router.post("/danger/reset-stats")
+async def reset_stats(body: ResetStatsBody):
+    _require_password(body.password)
+    if body.confirm.strip().upper() != "SIFIRLA":
+        raise HTTPException(400, "Onay metni 'SIFIRLA' olmalı")
+    return _reset_statistics(body.bot_id)
