@@ -37,7 +37,7 @@ import uuid
 import zipfile
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Dict, List
+from typing import Any, Dict, Iterable, List
 
 from app.paths import BASE_DIR, paths
 
@@ -74,42 +74,68 @@ def _db_snapshot(dest: Path) -> None:
 
 
 DATA_EXTENSIONS = {".csv", ".xlsx", ".xls", ".parquet", ".feather", ".h5", ".pkl"}
-MAX_DATA_FILE_MB = 20
+
+# Minimal yedek: sistemin çalışması için gerekli küçük dosyalar.
+# (Botlar, stratejiler, ayarlar ve coin listeleri `tradeai.db` içinde.)
+ESSENTIAL_FILES = (
+    (".secret_key", "Data/.secret_key"),
+    ("coin_list.txt", "Data/coin_list.txt"),
+    ("Strategy/strategys.json", "Data/Strategy/strategys.json"),
+)
 
 
 def _add_tree(
     zf: zipfile.ZipFile,
     root: Path,
     arc_prefix: str,
-    skip: set[str],
-    include_datasets: bool = False,
+    skip: set[str] | None = None,
 ) -> List[str]:
-    """Klasörü arşive ekler.
-
-    Varsayılan olarak büyük veri dosyaları (.csv/.xlsx/.parquet, >20 MB) atlanır:
-    `Data/` altında GB'lık geçmiş veri dökümleri olabiliyor ve bunlar yedeği
-    kullanılamaz hâle getiriyordu.
-    """
+    """Klasördeki tüm dosyaları arşive ekler (opsiyonel klasörler için)."""
     added: List[str] = []
     if not root.exists():
         return added
+    skip = skip or set()
     for path in sorted(root.rglob("*")):
         if not path.is_file():
             continue
         if any(part in skip for part in path.relative_to(root).parts):
             continue
-        if not include_datasets:
-            if path.suffix.lower() in DATA_EXTENSIONS:
-                continue
-            try:
-                if path.stat().st_size > MAX_DATA_FILE_MB * 1048576:
-                    continue
-            except OSError:
-                continue
         arc = f"{arc_prefix}/{path.relative_to(root).as_posix()}"
         zf.write(path, arc)
         added.append(arc)
     return added
+
+
+def _add_datasets(zf: zipfile.ZipFile, root: Path, arc_prefix: str, skip: set[str]) -> List[str]:
+    """Sadece veri dosyalarını (csv/xlsx/parquet...) ekler; boyut sınırı yok."""
+    added: List[str] = []
+    if not root.exists():
+        return added
+    for path in sorted(root.rglob("*")):
+        if not path.is_file() or path.suffix.lower() not in DATA_EXTENSIONS:
+            continue
+        if any(part in skip for part in path.relative_to(root).parts):
+            continue
+        arc = f"{arc_prefix}/{path.relative_to(root).as_posix()}"
+        zf.write(path, arc)
+        added.append(arc)
+    return added
+
+
+def _bot_state_files() -> List[Path]:
+    """Yalnızca veritabanında kayıtlı botların durum dosyalarını döndürür."""
+    try:
+        from app import db
+
+        bot_ids = [str(row["id"]) for row in db.rows("SELECT id FROM bots")]
+    except Exception:
+        return []
+    files: List[Path] = []
+    for bot_id in bot_ids:
+        candidate = paths.state / f"{bot_id}.json"
+        if candidate.exists():
+            files.append(candidate)
+    return files
 
 
 def create(
@@ -117,8 +143,17 @@ def create(
     include_logs: bool = False,
     include_env: bool = False,
     include_datasets: bool = False,
+    include_snapshots: bool = False,
+    include_models: bool = False,
 ) -> Dict[str, Any]:
-    """Yedek arşivi oluşturur ve meta bilgisini döndürür."""
+    """Yedek arşivi oluşturur ve meta bilgisini döndürür.
+
+    Varsayılan (minimal) kapsam: `tradeai.db` (botlar, stratejiler, ayarlar,
+    coin listeleri), `Data/.secret_key` (şifreli ayarların anahtarı),
+    `coin_list.txt`, `Strategy/strategys.json` ve mevcut botların durum
+    dosyaları. Regresyon kayıtları, AI modelleri, loglar ve büyük veri
+    dosyaları isteğe bağlıdır.
+    """
     _dir()
     backup_id = f"backup_{datetime.now().strftime('%Y%m%d_%H%M%S')}_{uuid.uuid4().hex[:6]}"
     target = _dir() / f"{backup_id}.zip"
@@ -130,17 +165,22 @@ def create(
         if paths.db.exists():
             _db_snapshot(db_copy)
 
+        state_files = _bot_state_files()
         manifest = {
             "format": FORMAT_VERSION,
             "id": backup_id,
             "created_at": _now(),
             "note": note[:200],
             "app": "TradeAIBot",
+            "scope": "minimal",
             "includes": {
                 "db": db_copy.exists(),
-                "snapshots": (paths.data / "snapshots").exists(),
-                "state": paths.state.exists(),
-                "data_files": paths.data.exists(),
+                "secret_key": (paths.data / ".secret_key").exists(),
+                "coin_lists": (paths.data / "coin_list.txt").exists(),
+                "strategies": (paths.data / "Strategy" / "strategys.json").exists(),
+                "state": len(state_files),
+                "snapshots": bool(include_snapshots),
+                "models": bool(include_models),
                 "logs": bool(include_logs),
                 "env": bool(include_env),
                 "datasets": bool(include_datasets),
@@ -152,24 +192,33 @@ def create(
                 zf.write(db_copy, "tradeai.db")
                 files.append("tradeai.db")
 
-            # Data: veritabanı ve snapshots ayrı ele alınır, kalan veri dosyaları.
-            # `backups` atlanmalı: yedek klasörü Data içinde olduğu için arşiv
-            # kendi kendini okumaya başlar (sonsuz büyüme).
-            data_files = _add_tree(
-                zf,
-                paths.data,
-                "Data",
-                skip={"snapshots", "tradeai.db", BACKUP_DIR.name},
-                include_datasets=include_datasets,
-            )
-            files.extend(data_files)
+            for rel, arc in ESSENTIAL_FILES:
+                source = paths.data / rel
+                if source.exists():
+                    zf.write(source, arc)
+                    files.append(arc)
 
-            files.extend(
-                _add_tree(zf, paths.data / "snapshots", "Data/snapshots", skip=set())
-            )
-            files.extend(_add_tree(zf, paths.state, "state", skip=set()))
+            # Botların açık pozisyon/nakit durumları (sadece mevcut botlar).
+            for source in state_files:
+                arc = f"state/{source.name}"
+                zf.write(source, arc)
+                files.append(arc)
+
+            if include_snapshots:
+                files.extend(_add_tree(zf, paths.data / "snapshots", "Data/snapshots"))
+            if include_models:
+                files.extend(_add_tree(zf, paths.data / "Model", "Data/Model"))
+            if include_datasets:
+                files.extend(
+                    _add_datasets(
+                        zf,
+                        paths.data,
+                        "Data",
+                        skip={"snapshots", "Model", "tradeai.db", BACKUP_DIR.name},
+                    )
+                )
             if include_logs:
-                files.extend(_add_tree(zf, paths.logs / "bots", "Log/bots", skip=set()))
+                files.extend(_add_tree(zf, paths.logs / "bots", "Log/bots"))
             if include_env and (BASE_DIR / ".env").exists():
                 zf.write(BASE_DIR / ".env", ".env")
                 files.append(".env")
@@ -225,6 +274,71 @@ def _resolve(name: str) -> Path:
     if _dir().resolve() not in path.parents:
         raise ValueError("Geçersiz yedek yolu")
     return path
+
+
+# ---------------------------------------------------------------------------
+# Yükleme (tarayıcıdan gelen arşiv)
+# ---------------------------------------------------------------------------
+MAX_UPLOAD_MB = 4096
+
+
+def staging_path(name: str) -> Path:
+    """Yükleme için geçici dosya yolu (`.part`). Aynı ada sahip yedek varsa reddeder."""
+    target = _resolve(name)
+    if target.exists():
+        raise FileExistsError("Bu adda bir yedek zaten var")
+    return target.with_name(target.name + ".part")
+
+
+def finalize_upload(name: str, temp: Path) -> Dict[str, Any]:
+    """Geçici dosyayı doğrulayıp yedek klasörüne taşır."""
+    target = _resolve(name)
+    if target.exists():
+        temp.unlink(missing_ok=True)
+        raise FileExistsError("Bu adda bir yedek zaten var")
+    try:
+        if not temp.exists() or temp.stat().st_size == 0:
+            raise ValueError("Boş dosya")
+        try:
+            with zipfile.ZipFile(temp) as zf:
+                names = set(zf.namelist())
+        except zipfile.BadZipFile:
+            raise ValueError("Dosya geçerli bir ZIP arşivi değil")
+        if "tradeai.db" not in names and not any(n.startswith("Data/") for n in names):
+            raise ValueError("Arşivde geri yüklenecek veri bulunamadı (tradeai.db yok)")
+        temp.replace(target)
+    except Exception:
+        temp.unlink(missing_ok=True)
+        raise
+    return {
+        "ok": True,
+        "path": target.name,
+        "size_mb": round(target.stat().st_size / 1048576, 2),
+    }
+
+
+def save_upload(
+    name: str,
+    chunks: Iterable[bytes],
+    max_mb: int = MAX_UPLOAD_MB,
+) -> Dict[str, Any]:
+    """Parça parça gelen veriyi yazar (bellekte tamamını tutmadan)."""
+    temp = staging_path(name)
+    limit = max(1, int(max_mb)) * 1048576
+    size = 0
+    try:
+        with open(temp, "wb") as out:
+            for chunk in chunks:
+                if not chunk:
+                    continue
+                size += len(chunk)
+                if size > limit:
+                    raise ValueError(f"Dosya çok büyük (>{max_mb} MB)")
+                out.write(chunk)
+        return finalize_upload(name, temp)
+    except Exception:
+        temp.unlink(missing_ok=True)
+        raise
 
 
 # ---------------------------------------------------------------------------
@@ -361,15 +475,17 @@ def _cli() -> int:
     parser = argparse.ArgumentParser(prog="app.backup", description="TradeAIBot yedekleme")
     sub = parser.add_subparsers(dest="command", required=True)
 
-    p_create = sub.add_parser("create", help="Yeni yedek oluştur")
+    p_create = sub.add_parser("create", help="Yeni yedek oluştur (varsayılan: minimal)")
     p_create.add_argument("--note", default="")
     p_create.add_argument("--logs", action="store_true", help="Bot loglarını da ekle")
     p_create.add_argument("--env", action="store_true", help=".env dosyasını da ekle (API anahtarları!)")
     p_create.add_argument(
         "--datasets",
         action="store_true",
-        help="Büyük veri dosyalarını (csv/xlsx/parquet, >20 MB) da ekle",
+        help="Büyük veri dosyalarını (csv/xlsx/parquet) da ekle",
     )
+    p_create.add_argument("--snapshots", action="store_true", help="Regresyon kayıtlarını da ekle")
+    p_create.add_argument("--models", action="store_true", help="AI modellerini de ekle")
 
     sub.add_parser("list", help="Yedekleri listele")
     sub.add_parser("where", help="Yedek klasörünü yazdır")
@@ -391,7 +507,14 @@ def _cli() -> int:
         if args.command == "create":
             print(
                 json.dumps(
-                    create(args.note, args.logs, args.env, args.datasets),
+                    create(
+                        note=args.note,
+                        include_logs=args.logs,
+                        include_env=args.env,
+                        include_datasets=args.datasets,
+                        include_snapshots=args.snapshots,
+                        include_models=args.models,
+                    ),
                     ensure_ascii=False,
                     indent=1,
                 )

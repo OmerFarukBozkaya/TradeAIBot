@@ -1147,6 +1147,8 @@ def run_backup_create(params: Dict[str, Any]) -> Dict[str, Any]:
         include_logs=bool(params.get("include_logs")),
         include_env=bool(params.get("include_env")),
         include_datasets=bool(params.get("include_datasets")),
+        include_snapshots=bool(params.get("include_snapshots")),
+        include_models=bool(params.get("include_models")),
     )
     _progress(job_id, 95, "Arşiv yazıldı")
     return result

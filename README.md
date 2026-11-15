@@ -1004,25 +1004,53 @@ etkilenen üç indikatörü** ilk mum `19` ile gösterdi; kod geri alınınca do
 
 ## Yedekleme ve geri yükleme
 
-**Sistem → Yedekleme** bölümü tek bir `.zip` arşivinde şunları toplar:
+**Sistem → Yedekleme** bölümü varsayılan olarak **minimal** bir `.zip` arşivi üretir:
+yalnızca sistemin çalışması için gerekli olanlar.
 
 | İçerik | Açıklama |
 |---|---|
-| `tradeai.db` | Botlar, işlemler, stratejiler, coin listeleri, panel ayarları (tutarlı kopya) |
-| `Data/snapshots/` | Regresyon referans kayıtları |
-| `state/` | Bot çalışma durumları (açık pozisyon, nakit) |
-| `Data/*.txt`, `Data/Strategy/` | Coin listesi ve dosya tabanlı strateji kayıtları |
+| `tradeai.db` | **Botlar, stratejiler, ayarlar, coin listeleri**, işlemler (tutarlı kopya) |
+| `Data/.secret_key` | Panelde şifreli saklanan ayarların (API anahtarları vb.) anahtarı |
+| `Data/coin_list.txt` | Eski/uyumluluk coin listesi |
+| `Data/Strategy/strategys.json` | Eski/uyumluluk strateji dosyası |
+| `state/<bot_id>.json` | Yalnızca **mevcut botların** açık pozisyon/nakit durumu |
 
-Varsayılan olarak **girmez**: `.env` (API anahtarları) ve büyük veri dosyaları
-(`.csv/.xlsx/.parquet` ve 20 MB üstü dosyalar). İstenirse arayüzdeki
-**Büyük veri dosyaları** / **.env** kutularıyla veya CLI'da `--datasets` / `--env`
-ile eklenir. Böylece `Data/` altındaki GB'lık geçmiş dökümler yedeği şişirmez.
+Varsayılan olarak **girmez** (isteğe bağlı kutular / CLI bayrakları ile eklenir):
+
+| Seçenek | İçerik | CLI |
+|---|---|---|
+| Regresyon kayıtları | `Data/snapshots/` (genelde MB'larca) | `--snapshots` |
+| AI modelleri | `Data/Model/` | `--models` |
+| Büyük veri dosyaları | `.csv/.xlsx/.parquet` (boyut sınırı yok) | `--datasets` |
+| Bot logları | `Log/bots/` | `--logs` |
+| `.env` | API anahtarları (düz metin) | `--env` |
+
+Böylece `Data/` altındaki GB'lık geçmiş dökümler, model dosyaları, regresyon
+kayıtları ve alakasız dosyalar yedeğe girmez; tipik arşiv ~8 MB (DB sıkışmış).
+
+> `Data/.secret_key` yedeğe dahildir; panelde kayıtlı şifreli API anahtarlarının
+> çözülebilmesi için gereklidir. Arşivi paylaşırken bunu göz önünde bulundurun.
 
 - Yedekler **`Data/backups/`** altında tutulur. Bu klasör host'a mount edilir,
   yani `docker compose up -d` / yeniden derleme yedeği silmez.
-- Arşivler arayüzden **indirilebilir**, silinebilir; dışarıdan yüklemek için
-  `docker cp yedek.zip tradeai:/app/Data/backups/` sonra sayfa yenilenir.
+- Arşivler arayüzden **indirilebilir**, **yüklenebilir** ve silinebilir.
+  Bilgisayarınızdaki `.zip` dosyasını **Sistem → Yedekleme → Yükle** ile gönderin;
+  `docker cp` gerekmez. Aynı adda arşiv varsa yükleme `409` ile reddedilir
+  (önce eskiyi silin veya dosyayı yeniden adlandırın).
 - Oluşturma ve geri yükleme **iş kuyruğunda** çalışır; ilerleme gösterilir.
+- Geri yükleme kullanıcıları da değiştirdiği için **oturum kapanır**; yedekteki
+  kullanıcı bilgileriyle yeniden giriş yapılır.
+
+**Sıfırdan kurulumda yedekten dönme** (tamamen web):
+
+1. Yeni makinede `docker compose up -d --build` ile açın, `.env`'de yalnızca
+   `ADMIN_PASSWORD` ve `TRADEAI_PORT` belirleyin (`TRADEAI_SECRET_KEY` boş kalsın;
+   yedekteki `Data/.secret_key` kullanılır).
+2. Giriş yapın → **Sistem → Yedekleme → Yükle** ile `.zip` dosyasını gönderin.
+3. Listede **Geri yükle** → onaylayın. Botlar durdurulur, önce `pre-restore_*.zip`
+   güvenlik yedeği alınır.
+4. Oturum kapanırsa **yedekteki admin kullanıcı/şifresiyle** giriş yapın.
+5. **Botlar** sayfasından botları başlatın.
 
 **Geri yükleme** (arayüzdeki *Geri yükle* veya CLI):
 
@@ -1045,9 +1073,11 @@ docker cp <dosya>.zip tradeai:/app/Data/backups/
 ```
 
 Güvenlik: arşiv adları dizin dışına çıkamaz (`..`, alt dizin reddedilir) ve
-geri yükleme zip-slip içeren arşivleri reddeder. Davranış `tests/test_backup.py`
-ile korunur (11 test: içerik, DB bütünlüğü, güvenlik yedeği, bot durdurma,
-zip-slip, kendi kendini yedeklememe).
+geri yükleme zip-slip içeren arşivleri reddeder. Yükleme geçici `.part` dosyasına
+yazılır; yalnızca geçerli ZIP (en az `tradeai.db` veya `Data/`) kabul edilir ve
+4 GB üstü yüklemeler reddedilir. Davranış `tests/test_backup.py` ile korunur
+(19 test: içerik, DB bütünlüğü, güvenlik yedeği, bot durdurma, zip-slip,
+kendi kendini yedeklememe, minimal kapsam, yükleme doğrulama/limit/çakışma).
 
 ## Performans
 Ölçümler gerçek motorla yapıldı (250.000 mumluk backtest, Docker içinde):

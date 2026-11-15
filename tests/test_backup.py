@@ -29,9 +29,16 @@ def _isolated(tmp_path, monkeypatch):
         ("bot_a", "Test Bot", "trade", "paper", "1h", "{}", "stopped", 1, db.utcnow(), db.utcnow()),
     )
     (paths.data / "coin_list.txt").write_text("BTCUSDT,ETHUSDT", encoding="utf-8")
+    (paths.data / ".secret_key").write_text("test-secret-key", encoding="utf-8")
+    (paths.data / "Strategy").mkdir(parents=True, exist_ok=True)
+    (paths.data / "Strategy" / "strategys.json").write_text("{}", encoding="utf-8")
     (paths.data / "snapshots").mkdir(parents=True, exist_ok=True)
     (paths.data / "snapshots" / "snap_x.json.gz").write_bytes(b"fake")
+    (paths.data / "Model").mkdir(parents=True, exist_ok=True)
+    (paths.data / "Model" / "model.keras").write_bytes(b"model")
+    (paths.data / "esra.py").write_text("print('x')", encoding="utf-8")
     (paths.state / "bot_a.json").write_text('{"cash": 100}', encoding="utf-8")
+    (paths.state / "bot_orphan.json").write_text('{"cash": 5}', encoding="utf-8")
     yield tmp_path
 
 
@@ -41,14 +48,50 @@ def test_create_archive_contents():
     assert path.exists()
     with zipfile.ZipFile(path) as zf:
         names = set(zf.namelist())
+        # Zorunlu: DB (botlar, stratejiler, ayarlar, coin listeleri) + anahtar + küçük dosyalar
         assert "tradeai.db" in names
         assert "manifest.json" in names
-        assert any(n.startswith("Data/snapshots/") for n in names)
-        assert any(n.startswith("state/") for n in names)
-        assert not any(n == ".env" for n in names)
+        assert "Data/.secret_key" in names
+        assert "Data/coin_list.txt" in names
+        assert "Data/Strategy/strategys.json" in names
+        # Sadece mevcut botun durumu
+        assert "state/bot_a.json" in names
+        assert "state/bot_orphan.json" not in names
+        # Gereksizler varsayılan olarak girmez
+        assert not any(n.startswith("Data/snapshots/") for n in names)
+        assert "Data/Model/model.keras" not in names
+        assert not any("esra" in n for n in names)
+        assert ".env" not in names
         manifest = json.loads(zf.read("manifest.json"))
         assert manifest["note"] == "ilk yedek"
         assert manifest["format"] == backup.FORMAT_VERSION
+        assert manifest["scope"] == "minimal"
+        assert manifest["includes"]["db"] is True
+        assert manifest["includes"]["secret_key"] is True
+        assert manifest["includes"]["state"] == 1
+        assert manifest["includes"]["snapshots"] is False
+
+
+def test_optional_extras_only_when_requested():
+    info = backup.create(include_snapshots=True, include_models=True)
+    with zipfile.ZipFile(backup.BACKUP_DIR / info["path"]) as zf:
+        names = set(zf.namelist())
+        assert "Data/snapshots/snap_x.json.gz" in names
+        assert "Data/Model/model.keras" in names
+        manifest = json.loads(zf.read("manifest.json"))
+        assert manifest["includes"]["snapshots"] is True
+        assert manifest["includes"]["models"] is True
+
+
+def test_datasets_only_include_data_extensions():
+    (paths.data / "BTC.csv").write_text("a,b\n1,2", encoding="utf-8")
+    info = backup.create(include_datasets=True)
+    with zipfile.ZipFile(backup.BACKUP_DIR / info["path"]) as zf:
+        names = set(zf.namelist())
+        assert "Data/BTC.csv" in names
+        # datasets seçeneği rastgele dosyaları veya modelleri içeri almamalı
+        assert not any("esra" in n for n in names)
+        assert "Data/Model/model.keras" not in names
 
 
 def test_db_in_archive_is_readable_and_consistent():
@@ -152,3 +195,65 @@ def test_env_only_when_requested(tmp_path, monkeypatch):
     with zipfile.ZipFile(backup.BACKUP_DIR / info["path"]) as zf:
         assert ".env" in zf.namelist()
     assert (backup.BACKUP_DIR / info["path"]).exists()
+
+
+# ---------------------------------------------------------------------------
+# Tarayıcıdan yükleme (Data/backups/upload)
+# ---------------------------------------------------------------------------
+def _zip_bytes(entries):
+    import io
+
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
+        for name, data in entries.items():
+            zf.writestr(name, data)
+    return buf.getvalue()
+
+
+def test_upload_saves_valid_archive_in_chunks():
+    data = _zip_bytes({"tradeai.db": b"SQLite format 3\x00", "manifest.json": b"{}"})
+    info = backup.save_upload("uploaded.zip", [data[:10], data[10:20], data[20:]])
+    assert info["path"] == "uploaded.zip"
+    assert info["size_mb"] >= 0
+    target = backup.BACKUP_DIR / "uploaded.zip"
+    assert target.exists()
+    assert backup.list_backups()[0]["path"] == "uploaded.zip"
+    assert not list(backup.BACKUP_DIR.glob("*.part"))
+
+
+def test_upload_rejects_existing_name():
+    info = backup.create()
+    data = _zip_bytes({"tradeai.db": b"x"})
+    with pytest.raises(FileExistsError):
+        backup.save_upload(info["path"], [data])
+    # Mevcut arşiv bozulmamalı
+    assert (backup.BACKUP_DIR / info["path"]).exists()
+
+
+def test_upload_rejects_invalid_and_empty():
+    with pytest.raises(ValueError):
+        backup.save_upload("bad.zip", [b"not a zip"])
+    with pytest.raises(ValueError):
+        backup.save_upload("empty.zip", [])
+    assert not (backup.BACKUP_DIR / "bad.zip").exists()
+    assert not list(backup.BACKUP_DIR.glob("*.part"))
+
+
+def test_upload_rejects_archive_without_data():
+    data = _zip_bytes({"foo.txt": b"x"})
+    with pytest.raises(ValueError):
+        backup.save_upload("nope.zip", [data])
+    assert not (backup.BACKUP_DIR / "nope.zip").exists()
+
+
+def test_upload_size_limit():
+    with pytest.raises(ValueError):
+        backup.save_upload("big.zip", [b"x" * (1024 * 1024 + 10)], max_mb=1)
+    assert not (backup.BACKUP_DIR / "big.zip").exists()
+    assert not list(backup.BACKUP_DIR.glob("*.part"))
+
+
+def test_upload_rejects_path_traversal():
+    data = _zip_bytes({"tradeai.db": b"x"})
+    with pytest.raises(ValueError):
+        backup.save_upload("../evil.zip", [data])

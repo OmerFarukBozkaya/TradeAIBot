@@ -4785,8 +4785,10 @@ function renderSystemView(root, info, usage, snaps, backups = []) {
         <div>
           <h3 style="margin:0">Yedekleme</h3>
           <p class="muted small" style="margin:4px 0 0">
-            Veritabanı (botlar, işlemler, stratejiler, ayarlar), regresyon kayıtları, bot durumları,
-            coin listesi ve strateji dosyaları tek arşivde toplanır.
+            Varsayılan olarak yalnızca sistemin çalışması için gerekli olanlar alınır:
+            botlar, stratejiler, ayarlar ve coin listeleri (<code>tradeai.db</code>), mevcut
+            botların açık pozisyon/nakit durumları ve şifreli ayarların anahtarı (<code>.secret_key</code>).
+            Regresyon kayıtları, AI modelleri ve büyük veri dosyaları isteğe bağlıdır.
             <b>Geri yüklemede botlar önce durdurulur</b> ve mevcut veri otomatik olarak güvenlik yedeğine alınır.
           </p>
         </div>
@@ -4795,8 +4797,14 @@ function renderSystemView(root, info, usage, snaps, backups = []) {
         ${field("Not (isteğe bağlı)", `<input id="bak-note" placeholder="örn. v4 öncesi">`)}
         <label class="check"><input type="checkbox" id="bak-logs"> Bot logları</label>
         <label class="check" title="Data/ altındaki GB'lık geçmiş veri dökümleri"><input type="checkbox" id="bak-datasets"> Büyük veri dosyaları</label>
+        <label class="check" title="Data/snapshots — regresyon referans kayıtları"><input type="checkbox" id="bak-snapshots"> Regresyon kayıtları</label>
+        <label class="check" title="Data/Model — AI model dosyaları"><input type="checkbox" id="bak-models"> AI modelleri</label>
         <label class="check"><input type="checkbox" id="bak-env"> .env (API anahtarları)</label>
         <button class="primary" id="bak-create" type="button">Yedek oluştur</button>
+      </div>
+      <div class="row mt">
+        ${field("Bilgisayarınızdan yedek yükle", `<input type="file" id="bak-file" accept=".zip,application/zip">`)}
+        <button class="ghost" id="bak-upload" type="button">Yükle</button>
       </div>
       <div id="bak-status" class="mt"></div>
       <div class="result-scroll mt"><table>
@@ -4806,8 +4814,10 @@ function renderSystemView(root, info, usage, snaps, backups = []) {
       <div id="bak-result" class="mt"></div>
       <p class="muted small mt">
         Yedekler <code>Data/backups/</code> altında tutulur (kalıcı klasör). <b>İndir</b> ile bilgisayarınıza
-        alabilirsiniz; dışarıdan yüklemek için <code>docker cp yedek.zip tradeai:/app/Data/backups/</code>
-        sonra sayfayı yenileyin.
+        alabilirsiniz; bilgisayarınızdaki bir arşivi <b>Yükle</b> ile gönderip <b>Geri yükle</b> ile açabilirsiniz.
+        Alternatif: <code>docker cp yedek.zip tradeai:/app/Data/backups/</code>.
+        <br><b>Not:</b> Geri yükleme kullanıcıları da değiştirdiği için oturumunuz kapanabilir;
+        yedekteki kullanıcı bilgileriyle yeniden giriş yapmanız gerekir.
       </p>
     </div>
 
@@ -4856,7 +4866,7 @@ function renderSystemView(root, info, usage, snaps, backups = []) {
       const name = btn.dataset.restore;
       const ok = await confirmDialog(
         "Yedekten geri yükle",
-        `“${name}” geri yüklenecek.\n\n• Çalışan botlar durdurulacak\n• Mevcut veri otomatik güvenlik yedeğine alınacak\n• Geri yükleme sonrası botları yeniden başlatmanız gerekir\n\nDevam edilsin mi?`,
+        `“${name}” geri yüklenecek.\n\n• Çalışan botlar durdurulacak\n• Mevcut veri otomatik güvenlik yedeğine alınacak\n• Kullanıcılar yedekten geldiği için oturumunuz kapanabilir; yedekteki bilgilerle yeniden giriş yapın\n• Geri yükleme sonrası botları yeniden başlatmanız gerekir\n\nDevam edilsin mi?`,
         "Geri yükle",
         true,
       );
@@ -4891,6 +4901,8 @@ function renderSystemView(root, info, usage, snaps, backups = []) {
           include_logs: $("#bak-logs").checked,
           include_env: $("#bak-env").checked,
           include_datasets: $("#bak-datasets").checked,
+          include_snapshots: $("#bak-snapshots").checked,
+          include_models: $("#bak-models").checked,
         },
       });
       pollJob(job.id, (j) => {
@@ -4898,6 +4910,33 @@ function renderSystemView(root, info, usage, snaps, backups = []) {
         if (j.status === "done") reloadBackups();
       });
     } catch (e) { $("#bak-status").innerHTML = `<div class="error">${esc(e.message)}</div>`; }
+  });
+
+  $("#bak-upload").addEventListener("click", async () => {
+    const input = $("#bak-file");
+    const file = input.files && input.files[0];
+    if (!file) { toast("Önce bir .zip dosyası seçin", true); return; }
+    if (!/\.zip$/i.test(file.name)) { toast("Yalnızca .zip yedek dosyası yüklenebilir", true); return; }
+    $("#bak-status").innerHTML = `<span class="muted">${esc(file.name)} yükleniyor (${fmt(file.size / 1048576, 2)} MB)...</span>`;
+    try {
+      const res = await fetch(`/api/system/backups/upload?name=${encodeURIComponent(file.name)}`, {
+        method: "POST",
+        credentials: "same-origin",
+        headers: { "Content-Type": "application/octet-stream", "X-CSRF-Token": state.csrf },
+        body: file,
+      });
+      if (res.status === 401) { showLogin(); throw new Error("Oturum gerekli"); }
+      const text = await res.text();
+      let data = null;
+      try { data = text ? JSON.parse(text) : null; } catch (e) { data = text; }
+      if (!res.ok) throw new Error((data && data.detail) ? data.detail : res.statusText);
+      input.value = "";
+      $("#bak-status").innerHTML = `<div class="hint ok">Yüklendi: <b>${esc(data.path)}</b> · ${fmt(data.size_mb, 2)} MB — listeden <b>Geri yükle</b> ile açabilirsiniz.</div>`;
+      await reloadBackups();
+      toast("Yedek yüklendi");
+    } catch (e) {
+      $("#bak-status").innerHTML = `<div class="error">${esc(e.message)}</div>`;
+    }
   });
 
   bindBackupButtons();
@@ -4953,8 +4992,12 @@ function renderBackup(job) {
   const inc = r.includes || {};
   const parts = [];
   if (inc.db) parts.push("veritabanı");
+  if (inc.secret_key) parts.push("gizli anahtar");
+  if (inc.coin_lists) parts.push("coin listeleri");
+  if (inc.strategies) parts.push("stratejiler");
+  if (inc.state) parts.push(`${inc.state} bot durumu`);
   if (inc.snapshots) parts.push("regresyon kayıtları");
-  if (inc.state) parts.push("bot durumları");
+  if (inc.models) parts.push("AI modelleri");
   if (inc.data_files) parts.push("veri dosyaları");
   if (inc.logs) parts.push("loglar");
   if (inc.env) parts.push(".env");

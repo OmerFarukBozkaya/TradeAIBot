@@ -6,7 +6,7 @@ import shutil
 import time
 from typing import Any, Dict, List, Optional
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel
 
 from app import backup, db, snapshots
@@ -136,6 +136,8 @@ class BackupBody(BaseModel):
     include_logs: bool = False
     include_env: bool = False
     include_datasets: bool = False
+    include_snapshots: bool = False
+    include_models: bool = False
 
 
 @router.get("/backups")
@@ -153,8 +155,46 @@ async def backup_create(body: BackupBody):
             "include_logs": body.include_logs,
             "include_env": body.include_env,
             "include_datasets": body.include_datasets,
+            "include_snapshots": body.include_snapshots,
+            "include_models": body.include_models,
         },
     )
+
+
+@router.post("/backups/upload")
+async def backup_upload(request: Request, name: str):
+    """Tarayıcıdan gelen `.zip` arşivini `Data/backups/` içine kaydeder.
+
+    Gövde ham bayt olarak (application/octet-stream) gönderilir; multipart
+    bağımlılığı gerekmez. Dosya belleğe tamamen alınmadan diske yazılır.
+    """
+    try:
+        temp = backup.staging_path(name)
+    except FileExistsError as exc:
+        raise HTTPException(409, str(exc))
+    except ValueError as exc:
+        raise HTTPException(400, str(exc))
+
+    limit = backup.MAX_UPLOAD_MB * 1048576
+    size = 0
+    try:
+        with open(temp, "wb") as out:
+            async for chunk in request.stream():
+                if not chunk:
+                    continue
+                size += len(chunk)
+                if size > limit:
+                    raise ValueError(f"Dosya çok büyük (>{backup.MAX_UPLOAD_MB} MB)")
+                out.write(chunk)
+        return backup.finalize_upload(name, temp)
+    except FileExistsError as exc:
+        raise HTTPException(409, str(exc))
+    except ValueError as exc:
+        temp.unlink(missing_ok=True)
+        raise HTTPException(400, str(exc))
+    except Exception as exc:
+        temp.unlink(missing_ok=True)
+        raise HTTPException(500, f"Yükleme başarısız: {exc}")
 
 
 @router.get("/backups/{name}/download")
