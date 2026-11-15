@@ -9,7 +9,7 @@ from typing import Any, Dict, List, Optional
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
-from app import db, snapshots
+from app import backup, db, snapshots
 from app.config import BASE_DIR, settings
 from app.jobs import create_job
 
@@ -125,4 +125,69 @@ async def snapshot_delete(snapshot_id: str):
         raise HTTPException(400, str(exc))
     if not ok:
         raise HTTPException(404, "Snapshot bulunamadı")
+    return {"ok": True}
+
+
+# ---------------------------------------------------------------------------
+# Yedekleme / geri yükleme
+# ---------------------------------------------------------------------------
+class BackupBody(BaseModel):
+    note: str = ""
+    include_logs: bool = False
+    include_env: bool = False
+    include_datasets: bool = False
+
+
+@router.get("/backups")
+async def backup_list():
+    return backup.list_backups()
+
+
+@router.post("/backups")
+async def backup_create(body: BackupBody):
+    """Yedek arşivi oluşturur (iş kuyruğunda; DB kopyası tutarlı alınır)."""
+    return create_job(
+        "backup_create",
+        {
+            "note": body.note,
+            "include_logs": body.include_logs,
+            "include_env": body.include_env,
+            "include_datasets": body.include_datasets,
+        },
+    )
+
+
+@router.get("/backups/{name}/download")
+async def backup_download(name: str):
+    from fastapi.responses import FileResponse
+
+    try:
+        path = backup._resolve(name)
+    except ValueError as exc:
+        raise HTTPException(400, str(exc))
+    if not path.exists():
+        raise HTTPException(404, "Yedek bulunamadı")
+    return FileResponse(path, filename=path.name, media_type="application/zip")
+
+
+@router.post("/backups/{name}/restore")
+async def backup_restore(name: str):
+    """Yedeği geri yükler. Botlar durdurulur, önce güvenlik yedeği alınır."""
+    try:
+        path = backup._resolve(name)
+    except ValueError as exc:
+        raise HTTPException(400, str(exc))
+    if not path.exists():
+        raise HTTPException(404, "Yedek bulunamadı")
+    return create_job("backup_restore", {"name": name})
+
+
+@router.delete("/backups/{name}")
+async def backup_delete(name: str):
+    try:
+        ok = backup.delete_backup(name)
+    except ValueError as exc:
+        raise HTTPException(400, str(exc))
+    if not ok:
+        raise HTTPException(404, "Yedek bulunamadı")
     return {"ok": True}

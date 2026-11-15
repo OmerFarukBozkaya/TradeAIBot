@@ -998,6 +998,53 @@ etkilenen üç indikatörü** ilk mum `19` ile gösterdi; kod geri alınınca do
   hatasıyla karışmaması için.
 - Dosyalar `Data/snapshots/` altında tutulur; arayüzden silinebilir.
 
+## Yedekleme ve geri yükleme
+
+**Sistem → Yedekleme** bölümü tek bir `.zip` arşivinde şunları toplar:
+
+| İçerik | Açıklama |
+|---|---|
+| `tradeai.db` | Botlar, işlemler, stratejiler, coin listeleri, panel ayarları (tutarlı kopya) |
+| `Data/snapshots/` | Regresyon referans kayıtları |
+| `state/` | Bot çalışma durumları (açık pozisyon, nakit) |
+| `Data/*.txt`, `Data/Strategy/` | Coin listesi ve dosya tabanlı strateji kayıtları |
+
+Varsayılan olarak **girmez**: `.env` (API anahtarları) ve büyük veri dosyaları
+(`.csv/.xlsx/.parquet` ve 20 MB üstü dosyalar). İstenirse arayüzdeki
+**Büyük veri dosyaları** / **.env** kutularıyla veya CLI'da `--datasets` / `--env`
+ile eklenir. Böylece `Data/` altındaki GB'lık geçmiş dökümler yedeği şişirmez.
+
+- Yedekler **`Data/backups/`** altında tutulur. Bu klasör host'a mount edilir,
+  yani `docker compose up -d` / yeniden derleme yedeği silmez.
+- Arşivler arayüzden **indirilebilir**, silinebilir; dışarıdan yüklemek için
+  `docker cp yedek.zip tradeai:/app/Data/backups/` sonra sayfa yenilenir.
+- Oluşturma ve geri yükleme **iş kuyruğunda** çalışır; ilerleme gösterilir.
+
+**Geri yükleme** (arayüzdeki *Geri yükle* veya CLI):
+
+1. Çalışan tüm botlar durdurulur (DB değiştirilirken bozulmayı önler).
+2. Mevcut veri otomatik olarak `pre-restore_*.zip` güvenlik yedeğine alınır;
+   yanlış yedek seçilirse geri dönülebilir.
+3. SQLite `-wal/-shm/-journal` dosyaları temizlenir, arşiv açılır.
+4. Yedekteki botlar `stopped` işaretlenir; **Botlar** sayfasından yeniden başlatılır.
+
+```bash
+# Container içinde
+docker exec -it tradeai python -m app.backup create --note "v4 öncesi"
+docker exec -it tradeai python -m app.backup list
+docker exec -it tradeai python -m app.backup restore <dosya>.zip
+docker exec -it tradeai python -m app.backup where    # klasör yolu
+
+# Yedeği bilgisayara al / geri koy
+docker cp tradeai:/app/Data/backups/<dosya>.zip .
+docker cp <dosya>.zip tradeai:/app/Data/backups/
+```
+
+Güvenlik: arşiv adları dizin dışına çıkamaz (`..`, alt dizin reddedilir) ve
+geri yükleme zip-slip içeren arşivleri reddeder. Davranış `tests/test_backup.py`
+ile korunur (11 test: içerik, DB bütünlüğü, güvenlik yedeği, bot durdurma,
+zip-slip, kendi kendini yedeklememe).
+
 ## Performans
 Ölçümler gerçek motorla yapıldı (250.000 mumluk backtest, Docker içinde):
 

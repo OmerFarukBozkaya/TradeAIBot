@@ -1137,6 +1137,31 @@ def run_snapshot_verify(params: Dict[str, Any]) -> Dict[str, Any]:
     )
 
 
+def run_backup_create(params: Dict[str, Any]) -> Dict[str, Any]:
+    from app import backup
+
+    job_id = params.get("_job_id")
+    _progress(job_id, 10, "Veritabanı kopyalanıyor")
+    result = backup.create(
+        note=params.get("note", ""),
+        include_logs=bool(params.get("include_logs")),
+        include_env=bool(params.get("include_env")),
+        include_datasets=bool(params.get("include_datasets")),
+    )
+    _progress(job_id, 95, "Arşiv yazıldı")
+    return result
+
+
+def run_backup_restore(params: Dict[str, Any]) -> Dict[str, Any]:
+    from app import backup
+
+    job_id = params.get("_job_id")
+    _progress(job_id, 10, "Botlar durduruluyor")
+    result = backup.restore(str(params.get("name")))
+    _progress(job_id, 95, "Geri yükleme tamamlandı")
+    return result
+
+
 def run_ai_train(params: Dict[str, Any]) -> Dict[str, Any]:
     if not settings.AI_ENABLED:
         raise RuntimeError("AI profili etkin değil. docker compose --profile ai ile başlatın.")
@@ -1173,6 +1198,8 @@ HANDLERS = {
     "ai_train": run_ai_train,
     "snapshot_record": run_snapshot_record,
     "snapshot_verify": run_snapshot_verify,
+    "backup_create": run_backup_create,
+    "backup_restore": run_backup_restore,
 }
 
 

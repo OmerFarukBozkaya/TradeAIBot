@@ -29,6 +29,8 @@ JOB_LABELS = {
     "ai_train": "AI eğitimi",
     "snapshot_record": "Snapshot kaydı",
     "snapshot_verify": "Snapshot doğrulama",
+    "backup_create": "Yedek oluşturma",
+    "backup_restore": "Yedekten geri yükleme",
 }
 
 ACTIVE_STATUSES = ("queued", "running")

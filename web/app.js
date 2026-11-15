@@ -4724,10 +4724,30 @@ function bindSettingsActions(tabId) {
 /* Sistem                                                              */
 /* ------------------------------------------------------------------ */
 async function renderSystem(root) {
-  const [info, usage, snaps] = await Promise.all([
-    api("/system"), api("/system/bot-usage"), api("/system/snapshots").catch(() => []),
+  const [info, usage, snaps, backups] = await Promise.all([
+    api("/system"),
+    api("/system/bot-usage"),
+    api("/system/snapshots").catch(() => []),
+    api("/system/backups").catch(() => []),
   ]);
-  renderSystemView(root, info, usage, snaps);
+  renderSystemView(root, info, usage, snaps, backups);
+}
+
+function backupRows(backups) {
+  if (!backups.length) {
+    return '<tr><td colspan="5" class="muted">Henüz yedek yok. Yukarıdan “Yedek oluştur” deyin.</td></tr>';
+  }
+  return backups.map((b) => `<tr>
+    <td><div class="mono small">${esc(b.path)}</div>${b.kind === "pre-restore" ? '<span class="tag amber">güvenlik</span>' : ""}</td>
+    <td class="muted small">${esc(fmtIso(b.created_at))}</td>
+    <td class="num">${fmt(b.size_mb, 2)} MB</td>
+    <td class="muted small">${esc(b.note || "")}</td>
+    <td class="row" style="gap:6px">
+      <a class="small" href="/api/system/backups/${encodeURIComponent(b.path)}/download">İndir</a>
+      <button class="small primary" data-restore="${esc(b.path)}" type="button">Geri yükle</button>
+      <button class="small ghost" data-del-bak="${esc(b.path)}" type="button">Sil</button>
+    </td>
+  </tr>`).join("");
 }
 
 function snapshotRows(snaps) {
@@ -4747,7 +4767,7 @@ function snapshotRows(snaps) {
   </tr>`).join("");
 }
 
-function renderSystemView(root, info, usage, snaps) {
+function renderSystemView(root, info, usage, snaps, backups = []) {
   root.innerHTML = `
     <div class="grid c4">
       <div class="card"><h3>CPU</h3><div class="stat">${fmt(info.cpu_percent, 1)}%</div></div>
@@ -4759,6 +4779,37 @@ function renderSystemView(root, info, usage, snaps) {
     <div class="card mt"><h3>Bot kaynak kullanımı</h3><table><thead><tr><th>Bot</th><th>PID</th><th>Durum</th><th>CPU</th><th>RAM (MB)</th></tr></thead><tbody>
       ${(usage.bots || []).map((b) => `<tr><td>${esc(b.name)}</td><td>${esc(b.pid || "—")}</td><td>${statusTag(b.status)}</td><td>${fmt(b.cpu_percent, 1)}</td><td>${fmt(b.memory_mb, 1)}</td></tr>`).join("")}
     </tbody></table></div>
+
+    <div class="card mt">
+      <div class="row between">
+        <div>
+          <h3 style="margin:0">Yedekleme</h3>
+          <p class="muted small" style="margin:4px 0 0">
+            Veritabanı (botlar, işlemler, stratejiler, ayarlar), regresyon kayıtları, bot durumları,
+            coin listesi ve strateji dosyaları tek arşivde toplanır.
+            <b>Geri yüklemede botlar önce durdurulur</b> ve mevcut veri otomatik olarak güvenlik yedeğine alınır.
+          </p>
+        </div>
+      </div>
+      <div class="row mt">
+        ${field("Not (isteğe bağlı)", `<input id="bak-note" placeholder="örn. v4 öncesi">`)}
+        <label class="check"><input type="checkbox" id="bak-logs"> Bot logları</label>
+        <label class="check" title="Data/ altındaki GB'lık geçmiş veri dökümleri"><input type="checkbox" id="bak-datasets"> Büyük veri dosyaları</label>
+        <label class="check"><input type="checkbox" id="bak-env"> .env (API anahtarları)</label>
+        <button class="primary" id="bak-create" type="button">Yedek oluştur</button>
+      </div>
+      <div id="bak-status" class="mt"></div>
+      <div class="result-scroll mt"><table>
+        <thead><tr><th>Arşiv</th><th>Oluşturma</th><th>Boyut</th><th>Not</th><th></th></tr></thead>
+        <tbody id="bak-body">${backupRows(backups)}</tbody>
+      </table></div>
+      <div id="bak-result" class="mt"></div>
+      <p class="muted small mt">
+        Yedekler <code>Data/backups/</code> altında tutulur (kalıcı klasör). <b>İndir</b> ile bilgisayarınıza
+        alabilirsiniz; dışarıdan yüklemek için <code>docker cp yedek.zip tradeai:/app/Data/backups/</code>
+        sonra sayfayı yenileyin.
+      </p>
+    </div>
 
     <div class="card mt">
       <div class="row between">
@@ -4792,6 +4843,64 @@ function renderSystemView(root, info, usage, snaps) {
     if (body) body.innerHTML = snapshotRows(fresh);
     bindSnapButtons();
   };
+
+  const reloadBackups = async () => {
+    const fresh = await api("/system/backups").catch(() => []);
+    const body = $("#bak-body");
+    if (body) body.innerHTML = backupRows(fresh);
+    bindBackupButtons();
+  };
+
+  const bindBackupButtons = () => {
+    $$("[data-restore]").forEach((btn) => btn.addEventListener("click", async () => {
+      const name = btn.dataset.restore;
+      const ok = await confirmDialog(
+        "Yedekten geri yükle",
+        `“${name}” geri yüklenecek.\n\n• Çalışan botlar durdurulacak\n• Mevcut veri otomatik güvenlik yedeğine alınacak\n• Geri yükleme sonrası botları yeniden başlatmanız gerekir\n\nDevam edilsin mi?`,
+        "Geri yükle",
+        true,
+      );
+      if (!ok) return;
+      $("#bak-result").innerHTML = '<span class="muted">Geri yükleme başlatıldı…</span>';
+      try {
+        const job = await api(`/system/backups/${encodeURIComponent(name)}/restore`, { method: "POST", body: {} });
+        pollJob(job.id, (j) => {
+          $("#bak-result").innerHTML = renderRestore(j);
+          if (j.status === "done") reloadBackups();
+        });
+      } catch (e) { $("#bak-result").innerHTML = `<div class="error">${esc(e.message)}</div>`; }
+    }));
+    $$("[data-del-bak]").forEach((btn) => btn.addEventListener("click", async () => {
+      const ok = await confirmDialog("Yedeği sil", "Bu arşiv kalıcı olarak silinsin mi?", "Sil", true);
+      if (!ok) return;
+      try {
+        await api(`/system/backups/${encodeURIComponent(btn.dataset.delBak)}`, { method: "DELETE" });
+        toast("Yedek silindi");
+        reloadBackups();
+      } catch (e) { toast(e.message, true); }
+    }));
+  };
+
+  $("#bak-create").addEventListener("click", async () => {
+    $("#bak-status").innerHTML = '<span class="muted">Yedek hazırlanıyor…</span>';
+    try {
+      const job = await api("/system/backups", {
+        method: "POST",
+        body: {
+          note: $("#bak-note").value,
+          include_logs: $("#bak-logs").checked,
+          include_env: $("#bak-env").checked,
+          include_datasets: $("#bak-datasets").checked,
+        },
+      });
+      pollJob(job.id, (j) => {
+        $("#bak-status").innerHTML = renderBackup(j);
+        if (j.status === "done") reloadBackups();
+      });
+    } catch (e) { $("#bak-status").innerHTML = `<div class="error">${esc(e.message)}</div>`; }
+  });
+
+  bindBackupButtons();
 
   const bindSnapButtons = () => {
     $$("[data-verify]").forEach((btn) => btn.addEventListener("click", async () => {
@@ -4833,6 +4942,46 @@ function renderSystemView(root, info, usage, snaps) {
   });
 
   bindSnapButtons();
+}
+
+function renderBackup(job) {
+  if (job.status === "error") return `<div class="error">${esc(job.error)}</div>`;
+  if (job.status !== "done") {
+    return `<span class="muted">Durum: ${esc(job.message || job.status)}${job.progress ? ` · %${job.progress}` : ""}…</span>`;
+  }
+  const r = job.result || {};
+  const inc = r.includes || {};
+  const parts = [];
+  if (inc.db) parts.push("veritabanı");
+  if (inc.snapshots) parts.push("regresyon kayıtları");
+  if (inc.state) parts.push("bot durumları");
+  if (inc.data_files) parts.push("veri dosyaları");
+  if (inc.logs) parts.push("loglar");
+  if (inc.env) parts.push(".env");
+  return `<div class="hint ok">
+    Yedek hazır: <b>${esc(r.path || r.id)}</b> · ${fmt(r.size_mb, 2)} MB
+    · ${r.file_count || 0} dosya${parts.length ? ` · ${parts.map(esc).join(", ")}` : ""}
+  </div>`;
+}
+
+function renderRestore(job) {
+  if (job.status === "error") return `<div class="error">${esc(job.error)}</div>`;
+  if (job.status !== "done") {
+    return `<span class="muted">Durum: ${esc(job.message || job.status)}${job.progress ? ` · %${job.progress}` : ""}…</span>`;
+  }
+  const r = job.result || {};
+  const f = r.files || {};
+  const stopped = (r.bots_stopped || []).length;
+  return `<div class="hint ok">
+    <div>
+      <b>Geri yükleme tamamlandı</b> · kaynak <span class="mono">${esc(r.restored_from)}</span><br>
+      Veritabanı: ${f.db || 0} · veri: ${f.data || 0} · regresyon: ${f.snapshots || 0} ·
+      durum: ${f.state || 0}${f.logs ? ` · log: ${f.logs}` : ""}${f.env ? " · .env" : ""}<br>
+      ${stopped ? `${stopped} bot durduruldu.` : ""} ${r.safety_backup ? `Güvenlik yedeği: <span class="mono">${esc(r.safety_backup)}</span>.` : ""}
+      ${esc(r.note || "")}
+    </div>
+  </div>
+  <div class="row mt"><button class="primary" onclick="location.hash='#bots'" type="button">Botlara git ve başlat</button></div>`;
 }
 
 function renderSnapshotRecord(job) {
