@@ -14,25 +14,58 @@ import numpy as np
 
 class Binance:
     def __init__(self):
-        env_files = glob(".env*")
-        if env_files:
-            # İlk bulunan dosyayı seç
-            selected_env_file = env_files[0]
-            # Seçilen dosyayı yükle
-            load_dotenv(selected_env_file)
-        else:
-            print(".env ile başlayan bir dosya bulunamadı.")
-        self.key = os.getenv('BINANCE_API_KEY')
-        self.secret = os.getenv('BINANCE_API_SECRET')
-        while True:
-            if Binance.internet_var_mi():
-                self.client = Client(self.key, self.secret)
-                break
-            time.sleep(10)
+        load_dotenv()
+        try:
+            from app.config import settings as _settings
+            key = _settings.BINANCE_API_KEY
+            secret = _settings.BINANCE_API_SECRET
+        except Exception:
+            key = os.getenv('BINANCE_API_KEY')
+            secret = os.getenv('BINANCE_API_SECRET')
+        self.key = key or os.getenv('BINANCE_API_KEY')
+        self.secret = secret or os.getenv('BINANCE_API_SECRET')
         self.base_url = "https://api.binance.com"
+        attempts = 0
+        last_error = None
+        while True:
+            try:
+                self.client = Client(self.key, self.secret)
+                # Gerçek erişimi ping ile doğrula (base URL 403 dönebilir).
+                response = requests.get(self.base_url + "/api/v3/ping", timeout=10)
+                response.raise_for_status()
+                break
+            except Exception as exc:
+                last_error = exc
+                attempts += 1
+                if attempts >= 3:
+                    raise ConnectionError(
+                        f"Binance API'ye erişilemedi: {last_error}. "
+                        "İnternet bağlantısını veya bölge kısıtlamasını kontrol edin."
+                    )
+                time.sleep(3)
         self.session = requests.Session()
         adapter = requests.adapters.HTTPAdapter(pool_connections=100, pool_maxsize=300)
         self.session.mount('https://', adapter)
+        # exchangeInfo her çağrıda çekilmesin; TTL'li önbellek
+        self._exchange_info = None
+        self._exchange_info_time = 0
+        self._minqty_cache = {}
+
+    def _load_exchange_info(self, force=False):
+        now = time.time()
+        if force or self._exchange_info is None or (now - self._exchange_info_time) > 3600:
+            response = requests.get(self.base_url + "/api/v3/exchangeInfo", timeout=20)
+            response.raise_for_status()
+            self._exchange_info = response.json()
+            self._exchange_info_time = now
+            self._minqty_cache = {}
+        return self._exchange_info
+
+    def market_buy(self, coin, adet):
+        return self.client.order_market_buy(symbol=coin, quantity=adet)
+
+    def market_sell(self, coin, adet):
+        return self.client.order_market_sell(symbol=coin, quantity=adet)
 
     def sahip_olduklarim(self):
         sahip_olduklarim = {}
@@ -50,9 +83,7 @@ class Binance:
     @staticmethod
     def internet_var_mi():
         try:
-            # Google'a bir istek göndererek internet bağlantısını kontrol ediyoruz
-            response = requests.get("https://api.binance.com", timeout=5)
-            # Eğer durum kodu 200 ise bağlantı başarılı
+            response = requests.get("https://api.binance.com/api/v3/ping", timeout=5)
             if response.status_code == 200:
                 return True
         except (requests.ConnectionError, requests.Timeout):
@@ -178,16 +209,17 @@ class Binance:
         return result
 
     def get_coin_minQTY(self,coin):
-        url = "https://api.binance.com/api/v3/exchangeInfo"
-        response = requests.get(url)
-        if response.status_code == 200:
-            data = response.json()  # JSON yanıtı al
-            for i in data['symbols']:
-                if i['symbol'] == coin and i['status']=="TRADING" and "USD" not in i['baseAsset'] and i['quoteAsset'] == "USDT" and  "SPOT" in i['permissionSets'][0]:
-                    return float(i['filters'][1]['minQty'])
-        else:
-            print("İstek başarısız oldu:", response.status_code)
-            return None
+        if coin in self._minqty_cache:
+            return self._minqty_cache[coin]
+        data = self._load_exchange_info()
+        for i in data['symbols']:
+            if i['symbol'] == coin and i['status']=="TRADING" and "USD" not in i['baseAsset'] and i['quoteAsset'] == "USDT" and "SPOT" in i['permissionSets'][0]:
+                value = float(i['filters'][1]['minQty'])
+                self._minqty_cache[coin] = value
+                return value
+        # Bulunamazsa tamamıyla başarısız olmak yerine küçük bir varsayılan döndür
+        self._minqty_cache[coin] = 0.0
+        return 0.0
     def coins_sorted_by_volume(self, coinlist, periyot):
         binance = Binance()
         data = {}

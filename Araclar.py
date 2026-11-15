@@ -13,15 +13,43 @@ import pandas as pd
 import os
 import requests
 import json
-from Backtest import Backtest
-from dotenv import load_dotenv
 from glob import glob
+from dotenv import load_dotenv
 import numpy as np
-from matplotlib.gridspec import GridSpec
-import matplotlib.pyplot as plt
 from datetime import datetime
-from matplotlib.widgets import Cursor
 import logging
+
+
+def _load_matplotlib():
+    """Grafik araçlarını yalnızca çizim yapan metotlar çağırdığında yükler.
+
+    Modül seviyesinde import edildiğinde her bot süreci ~25 MB fazla bellek
+    kullanıyordu; botlar grafik çizmediği için bu tamamen israftı.
+    """
+    global matplotlib, plt, GridSpec, Cursor
+    if plt is not None:
+        return True
+    try:
+        import matplotlib
+
+        matplotlib.use("Agg")
+        import matplotlib.pyplot as plt
+        from matplotlib.gridspec import GridSpec
+        from matplotlib.widgets import Cursor
+
+        return True
+    except Exception:  # matplotlib yoksa çizim devre dışı kalır, analiz çalışır.
+        plt = None
+        GridSpec = None
+        Cursor = None
+        return False
+
+
+matplotlib = None
+plt = None
+GridSpec = None
+Cursor = None
+from logging.handlers import RotatingFileHandler
 from logging.handlers import RotatingFileHandler
 
 # Klasör kontrolü
@@ -45,14 +73,7 @@ trade.propagate = False
 
 class Araclar:
     def __init__(self , to_email=None):
-        env_files = glob(".env*")
-        if env_files:
-            # İlk bulunan dosyayı seç
-            selected_env_file = env_files[0]
-            # Seçilen dosyayı yükle
-            load_dotenv(selected_env_file)
-        else:
-            print(".env ile başlayan bir dosya bulunamadı.")
+        load_dotenv()
         self.from_email=os.getenv('GONDERICI_EMAIL')
         self.to_email=os.getenv('ALICI_EMAIL')
         self.email_password=os.getenv('GONDERICI_EMAIL_SIFRE')
@@ -210,6 +231,10 @@ class Araclar:
             'sma200': sma200,
             'macd_val': macd[0],
             'macd_signal': macd[1],
+            'bb_down' : bb[0],
+            'bb_mid' : bb[1],
+            'bb_up' : bb[2],
+            'mac_signal': macd[1],
             'bb_down' : bb[0],
             'bb_mid' : bb[1],
             'bb_up' : bb[2],
@@ -562,8 +587,8 @@ class Araclar:
                     # Stratejileri kaydet
                     strategys[period] = strategies_list
 
-                # Sonuçları yeni JSON dosyasına yaz
-                with open('Data/strategys.json', 'w') as f:
+                # Sonuçları tek doğruluk kaynağına yaz (AI ve uygulama aynı dosyayı okur).
+                with open('Data/Strategy/strategys.json', 'w') as f:
                     json.dump(strategys, f, indent=4)
 
             print("Strateji analizi başarıyla tamamlandı ve stratejiler kaydedildi.")
@@ -574,26 +599,46 @@ class Araclar:
     def get_strategys():
         # Data klasörünün mevcut olup olmadığını kontrol et ve oluştur
         default_strategys = {"15m": ["BB_RSI","BB_ADX","FDI"],"1d": ["MA_Cross","MACD","DMO"],"1h": ["TSO","BB_ADX","BB_RSI"],"4h": ["VMZI","DMO","FDI"]}
+        strategy_path = 'Data/Strategy/strategys.json'
+        legacy_path = 'Data/strategys.json'
 
-        # Dosya kontrolü
-        if not os.path.exists('Data/Strategy/strategys.json'):
-            # Varsayılan dosyayı oluştur
-            with open('Data/Strategy/strategys.json', 'w') as f:
-                json.dump(default_strategys, f, indent=4)
-            print("Varsayılan strategys.json oluşturuldu.")
-            
-        with open(f'Data/Strategy/strategys.json', 'r') as f:
-            result = json.load(f)
-            strategys = {}
-            for period in result.keys():
-                function_list = []
-                # Fonksiyon isimlerini globals() ile eşleştir ve diziye ekle
-                for name in result[period]:
-                    if hasattr(Stratejiler, name):  # functions modülünde bu isimde bir fonksiyon var mı?
-                        function_list.append(getattr(Stratejiler, name))
-                    else:
-                        print(f"Fonksiyon tanımlı değil: {name}")
-                strategys[period] = function_list
+        def _load(path):
+            try:
+                with open(path, 'r', encoding='utf-8') as f:
+                    return json.load(f)
+            except (OSError, ValueError):
+                return None
+
+        result = _load(strategy_path)
+        legacy = _load(legacy_path)
+
+        # Eski dosya ile yeni dosya ayrışmışsa: hangisinde daha çok strateji varsa onu kullan.
+        def _count(data):
+            return sum(len(v or []) for v in (data or {}).values())
+
+        if legacy and (not result or _count(legacy) > _count(result)):
+            result = legacy
+            os.makedirs(os.path.dirname(strategy_path), exist_ok=True)
+            with open(strategy_path, 'w', encoding='utf-8') as f:
+                json.dump(result, f, indent=4)
+
+        if not result:
+            result = default_strategys
+            os.makedirs(os.path.dirname(strategy_path), exist_ok=True)
+            with open(strategy_path, 'w', encoding='utf-8') as f:
+                json.dump(result, f, indent=4)
+
+        strategys = {}
+        for period, names in result.items():
+            function_list = []
+            for name in names or []:
+                if hasattr(Stratejiler, name):
+                    function_list.append(getattr(Stratejiler, name))
+                else:
+                    print(f"Fonksiyon tanımlı değil: {name}")
+            strategys[period] = function_list
+        for period in default_strategys:
+            strategys.setdefault(period, [])
         return strategys
 
     @staticmethod
@@ -735,19 +780,20 @@ class Araclar:
             break
 
     def update_strategys(self,periyod):
+        from Backtest import Backtest
         backtest=Backtest()
         while True:
             Araclar.mum_olusmasini_bekle(periyod)
             if self.strategy_limit_check != "True":
                 time.sleep(10)
                 continue
-            araclar=Araclar()
+            
             # Hesaplamalar Yapılıyor
             backtest.paralel_hesaplama()
             # Analiz yapılıyor
-            araclar.strategy_result_analyze()
+            self.strategy_result_analyze()
             # strategy.json hazırlanıyor
-            araclar.strategy_analyze_save()
+            self.strategy_analyze_save()
 
     @staticmethod
     def stratejinin_buy_verdikleri(strategy_name,periyot):
@@ -768,10 +814,12 @@ class Araclar:
 
     @staticmethod
     def tekli_analiz(coin, periyot,stop=True,canli_veri=True):
+        from Backtest import Backtest
         result = Backtest.Hesapla(coin, periyot, stop=stop,canli_veri=canli_veri)
         Backtest.Kayit_Et([result['EXCEL DATA']])
         Backtest.backtest_islem_gecmisi_analiz(result['ISLEM GECMISI'])
-        Araclar.strategy_result_analyze()
+        araclar = Araclar()
+        araclar.strategy_result_analyze()
 
     @staticmethod
     def ondalik_basamak_sayisi(sayi):
@@ -836,6 +884,8 @@ class Araclar:
         strategy_results, indicators = strategy_func(high, low, close)
 
         # Ana grafik
+        if not _load_matplotlib():
+            return None
         num_sub_graphs = len(indicators['sub_indicators'])
         total_rows = 2 + num_sub_graphs
         fig = plt.figure(figsize=(16, 6 + 3 * num_sub_graphs))

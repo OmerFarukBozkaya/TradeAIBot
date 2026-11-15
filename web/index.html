@@ -1,0 +1,173 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#06080f">
+  <title>TradeAIBot</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Cdefs%3E%3ClinearGradient id='g' x1='0' y1='0' x2='1' y2='1'%3E%3Cstop offset='0' stop-color='%2338bdf8'/%3E%3Cstop offset='1' stop-color='%238b5cf6'/%3E%3C/linearGradient%3E%3C/defs%3E%3Crect width='64' height='64' rx='16' fill='%230a0f1c'/%3E%3Cpath d='M14 44 L26 30 L34 38 L50 18' fill='none' stroke='url(%23g)' stroke-width='5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E">
+  <link rel="stylesheet" href="/static/style.css?v=69">
+</head>
+<body>
+  <div class="bg-layer" aria-hidden="true">
+    <div class="orb orb-1"></div>
+    <div class="orb orb-2"></div>
+    <div class="orb orb-3"></div>
+    <div class="grid-overlay"></div>
+  </div>
+
+  <div id="login-overlay" class="overlay hidden">
+    <div class="login-shell">
+      <div class="login-logo">
+        <svg viewBox="0 0 64 64" width="34" height="34" aria-hidden="true">
+          <defs><linearGradient id="lg" x1="0" y1="0" x2="1" y2="1">
+            <stop offset="0" stop-color="#38bdf8"/><stop offset="1" stop-color="#8b5cf6"/>
+          </linearGradient></defs>
+          <path d="M10 46 L24 30 L34 39 L54 15" fill="none" stroke="url(#lg)" stroke-width="5"
+                stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+      </div>
+      <h1>Trade<span>AI</span>Bot</h1>
+      <p class="muted">Kontrol paneline giriş yapın</p>
+      <form id="login-form" autocomplete="on">
+        <label>Kullanıcı adı<input id="login-user" autocomplete="username" required></label>
+        <label>Şifre<input id="login-pass" type="password" autocomplete="current-password" required></label>
+        <button type="submit" class="primary block">Giriş Yap</button>
+        <div id="login-error" class="error"></div>
+      </form>
+      <div class="login-foot">Yerel ağ · Şifreli oturum · CSRF korumalı</div>
+    </div>
+  </div>
+
+  <div id="app" class="hidden">
+    <aside class="sidebar">
+      <a class="brand" href="#dashboard">
+        <span class="brand-mark">
+          <svg viewBox="0 0 64 64" width="22" height="22" aria-hidden="true">
+            <defs><linearGradient id="bg1" x1="0" y1="0" x2="1" y2="1">
+              <stop offset="0" stop-color="#38bdf8"/><stop offset="1" stop-color="#8b5cf6"/>
+            </linearGradient></defs>
+            <path d="M10 46 L24 30 L34 39 L54 15" fill="none" stroke="url(#bg1)" stroke-width="6"
+                  stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+        </span>
+        <span class="brand-text">Trade<span>AI</span></span>
+      </a>
+
+      <nav id="nav">
+        <a href="#dashboard" data-view="dashboard">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 13h6V4H4v9Zm0 7h6v-5H4v5Zm10 0h6v-9h-6v9Zm0-16v5h6V4h-6Z"/></svg>
+          <span>Dashboard</span>
+        </a>
+        <a href="#bots" data-view="bots">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2a2 2 0 0 1 2 2v1h2a4 4 0 0 1 4 4v3h1a2 2 0 1 1 0 4h-1v3a4 4 0 0 1-4 4H8a4 4 0 0 1-4-4v-3H3a2 2 0 1 1 0-4h1V9a4 4 0 0 1 4-4h2V4a2 2 0 0 1 2-2Zm-3 9a1.5 1.5 0 1 0 0 3 1.5 1.5 0 0 0 0-3Zm6 0a1.5 1.5 0 1 0 0 3 1.5 1.5 0 0 0 0-3Z"/></svg>
+          <span>Botlar</span>
+        </a>
+        <a href="#strategies" data-view="strategies">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 3h2v18H3V3Zm4 13h3v5H7v-5Zm5-7h3v12h-3V9Zm5 4h3v8h-3v-8Zm5-9h-3v17h3V4Z"/></svg>
+          <span>Stratejiler</span>
+        </a>
+        <a href="#scan" data-view="scan">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M10 2a8 8 0 1 0 4.9 14.3l5 5 1.4-1.4-5-5A8 8 0 0 0 10 2Zm0 2a6 6 0 1 1 0 12 6 6 0 0 1 0-12Z"/></svg>
+          <span>Tarama</span>
+        </a>
+        <a href="#lists" data-view="lists">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5h16v2H4V5Zm0 6h16v2H4v-2Zm0 6h10v2H4v-2Z"/></svg>
+          <span>Coin Listeleri</span>
+        </a>
+        <a href="#analysis" data-view="analysis">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20h16v2H4v-2Zm1-3 4-6 3 3 5-7 2 1.5-6.4 9L9.6 14 6.6 18.5 5 17Z"/></svg>
+          <span>Analiz</span>
+        </a>
+        <a href="#trades" data-view="trades">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 3h10a2 2 0 0 1 2 2v16l-3.5-2-3.5 2-3.5-2L5 21V5a2 2 0 0 1 2-2Zm1 5v2h8V8H8Zm0 4v2h6v-2H8Z"/></svg>
+          <span>İşlem Geçmişi</span>
+        </a>
+        <a href="#settings" data-view="settings">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 8a4 4 0 1 0 0 8 4 4 0 0 0 0-8Zm9.4 4a7.6 7.6 0 0 1-.1 1.2l2 1.6-2 3.4-2.4-1a8 8 0 0 1-2 1.2l-.3 2.6h-4l-.3-2.6a8 8 0 0 1-2-1.2l-2.4 1-2-3.4 2-1.6a7.6 7.6 0 0 1 0-2.4l-2-1.6 2-3.4 2.4 1a8 8 0 0 1 2-1.2L10.6 2h4l.3 2.6a8 8 0 0 1 2 1.2l2.4-1 2 3.4-2 1.6c.1.4.1.8.1 1.2Z"/></svg>
+          <span>Ayarlar</span>
+        </a>
+        <a href="#system" data-view="system">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 4h16a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2Zm0 2v9h16V6H4Zm4 14h8v2H8v-2Z"/></svg>
+          <span>Sistem</span>
+        </a>
+      </nav>
+
+      <div class="sidebar-footer">
+        <div class="user-chip">
+          <span class="avatar" id="user-avatar">A</span>
+          <span id="current-user" class="username"></span>
+        </div>
+        <button id="logout" class="icon-btn" title="Çıkış yap" aria-label="Çıkış yap">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M10 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h5v-2H5V5h5V3Zm6.2 5.4L15 9.6l2.4 2.4H9v2h8.4L15 16.4l1.2 1.2L21 13l-4.8-4.6Z"/></svg>
+        </button>
+      </div>
+    </aside>
+
+    <main>
+      <header class="topbar">
+        <div class="topbar-inner">
+          <div class="topbar-left">
+            <span class="eyebrow">TradeAIBot <span class="crumb-sep">/</span> <span id="view-crumb">Dashboard</span></span>
+            <div class="topbar-title">
+              <h2 id="view-title">Dashboard</h2>
+              <span class="topbar-sub" id="view-sub">Genel bakış ve performans</span>
+            </div>
+          </div>
+
+          <div class="topbar-stats" id="topbar-stats">
+            <div class="tb-stat">
+              <span class="tb-label">Çalışan bot</span>
+              <b id="tb-bots">—</b>
+            </div>
+            <div class="tb-stat tb-opt">
+              <span class="tb-label">Açık pozisyon</span>
+              <b id="tb-pos">—</b>
+            </div>
+            <div class="tb-stat tb-opt">
+              <span class="tb-label">Kazanma oranı</span>
+              <b id="tb-win">—</b>
+            </div>
+            <div class="tb-stat">
+              <span class="tb-label">Toplam K/Z</span>
+              <b id="tb-pnl">—</b>
+            </div>
+          </div>
+
+          <div class="topbar-right">
+            <button class="icon-btn" id="topbar-refresh" type="button" title="Yenile" aria-label="Yenile">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5V2L7 6l5 4V7a5 5 0 1 1-5 5H5a7 7 0 1 0 7-7Z"/></svg>
+            </button>
+            <button id="live-toggle" class="live-toggle" type="button" title="Canlı işlem anahtarı">
+              <span class="lt-track"><span class="lt-thumb"></span></span>
+              <span class="lt-text">Canlı işlem</span>
+              <span id="live-state" class="lt-state">Kapalı</span>
+            </button>
+            <div class="clock-wrap">
+              <div class="clock" id="clock"></div>
+              <div class="clock-date" id="clock-date"></div>
+            </div>
+          </div>
+        </div>
+      </header>
+      <section id="content"></section>
+    </main>
+  </div>
+
+  <div id="modal" class="overlay hidden">
+    <div class="modal-card">
+      <div class="modal-head">
+        <h3 id="modal-title"></h3>
+        <button id="modal-close" class="icon-btn" aria-label="Kapat">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M18.3 5.7 12 12l6.3 6.3-1.4 1.4L10.6 13.4 4.3 19.7 2.9 18.3 9.2 12 2.9 5.7 4.3 4.3l6.3 6.3 6.3-6.3 1.4 1.4Z"/></svg>
+        </button>
+      </div>
+      <div id="modal-body"></div>
+    </div>
+  </div>
+
+  <div id="toast" class="toast hidden"></div>
+
+  <script src="/static/app.js?v=69"></script>
+</body>
+</html>

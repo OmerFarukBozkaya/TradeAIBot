@@ -1,12 +1,44 @@
-version: '3.8'
 services:
   tradeai:
-    image: trade_ai
-    stdin_open: true
-    tty: true
+    build:
+      context: .
+      args:
+        INSTALL_AI: "false"
+    container_name: tradeai
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:8080:8080"
+    env_file:
+      - .env
+    environment:
+      - TZ=Europe/Istanbul
     volumes:
-      - ./Log:/app/Log
       - ./Data:/app/Data
+      - ./Log:/app/Log
+      - ./state:/app/state
       - ./Trade_Durumu:/app/Trade_Durumu
       - ./Trade_Durumu_AI:/app/Trade_Durumu_AI
-      - ./.env:/app/.env
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8080/api/health')"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
+  ai:
+    profiles: ["ai"]
+    build:
+      context: .
+      dockerfile: Dockerfile.ai
+    container_name: tradeai-ai
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      - TZ=Europe/Istanbul
+      - AI_ENABLED=true
+    volumes:
+      - ./Data:/app/Data
+      - ./Log:/app/Log
+      - ./state:/app/state
+    depends_on:
+      - tradeai

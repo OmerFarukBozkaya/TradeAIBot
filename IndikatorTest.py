@@ -1,8 +1,6 @@
 import numpy as np
 import pandas as pd
 from Indikator import Indikator
-import matplotlib.pyplot as plt
-from matplotlib.widgets import Cursor
 from datetime import datetime
 
 class IndikatorTest:
@@ -21,6 +19,8 @@ class IndikatorTest:
 
     @staticmethod
     def IndikatorResultTest(canli_veriler):
+        import matplotlib.pyplot as plt
+        from matplotlib.widgets import Cursor
         test_indikator = IndikatorTest()
         indikator = Indikator()
 
@@ -1204,6 +1204,27 @@ class IndikatorTest:
         bb_trend_list = [None if pd.isna(x) else x for x in bb_trend.tolist()]
 
         return bb_trend_list
+
+    @staticmethod
+    def vortex_indicator(high, low, period: int = 14):
+        if len(high) < period:
+            return [None] * len(high), [None] * len(high)
+
+        high = np.array(high)
+        low = np.array(low)
+
+        VMP = np.abs(high[1:] - low[:-1])
+        VMM = np.abs(low[1:] - high[:-1])
+        ATR = np.abs(high - low)  # ATR(1) benzeri basit mutlak fark hesaplama
+
+        VIP = [None] * len(high)
+        VIM = [None] * len(low)
+
+        for i in range(period, len(high)):
+            VIP[i] = np.sum(VMP[i - period:i]) / np.sum(ATR[i - period:i])
+            VIM[i] = np.sum(VMM[i - period:i]) / np.sum(ATR[i - period:i])
+
+        return VIP, VIM
 
     @staticmethod
     def Grafik_Indikator(open_prices, high_prices, low_prices, close_prices, vol, timestamps,

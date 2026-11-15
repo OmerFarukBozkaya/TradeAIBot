@@ -27,11 +27,20 @@ class Indikator:
         if len(src) < length:
             return [None] * len(src), [None] * len(src), [None] * len(src)
 
+        values = np.asarray(src, dtype=float)
         # Hareketli ortalama (Rolling Mean) hesapla
-        rolling_mean = np.convolve(src, np.ones(length) / length, mode='valid')
+        rolling_mean = np.convolve(values, np.ones(length) / length, mode='valid')
 
-        # Hareketli standart sapma (Rolling Std) hesapla
-        rolling_std = np.array([np.std(src[i:i + length]) for i in range(len(src) - length + 1)])
+        # Hareketli standart sapma (Rolling Std) — kümülatif toplamlarla O(n).
+        # Önceden her pencere için np.std çağrılıyordu (O(n·w)); 250.000 mumluk
+        # bir backtest'te bu tek başına ~11 saniye harcıyordu.
+        cum = np.cumsum(np.concatenate(([0.0], values)))
+        cum_sq = np.cumsum(np.concatenate(([0.0], values * values)))
+        window_sum = cum[length:] - cum[:-length]
+        window_sq = cum_sq[length:] - cum_sq[:-length]
+        mean = window_sum / length
+        variance = np.maximum(window_sq / length - mean * mean, 0.0)
+        rolling_std = np.sqrt(variance)
 
         # Üst ve alt bandı hesapla
         upper_band = rolling_mean + 2 * rolling_std
@@ -637,66 +646,58 @@ class Indikator:
 
     @staticmethod
     def Super_Trend(high, low, close, atr_length=10, factor=3.0):
+        """Supertrend hesaplama (numpy; pandas satır erişimi kaldırıldı).
+
+        Formül birebir korunmuştur: ATR = SMA(TrueRange), bantlar hl2 ± factor*ATR.
         """
-        Supertrend hesaplama fonksiyonu (doğru ve optimize edilmiş)
+        h = np.asarray(high, dtype=float)
+        l = np.asarray(low, dtype=float)
+        c = np.asarray(close, dtype=float)
+        n = len(c)
+        if n == 0:
+            return [], []
 
-        Parameters:
-            high (list): Yüksek fiyat verileri
-            low (list): Düşük fiyat verileri
-            close (list): Kapanış fiyatları
-            atr_length (int): ATR periyodu
-            factor (float): Faktör (çarpan)
+        prev_close = np.concatenate(([np.nan], c[:-1]))
+        tr = np.nanmax(
+            np.vstack([h - l, np.abs(h - prev_close), np.abs(l - prev_close)]),
+            axis=0,
+        )
 
-        Returns:
-            tuple: (Supertrend değerleri, trend yönleri)
-        """
-        # Verileri DataFrame'e dönüştür
-        data = pd.DataFrame({'high': high, 'low': low, 'close': close})
+        # rolling(atr_length).mean(): ilk atr_length-1 değer NaN
+        atr = np.full(n, np.nan)
+        if n >= atr_length:
+            cumsum = np.cumsum(np.insert(tr, 0, 0.0))
+            atr[atr_length - 1:] = (cumsum[atr_length:] - cumsum[:-atr_length]) / atr_length
 
-        # Ortalama True Range (ATR) hesaplama
-        data['tr1'] = data['high'] - data['low']
-        data['tr2'] = abs(data['high'] - data['close'].shift(1))
-        data['tr3'] = abs(data['low'] - data['close'].shift(1))
-        data['true_range'] = data[['tr1', 'tr2', 'tr3']].max(axis=1)
-        data['atr'] = data['true_range'].rolling(atr_length).mean()
+        hl2 = (h + l) / 2.0
+        upper_band = hl2 + factor * atr
+        lower_band = hl2 - factor * atr
 
-        # Supertrend üst ve alt bantlarının hesaplanması
-        hl2 = (data['high'] + data['low']) / 2
-        data['upper_band'] = hl2 + factor * data['atr']
-        data['lower_band'] = hl2 - factor * data['atr']
+        supertrend: list = [None] * n
+        direction: list = [None] * n
 
-        # Çıkış listelerini giriş verisi ile aynı uzunlukta oluştur (ilk kısımlar None)
-        supertrend = [None] * len(data)
-        direction = [None] * len(data)
-
-        for i in range(len(data)):
-            if i < atr_length:
-                # ATR periyodu tamamlanmadan hesaplama yapma, None bırak
+        for i in range(atr_length, n):
+            if i == atr_length:
+                supertrend[i] = float(lower_band[i])
+                direction[i] = 1
                 continue
-            elif i == atr_length:
-                # İlk hesaplama için başlangıç değeri: alt bant kullanılıyor
-                supertrend[i] = data['lower_band'].iloc[i]
-                direction[i] = 1  # Başlangıçta Uptrend
+            prev_st = supertrend[i - 1]
+            prev_dir = direction[i - 1]
+            if c[i] > prev_st:
+                st = lower_band[i]
+                d = 1
+            elif c[i] < prev_st:
+                st = upper_band[i]
+                d = -1
             else:
-                # Önceki değerlerden faydalanarak hesaplama yap
-                prev_supertrend = supertrend[i - 1]
-                prev_direction = direction[i - 1]
-
-                if data['close'].iloc[i] > prev_supertrend:
-                    supertrend[i] = data['lower_band'].iloc[i]
-                    direction[i] = 1  # Uptrend
-                elif data['close'].iloc[i] < prev_supertrend:
-                    supertrend[i] = data['upper_band'].iloc[i]
-                    direction[i] = -1  # Downtrend
-                else:
-                    supertrend[i] = prev_supertrend
-                    direction[i] = prev_direction
-
-                # Üst ve alt bant güncellemesi
-                if direction[i] == 1:
-                    supertrend[i] = min(supertrend[i], data['upper_band'].iloc[i])
-                elif direction[i] == -1:
-                    supertrend[i] = max(supertrend[i], data['lower_band'].iloc[i])
+                st = prev_st
+                d = prev_dir
+            if d == 1:
+                st = min(st, upper_band[i])
+            elif d == -1:
+                st = max(st, lower_band[i])
+            supertrend[i] = float(st)
+            direction[i] = int(d)
 
         return supertrend, direction
 

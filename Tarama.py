@@ -33,14 +33,7 @@ tarama.propagate = False
 class Tarama:
     @staticmethod
     def Tara(coinlist, periyot, mum_bekle=True):
-        env_files = glob(".env*")
-        if env_files:
-            # İlk bulunan dosyayı seç
-            selected_env_file = env_files[0]
-            # Seçilen dosyayı yükle
-            load_dotenv(selected_env_file)
-        else:
-            print(".env ile başlayan bir dosya bulunamadı.")
+        load_dotenv()
         calisacak_periyotlar = json.loads(os.getenv("CALISACAK_PERIYOTLAR"))
         
         if periyot not in calisacak_periyotlar:

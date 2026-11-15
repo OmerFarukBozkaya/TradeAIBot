@@ -61,15 +61,7 @@ buy_result.propagate = False
 
 class Trade:
     def __init__(self):
-        env_files = glob(".env*")
-        if env_files:
-            # İlk bulunan dosyayı seç
-            selected_env_file = env_files[0]
-            # Seçilen dosyayı yükle
-            load_dotenv(selected_env_file)
-        else:
-            print(".env ile başlayan bir dosya bulunamadı.")
-            exit(-1)
+        load_dotenv()
         self.binance = Binance()
         self.araclar = Araclar()
         self.islem_acik = False  # İşlem durumu
@@ -189,10 +181,7 @@ class Trade:
                             self.calisacak_periyotlar.remove(periyot)
                         except:
                             trade.error(f"CALISACAK_PERIYOTLAR dan {periyot} kaldirilamadi !")
-                        yeni_deger = str(self.calisacak_periyotlar).replace("\'", "\"")
-                        env_files = glob(".env*")
-                        env_files = env_files[0]
-                        self.araclar.change_env_variable(env_files, "CALISACAK_PERIYOTLAR", yeni_deger)
+                        # .env çalışma anında değiştirilmez; durdurma sadece süreci sonlandırır.
                         exit(0)
                 else:
                     coinlist = self.binance.coin_list()
@@ -260,10 +249,7 @@ class Trade:
                             self.calisacak_periyotlar_ai.remove(periyot)
                         except:
                             trade.error(f"CALISACAK_PERIYOTLAR_AI dan {periyot} kaldirilamadi !")
-                        yeni_deger = str(self.calisacak_periyotlar_ai).replace("\'", "\"")
-                        env_files = glob(".env*")
-                        env_files = env_files[0]
-                        self.araclar.change_env_variable(env_files, "CALISACAK_PERIYOTLAR_AI", yeni_deger)
+                        # .env çalışma anında değiştirilmez.
                         exit(0)
                 else:
                     coinlist = [coin]
@@ -385,14 +371,7 @@ class Trade:
                                 limit=limit-1
             return False  # İşlem açılmadı
     def satis_sinyali_bekle(self, periyot,temp_trade=False):
-        env_files = glob(".env*")
-        if env_files:
-            # İlk bulunan dosyayı seç
-            selected_env_file = env_files[0]
-            # Seçilen dosyayı yükle
-            load_dotenv(selected_env_file)
-        else:
-            print(".env ile başlayan bir dosya bulunamadı.")
+        load_dotenv()
         dinamik_stop_lose=os.getenv('DINAMIK_STOP_LOSE')=="True"
         static_stop_lose=os.getenv('STATIC_STOP_LOSE')=="True"
         destek_stop_lose=os.getenv('DESTEK_STOP_LOSE')=="True"

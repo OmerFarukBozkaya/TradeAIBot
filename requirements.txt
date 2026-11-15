@@ -1,18 +1,16 @@
-binance_connector
-joblib
-keras
-keras_tuner
-matplotlib
-numpy
-pandas
-plotly
-psutil
-python-dotenv
-python_binance
-Requests
-scikit_learn
-seaborn
-tensorflow
-ydata_profiling
-openpyxl
-jq
+# ---- Web / API ----
+fastapi>=0.110,<1.0
+uvicorn[standard]>=0.27,<1.0
+python-dotenv>=1.0
+pydantic>=2.6
+
+# ---- Veri / hesaplama ----
+numpy>=1.26,<3.0
+pandas>=2.0,<3.0
+requests>=2.31
+psutil>=5.9
+openpyxl>=3.1
+matplotlib>=3.8
+
+# ---- Borsa ----
+python-binance>=1.0.19

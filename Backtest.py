@@ -1,14 +1,13 @@
-from IndikatorTest import IndikatorTest
-import matplotlib.pyplot as plt
-import numpy as np
-import matplotlib.gridspec as gridspec
 import os
-import pandas as pd
-from Binance import Binance
-from StratejilerTest import StratejilerTest
 from concurrent.futures import ProcessPoolExecutor
+
+import numpy as np
+import pandas as pd
+
+from IndikatorTest import IndikatorTest
+from StratejilerTest import StratejilerTest
+from Binance import Binance
 from datetime import datetime
-from matplotlib.widgets import Cursor
 
 class Backtest:
     @staticmethod
@@ -192,6 +191,9 @@ class Backtest:
         new_data_df.to_excel(output_file, index=False, engine='openpyxl')
     @staticmethod
     def Grafik_Ciz(coin, periyot,selected_strategy_name=None,stop=False,ema_check=False,bb_check=False,heiken_ashi=False):
+        import matplotlib.pyplot as plt
+        from matplotlib.widgets import Cursor
+        
         # Veri ithali
         binance = Binance()
         data = binance.get_coin_data(coin, periyot, 1000)
@@ -429,6 +431,9 @@ class Backtest:
             plt.show()
     @staticmethod
     def Grafik_Ciz_Save(coin, periyot, selected_strategy_name=None):
+        import matplotlib.pyplot as plt
+        import matplotlib.gridspec as gridspec
+        
         # Veri ithali
         binance = Binance()
         data = binance.get_coin_data(coin, periyot, 1000)

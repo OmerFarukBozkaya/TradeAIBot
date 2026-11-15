@@ -1,0 +1,11 @@
+binance-connector
+joblib
+numpy
+pandas
+psutil
+python-dotenv
+python-binance
+Requests
+scikit-learn
+openpyxl
+jq

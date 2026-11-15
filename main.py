@@ -1,4 +1,3 @@
-import AI
 from Binance import Binance
 from Backtest import Backtest
 from IndikatorTest import IndikatorTest
@@ -236,6 +235,7 @@ def main ():
         print(araclar.saniye_to_hms(b - a))
     elif com == "24":
         a = time.time()
+        import AI
         AI.main()
         b = time.time()
         print(araclar.saniye_to_hms(b - a))

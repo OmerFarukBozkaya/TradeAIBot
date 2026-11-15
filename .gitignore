@@ -1,11 +1,25 @@
-.idea
-Proje notlari.txt
-__pycache__
-Data
-Log
-Trade_Durumu
-.env*
-.venv
+# Python
+__pycache__/
+*.pyc
+.pytest_cache/
+.venv/
+
+# IDE
+.idea/
+.vscode/
+
+# Çalışma zamanı verisi
+Data/
+Log/
+state/
+Trade_Durumu/
+Trade_Durumu_AI/
+
+# Gizli dosyalar
+.env
+.env.*
+!.env.example
+
+# AI model çıktıları
 scaler.pkl
 tradeai_model.keras
-Trade_Durumu_AI
