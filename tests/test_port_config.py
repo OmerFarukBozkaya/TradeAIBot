@@ -16,7 +16,9 @@ def test_dockerfile_port_from_env():
 
 def test_compose_port_from_env():
     text = (BASE_DIR / "docker-compose.yml").read_text(encoding="utf-8")
-    assert "127.0.0.1:${TRADEAI_PORT:-8080}:${TRADEAI_PORT:-8080}" in text
+    # Yayın adresi TRADEAI_BIND ile, port TRADEAI_PORT ile yönetilir.
+    assert "${TRADEAI_BIND:-0.0.0.0}:${TRADEAI_PORT:-8080}:${TRADEAI_PORT:-8080}" in text
+    assert "127.0.0.1:${TRADEAI_PORT" not in text, "yalnızca loopback'e bağlanmamalı"
     assert "TRADEAI_PORT" in text.split("healthcheck:")[-1], "healthcheck env portunu kullanmalı"
 
 

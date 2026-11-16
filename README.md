@@ -34,14 +34,29 @@ Kripto para analizi, backtest, tarama ve otomatik alım-satım için **web aray�
    ```
 
 4. Tarayıcıda açın: <http://localhost:8080> (portu değiştirdiyseniz
-   `.env` içindeki `TRADEAI_PORT` değerini kullanın, ör. <http://localhost:8089>)
+   `.env` içindeki `TRADEAI_PORT` değerini kullanın, ör. <http://localhost:8089>).
+   Aynı yerel ağdaki başka cihazlardan `http://<bu-makinenin-ip-adresi>:<port>`
+   ile erişebilirsiniz (ör. <http://192.168.1.21:8090>).
 
 5. İlk girişten sonra **Ayarlar → Şifre değiştir** ile şifreyi güncelleyin.
 
 > Port **`.env` → `TRADEAI_PORT`** ile belirlenir (varsayılan `8080`). Hem container
 > içindeki uvicorn hem host port eşlemesi bu değeri kullanır; değiştirdikten sonra
-> `docker compose up -d` yeterlidir (yeniden derleme gerekmez). Uygulama yalnızca
-> `127.0.0.1` adresine yayınlanır; dışarı açmak için HTTPS kullanın.
+> `docker compose up -d` yeterlidir (yeniden derleme gerekmez).
+>
+> Yayın adresi **`.env` → `TRADEAI_BIND`** ile belirlenir. Varsayılan **`0.0.0.0`**
+> tüm ağ arayüzlerini dinler; yani panel yerel ağdaki telefon/tablet/diğer
+> bilgisayarlardan erişilebilir. Yalnızca bu makineden erişmek için
+> `TRADEAI_BIND=127.0.0.1` yapın.
+>
+> **Güvenlik:** panel HTTP (şifresiz) çalışır. Güvenilmeyen ağlara (kafe Wi-Fi,
+> misafir ağı) açmayın; internetten erişim için VPN veya HTTPS'li ters proxy
+> kullanın. Windows'ta ilk erişimde güvenlik duvarı izni gerekebilir:
+>
+> ```powershell
+> New-NetFirewallRule -DisplayName "TradeAIBot 8090" -Direction Inbound `
+>   -Protocol TCP -LocalPort 8090 -Action Allow -Profile Private
+> ```
 
 > **Aynı tarayıcıda iki panel** (ör. remote `localhost:8089` + yerel `localhost:8080`)
 > açacaksanız: tarayıcı çerezleri **port ayrımı yapmaz**, aynı adlı çerez ikinci

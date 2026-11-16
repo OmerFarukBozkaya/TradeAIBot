@@ -7,7 +7,7 @@ services:
     container_name: tradeai
     restart: unless-stopped
     ports:
-      - "127.0.0.1:${TRADEAI_PORT:-8080}:${TRADEAI_PORT:-8080}"
+      - "${TRADEAI_BIND:-0.0.0.0}:${TRADEAI_PORT:-8080}:${TRADEAI_PORT:-8080}"
     env_file:
       - .env
     environment:
