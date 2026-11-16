@@ -1608,6 +1608,7 @@ function botCard(bot, seriesMap = {}) {
       <button data-action="stop" data-id="${esc(bot.id)}" ${bot.status !== "running" && bot.status !== "stopping" ? "disabled" : ""}>Durdur</button>
       <button data-action="restart" data-id="${esc(bot.id)}">Yeniden Başlat</button>
       <button data-action="edit" data-id="${esc(bot.id)}" ${bot.status === "running" ? "disabled" : ""}>Düzenle</button>
+      <button data-action="duplicate" data-id="${esc(bot.id)}">Kopyala</button>
       <button data-action="logs" data-id="${esc(bot.id)}">Loglar</button>
       <button data-action="delete" data-id="${esc(bot.id)}" class="ghost" ${bot.status === "running" ? "disabled" : ""}>Sil</button>
     </div>
@@ -1626,6 +1627,26 @@ async function botAction(action, id, mode) {
       return;
     }
     else if (action === "mode") { return switchBotMode(id, mode); }
+    else if (action === "duplicate") {
+      const bot = (state.bots || []).find((b) => b.id === id);
+      if (!bot) return;
+      const name = prompt("Yeni bot adı:", `${bot.name} (kopya)`);
+      if (!name || !name.trim()) return;
+      const live = bot.mode === "live";
+      const ok = await confirmDialog(
+        "Botu kopyala",
+        `"${bot.name}" botu yeni adla kopyalanacak.\n\n` +
+          `• Ad, periyot ve kurallar (strateji, risk, coinler) kopyalanır\n` +
+          `• İşlem geçmişi, loglar ve açık pozisyon kopyalanmaz; sıfırdan başlar\n` +
+          (live ? `• Kaynak bot CANLI; kopya da canlı olacak\n` : "") +
+          `\nDevam edilsin mi?`,
+        "Kopyala",
+        live,
+      );
+      if (!ok) return;
+      const res = await api(`/bots/${id}/duplicate`, { method: "POST", body: { name: name.trim() } });
+      toast(`Kopyalandı: ${res.name}`);
+    }
     else if (action === "delete") {
       if (!confirm("Bu bot silinsin mi? Geçmiş işlemler korunur.")) return;
       await api(`/bots/${id}`, { method: "DELETE" }); toast("Bot silindi");

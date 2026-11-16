@@ -316,6 +316,23 @@ Bot kartında durum, mod, nakit, K/Z, işlem sayısı, sparkline ve açık pozis
 Mod rozetine tıklayarak botu **tek tıkla test ↔ canlı** arasında değiştirebilirsiniz.
 **Loglar** penceresi botun canlı çıktısını ve son olayları (bilgi / uyarı / hata) birlikte gösterir.
 
+### Botu kopyalama
+
+Bot kartındaki **Kopyala** düğmesi, botun **adını, periyodunu ve kurallarını** (stratejiler,
+risk koruması, filtreler, coinler / coin listesi, maksimum pozisyon yüzdesi) yeni bir bota taşır.
+Kopya **sıfırdan başlar**:
+
+| Taşınır | Taşınmaz |
+|---|---|
+| Ad (istediğiniz gibi değiştirilebilir), periyot | İşlem geçmişi ve K/Z istatistikleri |
+| Stratejiler ve kuralları | Açık/kapalı pozisyonlar |
+| Risk koruması ve filtreler | Sinyal, olay ve bot logları |
+| Coin listesi, başlangıç nakdi, mod | Durum dosyası (`state/<bot_id>.json`) |
+
+Yeni bot **durdurulmuş** olarak oluşturulur; başlangıç nakdi ve sıfır K/Z ile Botlar
+sayfasından başlatılır. Kaynak bot canlıysa kopya da canlı moda geçer ve canlı işlem
+anahtarının açık olması gerekir; kopya canlı açıkken oluşturulursa onay istenir.
+
 ### Anlık K/Z ve pozisyon durumu
 
 Bot kartları **5 saniyede bir** kendini günceller (sayfa yenilenmeden):

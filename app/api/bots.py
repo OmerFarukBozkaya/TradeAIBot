@@ -48,6 +48,11 @@ class ActionBody(BaseModel):
     password: Optional[str] = None
 
 
+class DuplicateBody(BaseModel):
+    name: Optional[str] = None
+    mode: Optional[str] = None
+
+
 def _builtin_label(name: str) -> str:
     from app.strategies.service import list_builtin
 
@@ -321,6 +326,67 @@ async def get_bot(bot_id: str):
     if not bot:
         raise HTTPException(404, "Bot bulunamadı")
     return _serialize(bot)
+
+
+@router.post("/{bot_id}/duplicate")
+async def duplicate_bot(bot_id: str, body: Optional[DuplicateBody] = None):
+    """Botu kopyalar: ad, periyot ve kurallar (strateji/risk/coinler) taşınır.
+
+    İşlem geçmişi, pozisyonlar, sinyaller, olaylar ve loglar **kopyalanmaz**;
+    yeni bot sıfırdan başlar (durum dosyası yok → başlangıç nakdi ve sıfır K/Z).
+    """
+    source = db.row("SELECT * FROM bots WHERE id=?", (bot_id,))
+    if not source:
+        raise HTTPException(404, "Bot bulunamadı")
+
+    try:
+        config = json.loads(source["config_json"] or "{}")
+    except (TypeError, ValueError):
+        config = {}
+    if not isinstance(config, dict):
+        config = {}
+
+    # Kuralların hâlâ çalıştırılabilir olduğunu doğrula (silinmiş strateji kopyalanmasın).
+    for spec in normalize_specs(config.get("strategies")):
+        try:
+            build_evaluator(spec)
+        except Exception as exc:
+            raise HTTPException(400, f"Strateji hatası: {exc}")
+
+    mode = ((body.mode if body and body.mode else source["mode"]) or "paper").lower()
+    if mode not in {"paper", "live"}:
+        raise HTTPException(400, "Mod paper veya live olmalı")
+    if mode == "live":
+        _live_gate()
+
+    name = ((body.name if body and body.name else "") or f"{source['name']} (kopya)").strip()
+    if not name:
+        raise HTTPException(400, "Bot adı gerekli")
+
+    new_id = f"bot_{uuid.uuid4().hex[:10]}"
+    now = db.utcnow()
+    db.execute(
+        "INSERT INTO bots(id,name,type,mode,period,config_json,status,auto_restart,created_at,updated_at) "
+        "VALUES(?,?,?,?,?,?,?,?,?,?)",
+        (
+            new_id,
+            name,
+            source["type"] or "trade",
+            mode,
+            source["period"],
+            json.dumps(config, ensure_ascii=False),
+            "stopped",
+            1 if source.get("auto_restart") else 0,
+            now,
+            now,
+        ),
+    )
+    db.log_event(
+        new_id,
+        f"Bot kopyalandı: {source['name']} → {name} ({mode}, {source['period']})",
+        "info",
+    )
+    return _serialize(db.row("SELECT * FROM bots WHERE id=?", (new_id,)))
 
 
 @router.patch("/{bot_id}")
