@@ -112,7 +112,7 @@ SETTINGS: Tuple[SettingDef, ...] = (
     SettingDef("AUTO_RESTART", "Çökmede otomatik yeniden başlat", "system", "bool", "Beklenmedik kapanan botu supervisor ayağa kaldırır."),
     SettingDef("HEARTBEAT_SECONDS", "Heartbeat aralığı (sn)", "system", "int", "Supervisor kontrol sıklığı.", min=2, max=300),
     SettingDef("MAX_JOBS", "Eşzamanlı iş limiti", "system", "int", "Backtest/tarama gibi ağır işlerin paralel sayısı.", min=1, max=16),
-    SettingDef("AI_ENABLED", "Yapay zekâ özellikleri", "system", "bool", "AI profilinin kullanılabilir olması için gerekir."),
+    SettingDef("AI_ENABLED", "Yapay zekâ özellikleri", "system", "bool", "AI Eğitimi sekmesini ve model eğitimini açar."),
 )
 
 BY_KEY: Dict[str, SettingDef] = {item.key: item for item in SETTINGS}

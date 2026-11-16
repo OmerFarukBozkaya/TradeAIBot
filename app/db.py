@@ -176,6 +176,45 @@ CREATE TABLE IF NOT EXISTS settings (
     updated_at TEXT NOT NULL
 );
 
+CREATE TABLE IF NOT EXISTS ai_models (
+    id TEXT PRIMARY KEY,
+    name TEXT NOT NULL,
+    status TEXT NOT NULL DEFAULT 'candidate',
+    manifest_json TEXT NOT NULL,
+    metrics_json TEXT,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS ai_experiences (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    model_id TEXT,
+    bot_id TEXT,
+    coin TEXT NOT NULL,
+    period TEXT NOT NULL,
+    side TEXT NOT NULL DEFAULT 'BUY',
+    features_json TEXT NOT NULL,
+    entry_price REAL,
+    exit_price REAL,
+    pnl_pct REAL,
+    candles INTEGER,
+    reason TEXT,
+    mode TEXT,
+    created_at TEXT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_ai_experiences_model ON ai_experiences(model_id, created_at);
+CREATE INDEX IF NOT EXISTS idx_ai_experiences_coin ON ai_experiences(coin, period, created_at);
+
+CREATE TABLE IF NOT EXISTS ai_training_runs (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    model_id TEXT,
+    status TEXT NOT NULL,
+    reason TEXT,
+    metrics_json TEXT,
+    created_at TEXT NOT NULL
+);
+
 CREATE TABLE IF NOT EXISTS coin_lists (
     id TEXT PRIMARY KEY,
     name TEXT NOT NULL UNIQUE,

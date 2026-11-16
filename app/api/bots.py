@@ -75,6 +75,23 @@ def _bot_config(body: BotBody) -> Dict[str, Any]:
             pinned.append(
                 {"type": "custom", "id": item["id"], "version": item["version"], "name": item["name"]}
             )
+        elif (spec.get("type") or spec.get("kind")) == "ai":
+            model_id = spec.get("model_id") or spec.get("id")
+            from app.ai.artifacts import load_manifest
+
+            manifest = load_manifest(str(model_id)) if model_id else None
+            if not manifest:
+                raise HTTPException(400, f"AI modeli bulunamadı: {model_id}")
+            if str(manifest.get("status")) == "archived":
+                raise HTTPException(400, "Arşivlenmiş AI modeli botlara eklenemez")
+            pinned.append(
+                {
+                    "type": "ai",
+                    "model_id": manifest["id"],
+                    "name": manifest.get("name") or manifest["id"],
+                    "status": manifest.get("status"),
+                }
+            )
         else:
             name = spec.get("name")
             pinned.append({"type": "builtin", "name": name, "label": _builtin_label(name)})
@@ -92,7 +109,7 @@ def _bot_config(body: BotBody) -> Dict[str, Any]:
     # Bot riski: stratejinin tanımındaki `risk` bloğu ile istemcinin verdiği değerler
     # birleştirilir; istemci aynı anahtarı verdiyse o kazanır. Böylece canlı motor,
     # backtest ile aynı stop/takipli stop/kâr koruma kurallarını uygular.
-    explicit = {k: v for k, v in (body.risk or {}).items() if v not in (None, "", False)}
+    explicit = {k: v for k, v in (body.risk or {}).items() if v is not None and v != ""}
     inherited: Dict[str, Any] = {}
     for spec in pinned:
         if spec.get("type") != "custom":
@@ -165,7 +182,7 @@ def _enrich_risk(config: Dict[str, Any]) -> None:
         definition = (item or {}).get("definition") or {}
         inherited = definition.get("risk") if isinstance(definition, dict) else None
         if isinstance(inherited, dict) and inherited:
-            config["risk"] = {**inherited, **{k: v for k, v in risk.items() if v not in (None, "", False)}}
+            config["risk"] = {**inherited, **{k: v for k, v in risk.items() if v is not None and v != ""}}
             return
     config["risk"] = risk
 
@@ -272,6 +289,8 @@ def _enrich_strategy_names(config: Dict[str, Any]) -> None:
         elif kind == "builtin":
             motor = spec.get("name") or ""
             spec["label"] = spec.get("label") or _builtin_label(motor)
+        elif kind == "ai":
+            spec["name"] = spec.get("name") or spec.get("model_id") or spec.get("id")
 
 
 def _enrich_coin_list(config: Dict[str, Any]) -> None:

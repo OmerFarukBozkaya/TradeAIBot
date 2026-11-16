@@ -89,3 +89,50 @@ def test_resume_all_includes_errored_bots_with_autorestart(temp_db, monkeypatch)
     sup.resume_all()
     assert "bot_err" in started
     assert "bot_err2" not in started
+
+
+def test_cooldown_only_after_configured_loss(temp_db, monkeypatch):
+    from app.engine import TradingEngine
+    from app.strategies.service import create_custom
+
+    created = create_custom(_definition(risk={"cooldown": 5, "cooldown_min_loss_pct": 5}))
+    engine = TradingEngine(
+        "bot_cd",
+        {
+            "period": "1h",
+            "strategies": [{"type": "custom", "id": created["id"]}],
+            "cash": 100,
+            "risk": {"cooldown": 5, "cooldown_min_loss_pct": 5},
+        },
+        "paper",
+    )
+    engine.state["candle_seq"] = 10
+    engine.state["cooldown_until"] = -1
+
+    # Küçük zarar eşiğin altında: cooldown uygulanmaz.
+    engine._apply_cooldown(-3.0)
+    assert engine.state.get("cooldown_until", -1) == -1
+
+    # Eşiğe ulaşan zarar: 5 mum bekleme.
+    engine._apply_cooldown(-5.0)
+    assert engine.state["cooldown_until"] == 15
+
+
+def test_cooldown_without_condition_applies_always(temp_db, monkeypatch):
+    from app.engine import TradingEngine
+    from app.strategies.service import create_custom
+
+    created = create_custom(_definition(risk={"cooldown": 3}))
+    engine = TradingEngine(
+        "bot_cd2",
+        {
+            "period": "1h",
+            "strategies": [{"type": "custom", "id": created["id"]}],
+            "cash": 100,
+            "risk": {"cooldown": 3},
+        },
+        "paper",
+    )
+    engine.state["candle_seq"] = 7
+    engine._apply_cooldown(2.5)
+    assert engine.state["cooldown_until"] == 10

@@ -44,6 +44,7 @@ class BacktestBody(BaseModel):
     period: str = "1h"
     limit: int = 20000
     cash: float = 100.0
+    risk: Dict[str, Any] = {}
 
 
 class BacktestAllBody(BaseModel):
@@ -224,6 +225,7 @@ async def backtest(body: BacktestBody):
             "period": body.period,
             "limit": body.limit,
             "cash": body.cash,
+            "risk": body.risk,
         },
     )
     return job

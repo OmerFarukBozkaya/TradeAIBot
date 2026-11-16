@@ -820,6 +820,7 @@ async function boot() {
 async function loadCatalog() {
   try { state.extra = await api("/strategies/builtin"); } catch (e) { state.extra = []; }
   try { state.custom = await api("/strategies/custom"); } catch (e) { state.custom = []; }
+  try { state.ai = await api("/ai/models"); } catch (e) { state.ai = []; }
   state.indicators = state.catalog || [];
 }
 
@@ -833,7 +834,8 @@ async function loadCatalog() {
    Ayrıca her gezinmede eski içerik SENKRON olarak temizlenir. */
 
 const VIEW_TITLES = {
-  dashboard: "Dashboard", bots: "Botlar", strategies: "Stratejiler", scan: "Tarama",
+  dashboard: "Dashboard", bots: "Botlar", strategies: "Stratejiler", ai: "AI Eğitimi",
+  scan: "Tarama",
   lists: "Coin Listeleri", analysis: "Analiz", trades: "İşlem Geçmişi",
   settings: "Ayarlar", system: "Sistem",
 };
@@ -841,6 +843,7 @@ const VIEW_SUBS = {
   dashboard: "Genel bakış ve performans",
   bots: "Bot oluştur, başlat ve izle",
   strategies: "Görsel kurallarla strateji tasarla",
+  ai: "Zaman serisi modeli eğit, test et ve botlara bağla",
   scan: "Piyasayı seçili stratejilerle tara",
   lists: "Coin listesi oluştur, düzenle ve yeniden kullan",
   analysis: "İndikatör ve piyasa analizi",
@@ -923,6 +926,7 @@ async function renderRoute() {
 
   const render = {
     dashboard: renderDashboard, bots: renderBots, strategies: renderStrategies,
+    ai: renderAI,
     scan: renderScan, lists: renderLists, analysis: renderAnalysis, trades: renderTrades,
     settings: renderSettings, system: renderSystem,
   }[view] || renderDashboard;
@@ -1543,12 +1547,16 @@ function tradeReason(reason) {
 function riskSummary(risk) {
   const r = risk || {};
   const parts = [];
-  if (r.stop_atr) parts.push(`stop ${fmt(r.stop_atr, 0)}×ATR${r.max_stop_pct ? ` (en çok %${fmt(r.max_stop_pct, 0)})` : ""}`);
-  if (r.trail_atr) parts.push(`takipli ${fmt(r.trail_atr, 0)}×ATR${r.trail_after_pct ? ` (kâr>%${fmt(r.trail_after_pct, 0)})` : ""}`);
+  if (r.stop_atr) parts.push(`stop ${fmt(r.stop_atr, 1)}×ATR${r.max_stop_pct ? ` (en çok %${fmt(r.max_stop_pct, 1)})` : ""}`);
+  if (r.trail_atr) parts.push(`takipli ${fmt(r.trail_atr, 1)}×ATR${r.trail_after_pct ? ` (kâr>%${fmt(r.trail_after_pct, 1)})` : ""}`);
   if (r.profit_exit_donchian) parts.push(`kâr koruma Donchian(${r.profit_exit_donchian})`);
   if (r.take_profit_atr) parts.push(`kâr al ${fmt(r.take_profit_atr, 1)}×ATR`);
   if (r.take_profit_pct) parts.push(`kâr al %${fmt(r.take_profit_pct, 1)}`);
-  if (r.cooldown) parts.push(`bekleme ${r.cooldown} mum`);
+  if (r.cooldown) parts.push(
+    r.cooldown_min_loss_pct
+      ? `bekleme ${r.cooldown} mum (yalnızca zarar ≥ %${fmt(r.cooldown_min_loss_pct, 1)})`
+      : `bekleme ${r.cooldown} mum`
+  );
   return parts.join(" · ");
 }
 
@@ -1692,6 +1700,66 @@ const RISK_ITEMS = [
   ["take_profit", "Kâr al", "Hedef kâra ulaşınca satar."],
 ];
 
+/*
+ * Sayısal risk kuralları. `rec` değerleri kendi backtest ölçümlerimizden
+ * gelen başlangıç önerileridir; periyoda göre değişir.
+ * unit: giriş kutusunun sağında gösterilir.
+ */
+const RISK_NUM_FIELDS = [
+  {
+    key: "stop_atr", label: "Zarar durdur (stop)", unit: "× ATR", step: "0.1",
+    help: "Giriş fiyatının kaç ATR aşağısında satılacağı. ATR, coinin son 14 mumdaki ortalama oynaklığıdır. Büyük değer = stop uzak, daha az erken çıkış ama daha büyük zarar.",
+    rec: { "1m": 35, "5m": 35, "15m": 30, "1h": 20, "4h": 5, "1d": 2 },
+  },
+  {
+    key: "max_stop_pct", label: "Stop üst sınırı", unit: "%", step: "0.5",
+    help: "ATR stop bu yüzdeden daha uzağa konamaz. Yüksek oynaklıklı coinlerde stopun %90 aşağıya düşmesini engelleyen felaket korumasıdır.",
+    rec: { "1m": 35, "5m": 35, "15m": 35, "1h": 30, "4h": 20, "1d": 15 },
+  },
+  {
+    key: "trail_atr", label: "Takipli stop", unit: "× ATR", step: "0.1",
+    help: "Fiyat yükseldikçe stop yukarı taşınır. Zirveden kaç ATR aşağıda takip edileceği. Kârı kilitler, trend dönünce çıkar.",
+    rec: { "1m": 30, "5m": 30, "15m": 30, "1h": 25, "4h": 12, "1d": 8 },
+  },
+  {
+    key: "trail_after_pct", label: "Takipli stop başlangıcı", unit: "% kâr", step: "0.5",
+    help: "Kâr bu yüzdeyi geçmeden takipli stop devreye girmez. Erken dalgalanmada pozisyonun kesilmesini önler.",
+    rec: { "1m": 2, "5m": 2, "15m": 3, "1h": 5, "4h": 8, "1d": 10 },
+  },
+  {
+    key: "take_profit_atr", label: "Kâr al (ATR)", unit: "× ATR", step: "0.1",
+    help: "Girişten kaç ATR yukarıda kâr alınacağı. 0 = kapalı; kârı takipli stop ve kâr korumaya bırakır (trend stratejilerinde önerilir).",
+    rec: { "1m": 0, "5m": 0, "15m": 0, "1h": 0, "4h": 0, "1d": 0 },
+  },
+  {
+    key: "take_profit_pct", label: "Kâr al (yüzde)", unit: "%", step: "0.5",
+    help: "Girişe göre sabit yüzde kâr hedefi. 0 = kapalı. Sabit hedef, güçlü trendlerde erken çıkmanıza yol açar.",
+    rec: { "1m": 0, "5m": 0, "15m": 0, "1h": 0, "4h": 0, "1d": 0 },
+  },
+  {
+    key: "profit_exit_donchian", label: "Kâr koruma (Donchian)", unit: "mum", step: "1",
+    help: "Pozisyon kârdayken son N mumun dibi kırılırsa çıkar. Trend bozulmasını hızlı yakalar. 0 = kapalı, 10 = yaygın değer.",
+    rec: { "1m": 0, "5m": 0, "15m": 10, "1h": 10, "4h": 10, "1d": 10 },
+  },
+  {
+    key: "cooldown", label: "Yeni alım beklemesi (cooldown)", unit: "mum", step: "1",
+    help: "Bir satıştan sonra kaç mum boyunca yeni pozisyon açılmayacağı. Aynı sinyalin hemen tekrar girip komisyon erozyonu yaratmasını önler.",
+    rec: { "1m": 10, "5m": 8, "15m": 8, "1h": 5, "4h": 3, "1d": 2 },
+  },
+  {
+    key: "cooldown_min_loss_pct", label: "Bekleme yalnızca zarar ≥", unit: "%", step: "0.5",
+    help: "0 = her satıştan sonra bekle. 5 = yalnızca %5 veya daha kötü zararla çıkıldıysa bekle; küçük zarar veya kârda bot hemen devam eder.",
+    rec: { "1m": 5, "5m": 5, "15m": 5, "1h": 5, "4h": 5, "1d": 5 },
+  },
+];
+
+function recommendRisk(period) {
+  const out = {};
+  RISK_NUM_FIELDS.forEach((f) => { out[f.key] = f.rec[period] ?? 0; });
+  return out;
+}
+
+
 function botStrategyCatalog() {
   const custom = (state.custom || [])
     .filter((c) => c.status === "active")
@@ -1708,15 +1776,34 @@ function botStrategyCatalog() {
       motor: b.name,
       spec: { type: "builtin", name: b.name },
     }));
-  return [...custom, ...builtin];
+  const ai = (state.ai || [])
+    .filter((m) => m.status === "active")
+    .map((m) => {
+      const t = (m.metrics && m.metrics.test) || {};
+      return {
+        key: "ai:" + m.id,
+        kind: "ai",
+        name: "AI · " + m.name,
+        version: 1,
+        ai: m,
+        ret: t.total_return_pct,
+        spec: { type: "ai", model_id: m.id },
+      };
+    });
+  return [...ai, ...custom, ...builtin];
 }
 
 async function openBotForm(existing = null, options = {}) {
   if (!state.extra || !state.custom) {
     try {
-      const [builtin, custom] = await Promise.all([api("/strategies/builtin"), api("/strategies/custom?include_archived=true")]);
+      const [builtin, custom, ai] = await Promise.all([
+        api("/strategies/builtin"),
+        api("/strategies/custom?include_archived=true"),
+        api("/ai/models").catch(() => []),
+      ]);
       state.extra = builtin;
       state.custom = custom;
+      state.ai = ai;
     } catch (err) { toast(err.message, true); return; }
   }
 
@@ -1736,13 +1823,36 @@ async function openBotForm(existing = null, options = {}) {
     coins: cfg ? (cfg.coins || []).slice() : presetCoins ? presetCoins.slice() : quick ? ["BTCUSDT", "ETHUSDT"] : [],
     coinListId: cfg && cfg.coin_list ? cfg.coin_list.id : options.coinListId || "",
     strategies: existing
-      ? ((cfg && cfg.strategies) || []).map((s) => (s.type === "custom" ? "custom:" + s.id : "builtin:" + s.name))
+      ? ((cfg && cfg.strategies) || []).map((s) =>
+          s.type === "custom" ? "custom:" + s.id
+            : s.type === "ai" ? "ai:" + (s.model_id || s.id)
+            : "builtin:" + s.name)
       : quick && quickPick ? [quickPick.key] : [],
     risk: Object.assign({ dynamic_stop: false, static_stop: false, support_stop: true, take_profit: true }, (cfg && cfg.risk) || {}),
     filters: Object.assign({ buy_ma_control: false, buy_bb_control: false }, (cfg && cfg.filters) || {}),
     autoRestart: existing ? !!existing.auto_restart : true,
   };
   const pick = (key) => catalog.find((c) => c.key === key);
+  const rv = (key) => {
+    const v = draft.risk[key];
+    return v === undefined || v === null || v === "" ? "" : v;
+  };
+  const riskNum = (fieldDef) => {
+    const rec = fieldDef.rec[draft.period];
+    const recText = rec === undefined ? "-" : String(rec);
+    return `<div class="risk-num-field">
+      <label class="risk-num-label" for="rk-${fieldDef.key}">
+        ${esc(fieldDef.label)} <span class="risk-num-unit">${esc(fieldDef.unit)}</span>
+      </label>
+      <div class="risk-num-input">
+        <input id="rk-${fieldDef.key}" type="number" min="0" step="${fieldDef.step}"
+          value="${esc(rv(fieldDef.key))}" placeholder="${esc(recText)}">
+        <button type="button" class="risk-num-rec" data-rec="${fieldDef.key}"
+          title="Bu periyot için önerilen değeri yaz">Önerilen: ${esc(recText)}</button>
+      </div>
+      <p class="risk-num-help">${esc(fieldDef.help)}</p>
+    </div>`;
+  };
 
   const wrap = document.createElement("div");
   wrap.className = "strat-editor";
@@ -1823,6 +1933,22 @@ async function openBotForm(existing = null, options = {}) {
       </div>
       <div class="section-body">
         <div class="toggle-list" id="risk-list"></div>
+        <div class="risk-num-head">
+          <span>Sayısal kurallar</span>
+          <span class="muted small">Değerler bu bota özeldir · 0 = kapalı · boş = stratejiden devral</span>
+          <button type="button" class="ghost small" id="risk-apply-rec">Önerilen değerleri uygula</button>
+        </div>
+        <p class="risk-num-intro">
+          Aşağıdaki değerler <b id="risk-num-period">${esc(draft.period)}</b> periyodu için önerilen başlangıç değerleridir.
+          Kendi backtest sonuçlarınıza göre değiştirebilirsiniz. Her alanın yanındaki
+          <b>“Önerilen”</b> düğmesine basarak o değeri tek tıkla yazabilirsiniz.
+        </p>
+        <div class="risk-num-grid" id="risk-num-grid"></div>
+        <div class="risk-num-note">
+          <b>Nasıl okunur?</b> ATR, coinin son 14 mumdaki ortalama oynaklığıdır. Stop ve takipli stop
+          ATR’nin katı olarak verilir; böylece aynı ayar hem sakin hem oynak coinlerde ölçekli çalışır.
+          Cooldown, art arda aynı sinyale girip komisyon ödemeyi engeller.
+        </div>
         <div class="toggle-list mt" id="filter-list"></div>
       </div>
     </div>
@@ -1878,7 +2004,13 @@ async function openBotForm(existing = null, options = {}) {
       b.type = "button";
       b.className = "chip" + (draft.period === p ? " active" : "");
       b.textContent = p;
-      b.addEventListener("click", () => { draft.period = p; renderPeriods(); summary(); });
+      b.addEventListener("click", () => {
+        draft.period = p;
+        renderPeriods();
+        collectRiskInputs();
+        renderRiskNumbers();
+        summary();
+      });
       box.appendChild(b);
     });
   };
@@ -1963,13 +2095,16 @@ async function openBotForm(existing = null, options = {}) {
       if (item.kind === "custom" && item.definition) {
         rules = `<span class="pick-rules"><span class="rule-badge buy">AL</span> ${esc(groupText(item.definition.buy) || "—")}</span>
                  <span class="pick-rules"><span class="rule-badge sell">SAT</span> ${esc(groupText(item.definition.sell) || "—")}</span>`;
+      } else if (item.kind === "ai") {
+        const t = (item.ai && item.ai.metrics && item.ai.metrics.test) || {};
+        rules = `<span class="pick-rules muted">Eğitilmiş AI modeli · test getirisi ${fmt(t.total_return_pct, 1)}% · ${fmt(t.trade_count, 0)} işlem</span>`;
       } else {
         rules = `<span class="pick-rules muted">Hazır strateji — mevcut motorla çalışır.</span>`;
       }
       card.innerHTML = `
         <span class="pick-head">
           <strong>${esc(item.name)}</strong>
-          <span class="tag ${item.kind === "custom" ? "green" : "gray"}">${item.kind === "custom" ? "özel v" + item.version : "hazır"}</span>
+          <span class="tag ${item.kind === "custom" ? "green" : item.kind === "ai" ? "blue" : "gray"}">${item.kind === "custom" ? "özel v" + item.version : item.kind === "ai" ? "AI" : "hazır"}</span>
         </span>
         ${item.motor && item.motor !== item.name ? `<span class="muted small mono">${esc(item.motor)}</span>` : ""}
         ${rules}`;
@@ -1999,6 +2134,62 @@ async function openBotForm(existing = null, options = {}) {
     });
   };
   renderToggles();
+
+  /* Sayısal risk kuralları (periyoda göre önerilen değerlerle) */
+  const collectRiskInputs = () => {
+    RISK_NUM_FIELDS.forEach((f) => {
+      const el = $(`#rk-${f.key}`);
+      if (!el) return;
+      const raw = String(el.value || "").trim().replace(",", ".");
+      if (raw === "") { delete draft.risk[f.key]; return; }
+      const n = Number(raw);
+      if (Number.isFinite(n)) draft.risk[f.key] = Math.max(0, n);
+    });
+  };
+  const renderRiskNumbers = () => {
+    const grid = $("#risk-num-grid");
+    if (!grid) return;
+    const periodLabel = $("#risk-num-period");
+    if (periodLabel) periodLabel.textContent = draft.period;
+    grid.innerHTML = RISK_NUM_FIELDS.map(riskNum).join("");
+    $$("#risk-num-grid [data-rec]").forEach((btn) => btn.addEventListener("click", () => {
+      const fieldDef = RISK_NUM_FIELDS.find((f) => f.key === btn.dataset.rec);
+      if (!fieldDef) return;
+      const value = fieldDef.rec[draft.period];
+      const input = $(`#rk-${fieldDef.key}`);
+      if (input && value !== undefined) {
+        input.value = String(value);
+        draft.risk[fieldDef.key] = value;
+        input.classList.add("just-set");
+        setTimeout(() => input.classList.remove("just-set"), 700);
+        summary();
+      }
+    }));
+    $$("#risk-num-grid input[type=number]").forEach((input) => {
+      input.addEventListener("input", () => {
+        collectRiskInputs();
+        summary();
+      });
+    });
+  };
+  renderRiskNumbers();
+
+  const applyRecommended = () => {
+    collectRiskInputs();
+    const rec = recommendRisk(draft.period);
+    Object.keys(rec).forEach((key) => {
+      draft.risk[key] = rec[key];
+      const input = $(`#rk-${key}`);
+      if (input) {
+        input.value = String(rec[key]);
+        input.classList.add("just-set");
+        setTimeout(() => input.classList.remove("just-set"), 700);
+      }
+    });
+    summary();
+  };
+  const applyRecBtn = $("#risk-apply-rec");
+  if (applyRecBtn) applyRecBtn.addEventListener("click", applyRecommended);
 
   const FILTER_ITEMS = [
     ["buy_ma_control", "EMA50 üzeri alım filtresi", "Fiyat EMA50 üzerindeyken alım yapar."],
@@ -2032,6 +2223,17 @@ async function openBotForm(existing = null, options = {}) {
       const specs = draft.strategies.map(pick).filter(Boolean).map((item) => item.spec);
       if (!specs.length) throw new Error("En az bir strateji seçin");
       if (draft.mode === "live" && !state.liveUnlocked) throw new Error("Canlı işlem anahtarı kapalı. Üst çubuktan açın.");
+      const numVal = (key) => {
+        const el = $(`#rk-${key}`);
+        if (!el) return null;
+        const raw = String(el.value || "").trim().replace(",", ".");
+        if (raw === "") return null; // boş = stratejiden devral
+        const n = Number(raw);
+        return Number.isFinite(n) ? Math.max(0, n) : null;
+      };
+      ["stop_atr", "max_stop_pct", "trail_atr", "trail_after_pct", "take_profit_atr",
+       "take_profit_pct", "profit_exit_donchian", "cooldown", "cooldown_min_loss_pct"]
+        .forEach((key) => { draft.risk[key] = numVal(key); });
       const body = {
         name: $("#b-name").value.trim() || "İsimsiz bot",
         period: draft.period,
@@ -3206,10 +3408,35 @@ function openBacktest(spec, info = {}) {
     const d = Number(x.diff || 0);
     return `<span class="tag ${p === best ? "green" : "gray"}">${p}: ${fmt(x.return_pct, 1)}% <small>(${d >= 0 ? "+" : ""}${fmt(d, 1)})</small></span>`;
   }).join(" ");
+  let baseRisk = info.risk && typeof info.risk === "object" ? info.risk : {};
+  if (spec && (spec.type === "custom" || spec.kind === "custom")) {
+    const custom = (state.custom || []).find((x) => x.id === spec.id);
+    if (custom && custom.definition && custom.definition.risk) baseRisk = custom.definition.risk;
+  }
+  const bRisk = (key) => {
+    const v = baseRisk[key];
+    return v === undefined || v === null || v === "" ? "" : v;
+  };
+  const btRisk = (fieldDef) => {
+    const rec = fieldDef.rec[selected];
+    const recText = rec === undefined ? "-" : String(rec);
+    const value = bRisk(fieldDef.key);
+    return `<div class="risk-num-field">
+      <label class="risk-num-label" for="brk-${fieldDef.key}">
+        ${esc(fieldDef.label)} <span class="risk-num-unit">${esc(fieldDef.unit)}</span>
+      </label>
+      <div class="risk-num-input">
+        <input id="brk-${fieldDef.key}" type="number" min="0" step="${fieldDef.step}"
+          value="${esc(value)}" placeholder="${esc(recText)}">
+        <button type="button" class="risk-num-rec" data-brec="${fieldDef.key}">Önerilen: ${esc(recText)}</button>
+      </div>
+      <p class="risk-num-help">${esc(fieldDef.help)}</p>
+    </div>`;
+  };
   const wrap = document.createElement("div");
   wrap.innerHTML = `
     <div class="row">
-      ${field("Coin", `<input id="bt-coin" value="BTCUSDT">`)}
+      ${field("Coin", `<input id="bt-coin" value="${esc(info.coin || "BTCUSDT")}">`)}
       ${field("Periyot", `<select id="bt-period">${["15m","1h","4h","1d"].map((p) => `<option ${p === selected ? "selected" : ""}>${p}</option>`).join("")}</select>`)}
       ${field("Nakit", `<input id="bt-cash" type="number" value="100">`)}
       ${field("Mum sayısı", `<select id="bt-limit">${limitOptionsHtml(selected, 20000)}</select>`)}
@@ -3217,6 +3444,12 @@ function openBacktest(spec, info = {}) {
     </div>
     <div id="bt-estimate" class="muted small" style="margin:8px 0 0"></div>
     ${best ? `<div class="mt small">Ölçülen en iyi zaman dilimi: <b>${esc(best)}</b> ${summary}</div>` : ""}
+    <details class="mt">
+      <summary class="muted small" style="cursor:pointer">Risk kuralları (stop, kâr al, cooldown) — boş = tanımdan devral</summary>
+      <div class="risk-num-grid mt" id="bt-risk-grid">
+        ${RISK_NUM_FIELDS.map(btRisk).join("")}
+      </div>
+    </details>
     <p class="muted small" style="margin:8px 0 0">
       Trend stratejileri uzun geçmişte anlam kazanır. Kısa pencerede al-tut önde görünüyorsa
       daha uzun geçmiş seçin; yıllık tablo hangi yıllarda önde olduğunu gösterir.
@@ -3231,8 +3464,34 @@ function openBacktest(spec, info = {}) {
     if (el) el.innerHTML = `${lim.toLocaleString("tr-TR")} mum × ${esc(per)} → <b>${limitSpanLabel(lim, per)}</b>. Gerçek süre çalıştırınca veri raporunda görünür.`;
   };
   modal("Backtest", wrap);
+  const bindBtRisk = () => {
+    $$("[data-brec]").forEach((btn) => btn.addEventListener("click", () => {
+      const fieldDef = RISK_NUM_FIELDS.find((f) => f.key === btn.dataset.brec);
+      if (!fieldDef) return;
+      const period = $("#bt-period").value;
+      const value = fieldDef.rec[period];
+      const input = $(`#brk-${fieldDef.key}`);
+      if (input && value !== undefined) {
+        input.value = String(value);
+        input.classList.add("just-set");
+        setTimeout(() => input.classList.remove("just-set"), 700);
+      }
+    }));
+  };
+  bindBtRisk();
   $("#bt-period").addEventListener("change", () => {
     refreshLimitOptions($("#bt-limit"), $("#bt-period").value);
+    const period = $("#bt-period").value;
+    $$("#bt-risk-grid .risk-num-field").forEach((card) => {
+      const key = card.querySelector("[data-brec]")?.dataset.brec;
+      const fieldDef = RISK_NUM_FIELDS.find((f) => f.key === key);
+      if (!fieldDef) return;
+      const rec = fieldDef.rec[period];
+      const btn = card.querySelector("[data-brec]");
+      if (btn) btn.textContent = `Önerilen: ${rec === undefined ? "-" : rec}`;
+      const input = card.querySelector("input");
+      if (input) input.placeholder = rec === undefined ? "" : String(rec);
+    });
     estimate();
   });
   $("#bt-limit").addEventListener("change", estimate);
@@ -3240,12 +3499,23 @@ function openBacktest(spec, info = {}) {
   $("#bt-run").addEventListener("click", async () => {
     $("#bt-result").innerHTML = '<span class="muted">İş başlatıldı…</span>';
     try {
+      const risk = {};
+      ["stop_atr", "max_stop_pct", "trail_atr", "trail_after_pct", "take_profit_atr",
+       "take_profit_pct", "profit_exit_donchian", "cooldown", "cooldown_min_loss_pct"]
+        .forEach((key) => {
+          const el = $(`#brk-${key}`);
+          const raw = el ? String(el.value || "").trim().replace(",", ".") : "";
+          if (raw === "") return;
+          const n = Number(raw);
+          if (Number.isFinite(n)) risk[key] = Math.max(0, n);
+        });
       const job = await api("/strategies/backtest", {
         method: "POST",
         body: {
           strategy: spec, coin: $("#bt-coin").value.trim().toUpperCase(),
           period: $("#bt-period").value, cash: Number($("#bt-cash").value),
           limit: Number($("#bt-limit").value || 20000),
+          risk,
         },
       });
       pollJob(job.id, (j) => { $("#bt-result").innerHTML = renderBacktest(j); });
@@ -3306,7 +3576,7 @@ function renderBacktest(job) {
             r.risk.take_profit_pct ? `kâr al %${fmt(r.risk.take_profit_pct, 1)}` : "",
             r.risk.take_profit_atr ? `kâr al ${fmt(r.risk.take_profit_atr, 1)}×ATR` : "",
             r.risk.profit_exit_donchian ? `kâr koruma: Donchian(${r.risk.profit_exit_donchian}) kırılımı` : "",
-            r.risk.cooldown ? `çıkış sonrası ${r.risk.cooldown} mum bekleme` : "",
+            r.risk.cooldown ? `çıkış sonrası ${r.risk.cooldown} mum bekleme${r.risk.cooldown_min_loss_pct ? ` (yalnızca zarar ≥ %${fmt(r.risk.cooldown_min_loss_pct, 1)})` : ""}` : "",
           ].filter(Boolean).join(" · ")}` : "Risk kuralı yok — pozisyon yalnızca sinyalle kapanır."}
         </p>
       </div>
@@ -3896,8 +4166,9 @@ async function renderLists(root) {
 /* Tarama                                                              */
 /* ------------------------------------------------------------------ */
 async function renderScan(root) {
-  const [builtin, custom, lists] = await Promise.all([
+  const [builtin, custom, lists, aiModels] = await Promise.all([
     api("/strategies/builtin"), api("/strategies/custom"), api("/coin-lists"),
+    api("/ai/models").catch(() => []),
   ]);
   const presetId = lists.some((l) => l.id === state.scanListId) ? state.scanListId : "";
   const preset = lists.find((l) => l.id === presetId);
@@ -3906,6 +4177,7 @@ async function renderScan(root) {
       id: "builtin:" + b.name, name: b.label || b.name, spec: { type: "builtin", name: b.name },
     })),
     ...custom.filter((c) => c.status === "active").map((c) => ({ id: "custom:" + c.id, name: c.name, spec: { type: "custom", id: c.id, version: c.version } })),
+    ...aiModels.filter((m) => m.status === "active").map((m) => ({ id: "ai:" + m.id, name: "AI · " + m.name, spec: { type: "ai", model_id: m.id } })),
   ];
   root.innerHTML = `
     <div class="card">
@@ -4125,16 +4397,16 @@ async function renderAnalysis(root) {
       ${tool(
         "M12 2 3 7v10l9 5 9-5V7l-9-5Zm0 2.3L18.6 8 12 11.7 5.4 8 12 4.3ZM5 9.7l6 3.3v6.3l-6-3.4V9.7Zm8 9.6V13l6-3.3v6.2l-6 3.4Z",
         "AI eğitimi",
-        "Model test, veri seti ve hiperparametre işleri.",
-        `<div class="tool-fields">
-          ${field("Mod", `<select id="ai-mode"><option value="test">Modeli test et</option><option value="dataset">Veri seti oluştur</option><option value="random_search">Hiperparametre arama</option><option value="best_model">En iyi modeli eğit</option></select>`)}
-        </div>
-        <div class="tool-note">AI profili etkin değilse iş hata verir.</div>`,
-        "AI işini başlat", "ai_train")}
+        "Model eğitimi, backtest ve bot entegrasyonu artık kendi sekmesinde.",
+        `<div class="tool-note">Zaman serisi protokolü, walk-forward raporu ve model onayı için <b>AI Eğitimi</b> sekmesini kullanın.</div>`,
+        "AI Eğitimi'ne git", "__goto_ai")}
     </div>
 
     <div id="analysis-result" class="mt"></div>`;
-  $$("[data-job]").forEach((btn) => btn.addEventListener("click", () => runAnalysisJob(btn.dataset.job, opts, btn)));
+  $$("[data-job]").forEach((btn) => btn.addEventListener("click", () => {
+    if (btn.dataset.job === "__goto_ai") { location.hash = "#ai"; return; }
+    runAnalysisJob(btn.dataset.job, opts, btn);
+  }));
 }
 
 function analysisProgressHtml(type, job, label) {
@@ -4516,6 +4788,380 @@ async function renderTrades(root) {
 /* ------------------------------------------------------------------ */
 /* Ayarlar                                                             */
 /* ------------------------------------------------------------------ */
+/* ------------------------------------------------------------------ */
+/* AI eğitimi                                                          */
+/* ------------------------------------------------------------------ */
+function aiStatusTag(status) {
+  const map = { active: ["green", "aktif"], candidate: ["blue", "aday"], archived: ["gray", "arşiv"] };
+  const [cls, text] = map[status] || ["gray", status || "-"];
+  return `<span class="tag ${cls}">${esc(text)}</span>`;
+}
+
+function aiMetricsHtml(m) {
+  const test = (m.metrics && m.metrics.test) || {};
+  const buy = (m.metrics && m.metrics.buy) || {};
+  const sell = (m.metrics && m.metrics.sell) || {};
+  const wf = (m.metrics && m.metrics.walk_forward) || {};
+  const ref = (m.metrics && m.metrics.refinement) || {};
+  const timing = ref.timing || {};
+  const params = m.params || {};
+  const ret = Number(test.total_return_pct || 0);
+  const edge = Number(test.edge_pct || 0);
+  const timingChips = timing && timing.trades
+    ? `<span class="tag gray" title="Giriş zamanlaması">Giriş: erken ${timing.entry ? timing.entry.erken : 0} · geç ${timing.entry ? timing.entry["geç"] : 0} · zamanında ${timing.entry ? timing.entry["zamanında"] : 0}</span>
+       <span class="tag gray" title="Çıkış zamanlaması">Çıkış: erken ${timing.exit ? timing.exit.erken : 0} · geç ${timing.exit ? timing.exit["geç"] : 0} · zamanında ${timing.exit ? timing.exit["zamanında"] : 0}</span>`
+    : "";
+  return `<div class="stat-grid">
+    <div class="stat"><span>Test getirisi</span><b class="${pnlClass(ret)}">${fmt(ret, 1)}%</b><small>al-tut: ${fmt(test.buy_hold_pct, 1)}%</small></div>
+    <div class="stat"><span>Fark (edge)</span><b class="${pnlClass(edge)}">${fmt(edge, 1)}%</b><small>al-tut'a karşı</small></div>
+    <div class="stat"><span>İşlem / kazanma</span><b>${fmt(test.trade_count, 0)}</b><small>${fmt(test.win_rate, 1)}% kazanan</small></div>
+    <div class="stat"><span>Maks. düşüş</span><b class="neg">${fmt(test.max_drawdown_pct, 1)}%</b><small>${fmt(params.coin || "")} ${esc(params.period || "")}</small></div>
+  </div>
+  <div class="row small muted" style="gap:8px;flex-wrap:wrap;margin-top:6px">
+    <span class="tag gray">AL precision ${fmt(buy.precision, 2)} · recall ${fmt(buy.recall, 2)}</span>
+    <span class="tag gray">SAT precision ${fmt(sell.precision, 2)} · recall ${fmt(sell.recall, 2)}</span>
+    <span class="tag gray">eşik AL ${fmt(m.thresholds && m.thresholds.buy, 2)} / SAT ${fmt(m.thresholds && m.thresholds.sell, 2)}</span>
+    ${ref.iterations_run ? `<span class="tag blue">iyileştirme ${ref.iterations_run} tur · en iyi tur ${ref.best_iteration}</span>` : ""}
+    ${wf.folds ? `<span class="tag ${Number(wf.avg_edge_pct) > 0 ? "green" : "gray"}">WF ${wf.folds} kat · ort. edge ${fmt(wf.avg_edge_pct, 1)}% · ${wf.positive_folds}/${wf.folds} pozitif</span>` : ""}
+    ${timingChips}
+  </div>`;
+}
+
+async function renderAI(root) {
+  const [status, models, auto] = await Promise.all([
+    api("/ai/status"),
+    api("/ai/models?include_archived=true"),
+    api("/ai/autopilot"),
+  ]);
+  const cfg = auto.settings || {};
+  const presets = auto.presets || [];
+  const active = models.filter((m) => m.status === "active");
+  const candidates = models.filter((m) => m.status === "candidate");
+  const archived = models.filter((m) => m.status === "archived");
+  const running = models.filter((m) => m.status === "active" && (m.params || {}).coin === cfg.coin);
+  const last = (auto.history || [])[0];
+  const decisionText = {
+    promoted: ["green", "terfi etti"],
+    kept: ["amber", "mevcut model korundu"],
+    rejected: ["red", "reddedildi"],
+    error: ["red", "hata"],
+  };
+
+  const modelCard = (m) => {
+    const p = m.params || {};
+    const d = m.data || {};
+    return `<div class="card" style="margin-bottom:10px">
+      <div class="row between" style="align-items:flex-start">
+        <div>
+          <div class="row" style="gap:8px;align-items:center">
+            <h3 style="margin:0">${esc(m.name)}</h3>
+            ${aiStatusTag(m.status)}
+          </div>
+          <div class="muted small" style="margin-top:4px">
+            ${esc(p.coin || "-")} · ${esc(p.period || "-")} · ${fmt(d.rows, 0)} mum · ${esc((m.created_at || "").slice(0, 16).replace("T", " "))}
+          </div>
+        </div>
+        <div class="row" style="gap:6px;flex-wrap:wrap">
+          ${m.status !== "active" ? `<button class="small" data-ai-promote="${esc(m.id)}" type="button">Aktifleştir</button>` : ""}
+          <button class="small" data-ai-backtest="${esc(m.id)}" type="button">Backtest</button>
+          <button class="ghost small" data-ai-detail="${esc(m.id)}" type="button">Detay</button>
+          ${m.status !== "archived" ? `<button class="ghost small" data-ai-archive="${esc(m.id)}" type="button">Arşivle</button>` : ""}
+          <button class="ghost small" data-ai-delete="${esc(m.id)}" type="button">Sil</button>
+        </div>
+      </div>
+      <div class="mt">${aiMetricsHtml(m)}</div>
+    </div>`;
+  };
+
+  root.innerHTML = `
+    <div class="card ${status.enabled ? "" : "warn-card"}">
+      <div class="row between">
+        <div>
+          <h3 style="margin:0">Yapay zekâ durumu</h3>
+          <p class="muted small" style="margin:6px 0 0">${esc(status.note)}</p>
+        </div>
+        <div class="row" style="gap:6px;flex-wrap:wrap">
+          <span class="tag ${status.enabled ? "green" : "gray"}">AI ${status.enabled ? "açık" : "kapalı"}</span>
+          <span class="tag ${status.sklearn ? "green" : "gray"}">${status.sklearn ? "scikit-learn hazır" : "NumPy yedek model"}</span>
+          <span class="tag blue">${status.models} model</span>
+          <span class="tag blue">${status.experiences} işlem deneyimi</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="card mt ai-auto-card">
+      <div class="row between" style="align-items:flex-start">
+        <div>
+          <div class="row" style="gap:10px;align-items:center">
+            <h3 style="margin:0">Otomatik öğrenme</h3>
+            <span class="tag ${cfg.enabled ? "green" : "gray"}">${cfg.enabled ? "açık" : "kapalı"}</span>
+          </div>
+          <p class="muted small" style="margin:6px 0 0;max-width:640px">
+            Tek anahtar: model belirli aralıkla kendi kendini eğitir, sonucu test eder.
+            Yeni model mevcut modelden belirgin biçimde iyiyse otomatik devreye girer; değilse korunur.
+            Kapanan işlemler bir sonraki turda ders olarak kullanılır.
+          </p>
+        </div>
+        <button class="toggle-row slim ${cfg.enabled ? "on" : ""}" id="auto-toggle" type="button" style="min-width:150px">
+          <span class="switch"></span><span class="toggle-text"><strong>${cfg.enabled ? "Açık" : "Kapalı"}</strong><small>dokun ve değiştir</small></span>
+        </button>
+      </div>
+
+      <div class="row mt" style="flex-wrap:wrap;align-items:flex-end">
+        ${field("Coin", `<input id="auto-coin" value="${esc(cfg.coin || "BTCUSDT")}">`)}
+        ${field("Periyot", `<select id="auto-period">${["15m","1h","4h","1d"].map((p) => `<option ${p === cfg.period ? "selected" : ""}>${p}</option>`).join("")}</select>`)}
+        ${field("Öğrenme tarzı", `<select id="auto-preset">${presets.map((p) => `<option value="${esc(p.id)}" ${p.id === cfg.preset ? "selected" : ""}>${esc(p.label)} — ${esc(p.desc)}</option>`).join("")}</select>`)}
+        ${field("Kaç saatte bir", `<select id="auto-interval">${[6,12,24,48,72,168].map((h) => `<option value="${h}" ${Number(cfg.interval_hours) === h ? "selected" : ""}>${h < 24 ? h + " saat" : h / 24 + " gün"}</option>`).join("")}</select>`)}
+        ${field("Geçmiş (mum)", `<select id="auto-limit">${[10000,20000,30000,50000].map((n) => `<option value="${n}" ${Number(cfg.limit) === n ? "selected" : ""}>${n.toLocaleString("tr-TR")}</option>`).join("")}</select>`)}
+      </div>
+      <div class="row mt" style="flex-wrap:wrap;gap:10px;align-items:center">
+        <button class="primary" id="auto-save" type="button">Ayarları kaydet</button>
+        <button class="ghost" id="auto-run" type="button" ${status.enabled ? "" : "disabled"}>Şimdi öğren</button>
+        <span class="muted small">${cfg.enabled && auto.next_run_at ? `Sıradaki tur: ${esc(fmtIso(auto.next_run_at))}` : "Otomatik öğrenme kapalı"}</span>
+      </div>
+      <div id="auto-result" class="mt"></div>
+
+      <div class="ai-auto-status mt">
+        <div class="ai-auto-item">
+          <span>Aktif model</span>
+          <b>${running.length ? esc(running[0].name) : "yok"}</b>
+          <small>${running.length ? "bot sihirbazında AI olarak seçilebilir" : "ilk başarılı eğitimde otomatik aktifleşir"}</small>
+        </div>
+        <div class="ai-auto-item">
+          <span>Son tur</span>
+          <b>${last ? esc((last.created_at || "").slice(0, 16).replace("T", " ")) : "-"}</b>
+          <small>${last ? `<span class="tag ${(decisionText[last.status] || ["gray"])[0]}">${esc((decisionText[last.status] || ["gray", last.status])[1])}</span>` : "henüz çalışmadı"}</small>
+        </div>
+        <div class="ai-auto-item">
+          <span>Üst üste hata</span>
+          <b>${fmt(cfg.consecutive_failures, 0)}</b>
+          <small>${Number(cfg.consecutive_failures) > 0 ? "tekrar deneme aralığı otomatik uzar" : "sorun yok"}</small>
+        </div>
+      </div>
+      ${last && last.reason ? `<div class="tool-note mt">Son karar: ${esc(last.reason)}</div>` : ""}
+    </div>
+
+    <div class="card mt">
+      <div class="row between">
+        <h3 style="margin:0">Aktif modeller <span class="tag green">${active.length}</span></h3>
+        <button class="ghost small" id="ai-refresh" type="button">Yenile</button>
+      </div>
+      <p class="muted small">Aktif model bot oluşturma ekranında AI stratejisi olarak seçilir ve panelden değiştirilene kadar sabit kalır.</p>
+      ${active.length ? active.map(modelCard).join("") : '<div class="empty-state">Henüz aktif model yok. "Şimdi öğren" ile ilk modeli üret.</div>'}
+    </div>
+
+    <div class="card mt">
+      <h3>Aday modeller <span class="tag blue">${candidates.length}</span></h3>
+      <p class="muted small">Kalite kapısını geçmiş ama mevcut modelden belirgin üstün olmadığı için terfi ettirilmemiş modeller.</p>
+      ${candidates.length ? candidates.map(modelCard).join("") : '<div class="empty-state">Aday model yok.</div>'}
+    </div>
+
+    ${archived.length ? `<div class="card mt"><h3>Arşiv <span class="tag gray">${archived.length}</span></h3>${archived.map(modelCard).join("")}</div>` : ""}
+
+    <details class="card mt">
+      <summary style="cursor:pointer"><b>Gelişmiş: elle eğitim</b> <span class="muted small">— genelde gerekmez</span></summary>
+      <p class="muted small" style="margin:10px 0 0">Otomatik öğrenme yeterli değilse ince ayar burada. Aynı zaman serisi protokolü uygulanır: kronolojik bölme, embargo, yalnızca validation'da eşik, testin tek kullanımı.</p>
+      <div class="row mt" style="flex-wrap:wrap">
+        ${field("Model adı", `<input id="ai-name" placeholder="BTC 1h dip-zirve">`)}
+        ${field("Coin", `<input id="ai-coin" value="BTCUSDT">`)}
+        ${field("Periyot", `<select id="ai-period">${["15m","1h","4h","1d"].map((p) => `<option ${p === "1h" ? "selected" : ""}>${p}</option>`).join("")}</select>`)}
+        ${field("Mum sayısı", `<input id="ai-limit" type="number" value="20000" min="1000" max="250000" step="1000">`)}
+      </div>
+      <div class="row" style="flex-wrap:wrap">
+        ${field("Veri kaynağı", `<select id="ai-source"><option value="binance">Binance</option><option value="csv">Yerel CSV (Data/)</option></select>`)}
+        ${field("CSV yolu", `<input id="ai-csv" placeholder="btcusd_1-min_data.csv">`)}
+        ${field("Etiket türü", `<select id="ai-label-kind"><option value="forward">İleri getiri (önerilen)</option><option value="local_extreme">Yerel dip/zirve (deney)</option></select>`)}
+        ${field("Ufuk (mum)", `<input id="ai-horizon" type="number" value="12" min="2" max="500">`)}
+      </div>
+      <div class="row" style="flex-wrap:wrap">
+        ${field("Hedef hareket %", `<input id="ai-target" type="number" value="1.0" min="0.05" max="50" step="0.1">`)}
+        ${field("Stop mesafesi %", `<input id="ai-stop" type="number" value="1.0" min="0.05" max="50" step="0.1">`)}
+        ${field("Min. precision", `<input id="ai-min-precision" type="number" value="0.35" min="0.05" max="0.95" step="0.05">`)}
+        ${field("Walk-forward kat", `<input id="ai-folds" type="number" value="3" min="0" max="6">`)}
+        ${field("İyileştirme turu", `<input id="ai-iterations" type="number" value="5" min="1" max="12">`)}
+        ${field("Sabır (tur)", `<input id="ai-patience" type="number" value="2" min="1" max="6">`)}
+        ${field("Zamanlama toleransı %", `<input id="ai-timing-tol" type="number" value="0.4" min="0.05" max="5" step="0.05">`)}
+      </div>
+      <div class="row" style="flex-wrap:wrap;gap:14px;margin-top:6px">
+        <label class="check"><input type="checkbox" id="ai-refine" checked> Zamanlama hatalarından öğren (tur tur iyileştir)</label>
+        <label class="check"><input type="checkbox" id="ai-wf" checked> Walk-forward raporu</label>
+        <label class="check"><input type="checkbox" id="ai-feedback" checked> Kapanan AI işlemlerinden öğren</label>
+        ${field("Geri bildirim ağırlığı", `<input id="ai-feedback-weight" type="number" value="0.5" min="0" max="2" step="0.1">`)}
+      </div>
+      <div class="row" style="margin-top:12px">
+        <button class="primary" id="ai-train" type="button" ${status.enabled ? "" : "disabled"}>Eğitimi başlat</button>
+      </div>
+      <div id="ai-train-result" class="mt"></div>
+    </details>
+  `;
+
+  const saveCfg = async (extra = {}) => {
+    const body = {
+      coin: $("#auto-coin").value.trim().toUpperCase(),
+      period: $("#auto-period").value,
+      preset: $("#auto-preset").value,
+      interval_hours: Number($("#auto-interval").value || 24),
+      limit: Number($("#auto-limit").value || 25000),
+      ...extra,
+    };
+    return api("/ai/autopilot", { method: "PUT", body });
+  };
+
+  $("#auto-toggle").addEventListener("click", async () => {
+    if (!cfg.enabled && !status.enabled) { toast("Önce AI özelliklerini açın: Ayarlar > Sistem", true); return; }
+    try {
+      await saveCfg({ enabled: !cfg.enabled });
+      toast(cfg.enabled ? "Otomatik öğrenme kapatıldı" : "Otomatik öğrenme açıldı");
+      route();
+    } catch (e) { toast(e.message, true); }
+  });
+  $("#auto-save").addEventListener("click", async () => {
+    try { await saveCfg(); toast("Otomatik öğrenme ayarları kaydedildi"); route(); }
+    catch (e) { toast(e.message, true); }
+  });
+  $("#auto-run").addEventListener("click", async () => {
+    const btn = $("#auto-run");
+    btn.disabled = true;
+    const box = $("#auto-result");
+    box.innerHTML = '<span class="muted">Öğrenme turu kuyruğa alınıyor…</span>';
+    try {
+      await saveCfg();
+      const job = await api("/ai/autopilot/run", { method: "POST" });
+      pollJob(job.id, (j) => {
+        if (j.status === "error") {
+          box.innerHTML = `<div class="error">${esc(j.error || "Öğrenme hatası")}</div>`;
+          btn.disabled = false;
+          return;
+        }
+        if (j.status !== "done") {
+          box.innerHTML = `<div class="muted">${esc(j.message || j.status)} · %${fmt(j.progress, 0)}</div>`;
+          return;
+        }
+        const r = j.result || {};
+        const gate = r.gate || {};
+        const t = (gate.metrics && gate.metrics.test) || {};
+        const [cls, text] = decisionText[r.decision] || ["gray", r.decision || "-"];
+        box.innerHTML = `<div class="card" style="padding:12px">
+          <div class="row between"><b>Tur tamamlandı</b><span class="tag ${cls}">${esc(text)}</span></div>
+          <div class="muted small" style="margin:6px 0">${esc(r.reason || "")}</div>
+          <div class="stat-grid">
+            <div class="stat"><span>Test getirisi</span><b class="${pnlClass(t.total_return_pct)}">${fmt(t.total_return_pct, 1)}%</b><small>al-tut ${fmt(t.buy_hold_pct, 1)}%</small></div>
+            <div class="stat"><span>Edge</span><b class="${pnlClass(t.edge_pct)}">${fmt(t.edge_pct, 1)}%</b><small>${fmt(t.trade_count, 0)} işlem</small></div>
+            <div class="stat"><span>Kazanma</span><b>${fmt(t.win_rate, 1)}%</b><small>maks. düşüş ${fmt(t.max_drawdown_pct, 1)}%</small></div>
+          </div>
+          ${(gate.reasons || []).length ? `<div class="error small mt">${gate.reasons.map((x) => esc(x)).join("<br>")}</div>` : ""}
+          ${(gate.warnings || []).length ? `<div class="muted small mt">${gate.warnings.map((x) => esc(x)).join("<br>")}</div>` : ""}
+          <div class="row mt"><button class="small" id="auto-after" type="button">Listeyi yenile</button></div>
+        </div>`;
+        btn.disabled = false;
+        const after = $("#auto-after");
+        if (after) after.addEventListener("click", () => route());
+      });
+    } catch (e) {
+      box.innerHTML = `<div class="error">${esc(e.message)}</div>`;
+      btn.disabled = false;
+    }
+  });
+  $("#ai-refresh").addEventListener("click", () => route());
+
+  $("#ai-source").addEventListener("change", () => {
+    $("#ai-csv").closest("label").style.display = $("#ai-source").value === "csv" ? "" : "none";
+  });
+  $("#ai-source").dispatchEvent(new Event("change"));
+
+  $("#ai-train").addEventListener("click", async () => {
+    const btn = $("#ai-train");
+    btn.disabled = true;
+    const box = $("#ai-train-result");
+    box.innerHTML = '<span class="muted">Eğitim kuyruğa alınıyor…</span>';
+    try {
+      const body = {
+        name: $("#ai-name").value.trim(),
+        coin: $("#ai-coin").value.trim().toUpperCase(),
+        period: $("#ai-period").value,
+        limit: Number($("#ai-limit").value || 20000),
+        source: $("#ai-source").value,
+        csv_path: $("#ai-csv").value.trim(),
+        label_kind: $("#ai-label-kind").value,
+        horizon: Number($("#ai-horizon").value || 12),
+        target_move: Number($("#ai-target").value || 1) / 100,
+        stop_move: Number($("#ai-stop").value || 1) / 100,
+        min_precision: Number($("#ai-min-precision").value || 0.35),
+        refine: $("#ai-refine").checked,
+        iterations: Number($("#ai-iterations").value || 5),
+        patience: Number($("#ai-patience").value || 2),
+        timing_tolerance: Number($("#ai-timing-tol").value || 0.4) / 100,
+        walk_forward: $("#ai-wf").checked,
+        folds: Number($("#ai-folds").value || 0),
+        use_feedback: $("#ai-feedback").checked,
+        feedback_weight: Number($("#ai-feedback-weight").value || 0.5),
+      };
+      const job = await api("/ai/train", { method: "POST", body });
+      box.innerHTML = `<div class="muted">İş <span class="mono">${esc(job.id)}</span> kuyruğa alındı.</div>`;
+      pollJob(job.id, (j) => {
+        if (j.status === "error") {
+          box.innerHTML = `<div class="error">${esc(j.error || "Eğitim hatası")}</div>`;
+          btn.disabled = false;
+          return;
+        }
+        if (j.status !== "done") {
+          box.innerHTML = `<div class="muted">${esc(j.message || j.status)} · %${fmt(j.progress, 0)}</div>`;
+          return;
+        }
+        const r = j.result || {};
+        const report = r.report || {};
+        const test = (report.test && report.test.trading) || {};
+        box.innerHTML = `<div class="card" style="padding:12px">
+          <div class="row between"><b>Eğitim tamamlandı</b><button class="small" id="ai-goto-models" type="button">Modeli gör</button></div>
+          <div class="muted small" style="margin:6px 0">Model: <span class="mono">${esc(r.model_id || "-")}</span></div>
+          <div class="stat-grid">
+            <div class="stat"><span>Test getirisi</span><b class="${pnlClass(test.total_return_pct)}">${fmt(test.total_return_pct, 1)}%</b><small>al-tut ${fmt(test.buy_hold_pct, 1)}%</small></div>
+            <div class="stat"><span>Edge</span><b class="${pnlClass(test.edge_pct)}">${fmt(test.edge_pct, 1)}%</b><small>${fmt(test.trade_count, 0)} işlem</small></div>
+            <div class="stat"><span>Kazanma</span><b>${fmt(test.win_rate, 1)}%</b><small>maks. düşüş ${fmt(test.max_drawdown_pct, 1)}%</small></div>
+          </div>
+        </div>`;
+        btn.disabled = false;
+        const after = $("#ai-goto-models");
+        if (after) after.addEventListener("click", () => route());
+      });
+    } catch (e) {
+      box.innerHTML = `<div class="error">${esc(e.message)}</div>`;
+      btn.disabled = false;
+    }
+  });
+
+  $$("[data-ai-detail]").forEach((b) => b.addEventListener("click", async () => {
+    try {
+      const d = await api(`/ai/models/${encodeURIComponent(b.dataset.aiDetail)}`);
+      modal("AI model detayı", `<pre style="white-space:pre-wrap;max-height:60vh;overflow:auto">${esc(JSON.stringify({ model: d.model, report: d.report, experiences: d.experiences }, null, 2))}</pre>`);
+    } catch (e) { toast(e.message, true); }
+  }));
+  $$("[data-ai-promote]").forEach((b) => b.addEventListener("click", async () => {
+    const ok = await confirmDialog("Modeli aktifleştir", "Bu model bot sihirbazında AI stratejisi olarak görünecek. Devam edilsin mi?");
+    if (!ok) return;
+    try { await api(`/ai/models/${encodeURIComponent(b.dataset.aiPromote)}/promote`, { method: "POST" }); toast("Model aktifleştirildi"); route(); }
+    catch (e) { toast(e.message, true); }
+  }));
+  $$("[data-ai-archive]").forEach((b) => b.addEventListener("click", async () => {
+    try { await api(`/ai/models/${encodeURIComponent(b.dataset.aiArchive)}/archive`, { method: "POST" }); toast("Model arşivlendi"); route(); }
+    catch (e) { toast(e.message, true); }
+  }));
+  $$("[data-ai-delete]").forEach((b) => b.addEventListener("click", async () => {
+    const ok = await confirmDialog("Modeli sil", "Model dosyaları kalıcı olarak silinecek. Devam edilsin mi?", "Sil", true);
+    if (!ok) return;
+    try { await api(`/ai/models/${encodeURIComponent(b.dataset.aiDelete)}`, { method: "DELETE" }); toast("Model silindi"); route(); }
+    catch (e) { toast(e.message, true); }
+  }));
+  $$("[data-ai-backtest]").forEach((b) => b.addEventListener("click", () => {
+    const m = models.find((x) => x.id === b.dataset.aiBacktest);
+    openBacktest({ type: "ai", model_id: b.dataset.aiBacktest }, {
+      coin: (m && m.params && m.params.coin) || "BTCUSDT",
+      bestTimeframe: (m && m.params && m.params.period) || "1h",
+    });
+  }));
+}
+
+
 async function renderSettings(root) {
   const [settings, coinlist, bots] = await Promise.all([api("/settings"), api("/settings/coinlist"), api("/bots")]);
   const app = settings.app;

@@ -8,7 +8,7 @@ def test_import_app():
 def test_schema_defines_core_tables():
     from app import db
 
-    for table in ("bots", "trades", "positions", "strategies", "signal_events", "jobs", "users", "coin_lists"):
+    for table in ("bots", "trades", "positions", "strategies", "signal_events", "jobs", "users", "coin_lists", "ai_models", "ai_experiences"):
         assert table in db.SCHEMA
 
 

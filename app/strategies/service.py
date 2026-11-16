@@ -12,6 +12,7 @@ from app.strategies.compiler import (
     validate_definition,
 )
 from app.strategies.registry import catalog
+from app.ai.strategy import AIModelStrategy, ai_model_specs
 
 
 def _timeframe_meta() -> Dict[str, Dict[str, Any]]:
@@ -276,16 +277,25 @@ def catalog_payload() -> Dict[str, Any]:
             }
             for item in custom
         ],
+        "ai": ai_model_specs(include_candidate=True),
     }
 
 
-def build_evaluator(spec: Dict[str, Any]):
-    """Bot konfigürasyonundaki strateji referansını çalıştırılabilir motora çevirir."""
+def build_evaluator(spec: Dict[str, Any], allow_archived: bool = False):
+    """Bot konfigürasyonundaki strateji referansını çalıştırılabilir motora çevirir.
+
+    ``allow_archived=True`` yalnızca backtest/analiz gibi teşhis yollarında
+    kullanılır; arşivlenmiş AI modeli canlı bota eklenemez.
+    """
     if isinstance(spec, str):
         return BuiltinStrategy(spec)
     kind = spec.get("type") or spec.get("kind")
     if kind == "builtin":
         return BuiltinStrategy(spec["name"])
+    if kind == "ai":
+        return AIModelStrategy(
+            spec.get("model_id") or spec.get("id"), allow_archived=allow_archived
+        )
     if kind == "custom":
         version = spec.get("version")
         item = get_custom(spec["id"])

@@ -63,7 +63,8 @@ class TradingEngine:
         self.risk = {
             **settings.DEFAULT_RISK,
             **self._inherited_risk(config),
-            **{k: v for k, v in (config.get("risk") or {}).items() if v not in (None, "", False)},
+            # Panelde açıkça verilen değerler (0 ve false dahil) devralınanı ezer.
+            **{k: v for k, v in (config.get("risk") or {}).items() if v is not None and v != ""},
         }
         self.filters = config.get("filters") or {}
         self.poll_seconds = int(config.get("poll_seconds", 10))
@@ -163,7 +164,10 @@ class TradingEngine:
                 labels[sid] = name or sid
             else:
                 motor = str(spec.get("name") or "")
-                labels[motor] = spec.get("label") or builtin_labels.get(motor, motor)
+                if (spec.get("type") or spec.get("kind")) == "ai":
+                    labels[str(spec.get("model_id") or motor)] = spec.get("name") or motor
+                else:
+                    labels[motor] = spec.get("label") or builtin_labels.get(motor, motor)
         return labels
 
     def _evaluator_name(self, evaluator) -> str:
@@ -263,7 +267,7 @@ class TradingEngine:
         if issues:
             for issue in issues:
                 self._log(self.bot_id, f"Mutabakat uyarısı: {issue}", "warning")
-            notifier.send(f"Mutabakat Uyarısı | {self.bot_id}", "\n".join(issues))
+            notifier.send(f"Mutabakat Uyarısı | {self.bot_name}", "\n".join(issues))
         return issues
 
     def run(self) -> None:
@@ -285,7 +289,7 @@ class TradingEngine:
                 return
         notifier.send(
             f"Bot Başladı | {self.bot_name}",
-            f"Mod: {self.mode}\nPeriyot: {self.period}\nNakit: {self.state['cash']:.2f}\n"
+            f"Bot: {self.bot_name}\nMod: {self.mode}\nPeriyot: {self.period}\nNakit: {self.state['cash']:.2f}\n"
             f"Strateji: {', '.join(self._evaluator_name(ev) for ev in self.evaluators)}",
         )
         try:
@@ -513,8 +517,8 @@ class TradingEngine:
             changes.append(f"{coin}: kısmi manuel satış ({sold:g}) yerel kayda işlendi")
             self._log(self.bot_id, changes[-1], "warning")
             notifier.send(
-                f"Kısmi manuel satış | {self.bot_id}",
-                f"{coin}\nSatılan: {sold:g}\nKalan: {actual:g}\nFiyat: {price:.8f}",
+                f"Kısmi manuel satış | {self.bot_name}",
+                f"Bot: {self.bot_name}\n{coin}\nSatılan: {sold:g}\nKalan: {actual:g}\nFiyat: {price:.8f}",
             )
             return changes
         if actual > local * 1.02:
@@ -548,6 +552,30 @@ class TradingEngine:
         except Exception:
             return 0.0
 
+    def _apply_cooldown(self, pnl_pct: float) -> None:
+        """Kapanış sonrası bekleme uygular.
+
+        `cooldown_min_loss_pct` > 0 ise bekleme yalnızca zarar bu yüzdeye
+        ulaştığında devreye girer; küçük/kârlı çıkışlarda bot hemen devam eder.
+        """
+        cooldown = int(self.risk.get("cooldown") or 0)
+        if cooldown <= 0:
+            return
+        min_loss = float(self.risk.get("cooldown_min_loss_pct") or 0)
+        if min_loss > 0 and pnl_pct > -min_loss:
+            self._log(
+                self.bot_id,
+                f"Cooldown atlandı: K/Z {pnl_pct:+.2f}% (eşik -%{min_loss:g})",
+                "debug",
+            )
+            return
+        self.state["cooldown_until"] = int(self.state.get("candle_seq", 0)) + cooldown
+        self._log(
+            self.bot_id,
+            f"Cooldown başladı: {cooldown} mum (K/Z {pnl_pct:+.2f}%)",
+            "info",
+        )
+
     def _close_manually(self, usdt: float, coin: str, local_qty: float) -> None:
         """Borsada elle satılmış pozisyonu yerel olarak kapatır (emir göndermez)."""
         position = self.state["position"]
@@ -566,9 +594,7 @@ class TradingEngine:
             (utcnow(), price, pnl_pct, self.bot_id, coin),
         )
         self.state["position"] = None
-        cooldown = int(self.risk.get("cooldown") or 0)
-        if cooldown:
-            self.state["cooldown_until"] = int(self.state.get("candle_seq", 0)) + cooldown
+        self._apply_cooldown(pnl_pct)
         self._save_state()
         self._log(
             self.bot_id,
@@ -577,8 +603,8 @@ class TradingEngine:
             "warning",
         )
         notifier.send(
-            f"Manuel satış | {self.bot_id}",
-            f"{coin} borsada elle satılmış.\nAdet: {local_qty:g}\nTahmini fiyat: {price:.8f}\n"
+            f"Manuel satış | {self.bot_name}",
+            f"Bot: {self.bot_name}\n{coin} borsada elle satılmış.\nAdet: {local_qty:g}\nTahmini fiyat: {price:.8f}\n"
             f"K/Z: {pnl_pct:+.2f}%\nPozisyon kapatıldı, nakit {usdt:.2f} USDT.",
         )
 
@@ -659,6 +685,23 @@ class TradingEngine:
         close = data["close"]
         price = float(close[-1])
         atr_value = self._atr_value(data)
+        # İşlemlerden öğrenme için giriş anındaki özellik fotoğrafı. AI stratejisi
+        # zaten kendi detayında gönderir; diğer stratejiler için burada üretilir.
+        try:
+            detail = result.get("buy_detail")
+            if isinstance(detail, dict) and not detail.get("features"):
+                from app.ai.features import build_features
+
+                feature = build_features(data)
+                idx = max(0, len(feature["close"]) - 2)
+                row = feature["frame"].iloc[idx]
+                detail["features"] = {
+                    str(k): (None if row[k] != row[k] else float(row[k]))
+                    for k in feature["feature_names"]
+                }
+                detail["feature_index"] = idx
+        except Exception as exc:  # noqa: BLE001 - öğrenme kaydı girişi engellemesin
+            self._log(self.bot_id, f"AI giriş özellikleri alınamadı: {exc}", "debug")
         self._log(
             self.bot_id,
             f"ALIM sinyali: {coin} @ {price:.8f} ({self._evaluator_name(evaluator)})",
@@ -698,8 +741,8 @@ class TradingEngine:
         self._set_position(coin, qty, exec_price, evaluator, result, atr=atr_value)
         self._record_trade(coin, "BUY", qty, exec_price, fee_amount, None, "sinyal")
         notifier.send(
-            f"AL | {self.bot_id}",
-            f"{coin} alındı\nAdet: {qty}\nFiyat: {exec_price:.8f}\nMod: paper",
+            f"AL | {self.bot_name}",
+            f"Bot: {self.bot_name}\n{coin} alındı\nAdet: {qty}\nFiyat: {exec_price:.8f}\nMod: paper",
         )
 
     def _open_live(self, coin, price, evaluator, result, atr_value=0.0) -> None:
@@ -737,8 +780,8 @@ class TradingEngine:
         self._set_position(coin, executed, avg, evaluator, result, order_id=str(order.get("orderId")), atr=atr_value)
         self._record_trade(coin, "BUY", executed, avg, fee_amount, str(order.get("orderId")), "sinyal")
         notifier.send(
-            f"AL | {self.bot_id}",
-            f"{coin} alındı\nAdet: {executed}\nFiyat: {avg:.8f}\nMod: LIVE",
+            f"AL | {self.bot_name}",
+            f"Bot: {self.bot_name}\n{coin} alındı\nAdet: {executed}\nFiyat: {avg:.8f}\nMod: LIVE",
         )
 
     def _set_position(self, coin, qty, price, evaluator, result, order_id=None, atr=0.0) -> None:
@@ -812,6 +855,31 @@ class TradingEngine:
             price = exec_price
 
         pnl_pct = (price / entry - 1) * 100
+        # Kapanan her bot işlemi "deneyim" olarak saklanır (özellik fotoğrafıyla).
+        # AI eğitimi bu kayıtları sınırlı ağırlıkla kullanabilir.
+        try:
+            entry_signal = position.get("entry_signal") or {}
+            if isinstance(entry_signal, dict) and entry_signal.get("features"):
+                from app.ai.artifacts import record_experience
+
+                record_experience(
+                    {
+                        "model_id": entry_signal.get("model_id") or position.get("strategy_id"),
+                        "bot_id": self.bot_id,
+                        "coin": coin,
+                        "period": self.period,
+                        "side": "BUY",
+                        "features": entry_signal.get("features") or {},
+                        "entry_price": entry,
+                        "exit_price": price,
+                        "pnl_pct": pnl_pct,
+                        "candles": int(position.get("candles") or 0),
+                        "reason": reason,
+                        "mode": self.mode,
+                    }
+                )
+        except Exception as exc:  # noqa: BLE001 - öğrenme kaydı botu durdurmamalı
+            self._log(self.bot_id, f"AI deneyim kaydı yazılamadı: {exc}", "debug")
         self.state["total_realized_pnl"] = round(
             float(self.state.get("total_realized_pnl", 0)) + (price - entry) * qty, 8
         )
@@ -822,9 +890,7 @@ class TradingEngine:
         )
         self.state["position"] = None
         # Stop/kâr sonrası hemen yeniden girişi engelle (komisyon erozyonu).
-        cooldown = int(self.risk.get("cooldown") or 0)
-        if cooldown:
-            self.state["cooldown_until"] = int(self.state.get("candle_seq", 0)) + cooldown
+        self._apply_cooldown(pnl_pct)
         self._save_state()
         self._log(
             self.bot_id,
@@ -832,8 +898,8 @@ class TradingEngine:
             "info",
         )
         notifier.send(
-            f"SAT | {self.bot_id}",
-            f"{coin} satıldı\nAdet: {qty}\nFiyat: {price:.8f}\nK/Z: {pnl_pct:.2f}%\nNeden: {reason}",
+            f"SAT | {self.bot_name}",
+            f"Bot: {self.bot_name}\n{coin} satıldı\nAdet: {qty}\nFiyat: {price:.8f}\nK/Z: {pnl_pct:.2f}%\nNeden: {reason}",
         )
 
     # ------------------------------------------------------------------

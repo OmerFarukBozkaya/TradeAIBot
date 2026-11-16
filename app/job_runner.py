@@ -395,7 +395,9 @@ def run_backtest(params: Dict[str, Any]) -> Dict[str, Any]:
     fee = float(params.get("fee", settings.PAPER_FEE))
     slippage = float(params.get("slippage", settings.PAPER_SLIPPAGE))
 
-    evaluator = build_evaluator(spec)
+    # Backtest teşhis amaçlıdır: arşivlenmiş modelin geçmiş performansı da
+    # yeniden ölçülebilir (canlı bota eklenmesi yine engellidir).
+    evaluator = build_evaluator(spec, allow_archived=True)
     # Toplu backtest'te veri bir kez çekilir ve paylaşılır (_data / _history_meta).
     cached_data = params.get("_data")
     if isinstance(cached_data, dict) and cached_data.get("close"):
@@ -506,7 +508,10 @@ def run_backtest(params: Dict[str, Any]) -> Dict[str, Any]:
                     }
                 )
                 position = None
-                cooldown_until = idx + cooldown
+                # Koşullu bekleme: yalnızca zarar eşiği aşıldıysa uygula.
+                min_loss = float(risk.get("cooldown_min_loss_pct") or 0)
+                if cooldown and (min_loss <= 0 or pnl_pct <= -min_loss):
+                    cooldown_until = idx + cooldown
 
         total = cash + (position["qty"] * price if position else 0)
         equity.append(total)
@@ -672,6 +677,7 @@ def run_backtest(params: Dict[str, Any]) -> Dict[str, Any]:
             "take_profit_atr": risk.get("take_profit_atr") or 0,
             "take_profit_pct": risk.get("take_profit_pct") or 0,
             "cooldown": risk.get("cooldown") or 0,
+            "cooldown_min_loss_pct": risk.get("cooldown_min_loss_pct") or 0,
             "exit_reasons": exit_reasons,
         },
         "equity": curve,
@@ -1165,22 +1171,35 @@ def run_backup_restore(params: Dict[str, Any]) -> Dict[str, Any]:
 
 
 def run_ai_train(params: Dict[str, Any]) -> Dict[str, Any]:
-    if not settings.AI_ENABLED:
-        raise RuntimeError("AI profili etkin değil. docker compose --profile ai ile başlatın.")
-    mode = params.get("mode", "test")
-    import AI
+    from app.ai.trainer import train_model
 
-    if mode == "dataset":
-        _araclar().create_dataset()
-    elif mode == "random_search":
-        AI.create_model_best_parametre()
-    elif mode == "best_model":
-        AI.create_model_best_model()
-    elif mode == "test":
-        AI.test_model()
-    else:
-        raise ValueError(f"Geçersiz AI modu: {mode}")
-    return {"ok": True, "mode": mode}
+    if not settings.AI_ENABLED:
+        raise RuntimeError("AI profili etkin değil. Ayarlar > Sistem > Yapay zekâ özelliklerini açın.")
+    job_id = params.get("_job_id")
+    _progress(job_id, 5, "Veri hazırlanıyor")
+
+    # Trainer tek seferde tüm işi yapar; ilerlemeyi kaba adımlarla bildiriyoruz.
+    _progress(job_id, 15, "Veri çekiliyor ve özellikler hesaplanıyor")
+    result = train_model(params)
+    _progress(job_id, 95, "Model aday olarak kaydedildi")
+    return {
+        "ok": True,
+        "model_id": (result.get("model") or {}).get("id"),
+        "metrics": (result.get("model") or {}).get("metrics"),
+        "report": result.get("report"),
+    }
+
+
+def run_ai_auto(params: Dict[str, Any]) -> Dict[str, Any]:
+    from app.ai.autopilot import run_once
+
+    if not settings.AI_ENABLED:
+        raise RuntimeError("AI kapalı. Ayarlar > Sistem > Yapay zekâ özelliklerini açın.")
+    job_id = params.get("_job_id")
+    _progress(job_id, 10, "Otomatik öğrenme başladı: veri çekiliyor")
+    result = run_once(trigger=str(params.get("trigger") or "manual"))
+    _progress(job_id, 95, f"Karar: {result.get('decision')}")
+    return result
 
 
 # ---------------------------------------------------------------------------
@@ -1198,6 +1217,7 @@ HANDLERS = {
     "strategy_results": run_strategy_results,
     "strategy_analyze_save": run_strategy_analyze_save,
     "ai_train": run_ai_train,
+    "ai_auto": run_ai_auto,
     "snapshot_record": run_snapshot_record,
     "snapshot_verify": run_snapshot_verify,
     "backup_create": run_backup_create,

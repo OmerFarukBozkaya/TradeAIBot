@@ -71,25 +71,37 @@ Kripto para analizi, backtest, tarama ve otomatik alım-satım için **web aray�
 > Değişiklikten sonra `docker compose up -d` (yeniden derleme gerekmez). Giriş
 > yapmış oturumlar yeni çerez adıyla bir kez yeniden giriş ister.
 
-### AI profili (opsiyonel)
+### AI eğitimi (dashboard)
 
-Sadece eğitim/test işleri için AI kuyruk işçisi:
+AI modeli eğitimi **panelden** yapılır: `AI Eğitimi` sekmesi. Önerilen yol tek
+anahtardır:
 
-```bash
-docker compose --profile ai up -d --build
-```
+**Otomatik öğrenme** → coin, periyot, öğrenme tarzı (Temkinli / Dengeli / Agresif)
+ve kaç saatte bir çalışacağını seç → anahtarı aç → **Şimdi öğren** ile ilk turu başlat.
 
-AI imajı TensorFlow/Keras içerir; çekirdek imaj hafif kalır. AI işleri `ai` servisindeki kuyruk işçisi tarafından işlenir.
+Her turda model kendi kendini eğitir, **5 tura kadar** eğitim kümesindeki
+işlemleri "erken / geç / zamanında" olarak analiz eder, hatalı zamanlamadaki
+örneklerin ağırlığını düşürüp ideal dip/zirve örneklerini güçlendirir ve yeniden
+eğitir. Tur seçimi validation ile yapılır; test yalnızca bir kez görülür.
+Ardından walk-forward ile test edilir ve aşırı öğrenme kapısından geçirilir. Yeni model mevcut modelden belirgin iyiyse otomatik aktifleşir;
+değilse mevcut model korunur. Hata olursa sonraki tur daha uzun beklemeyle tekrar
+dener. Kapanan AI işlemleri sonraki eğitimlerde sınırlı oranda ders olarak kullanılır.
 
-**AI stratejisiyle bot çalıştırmak** için ana uygulama imajında da AI bağımlılıkları gerekir:
+İnce ayar isteyenler için "Gelişmiş: elle eğitim" bölümü açılabilir. Titiz zaman
+serisi protokolü her iki yolda da aynıdır:
 
-```bash
-docker compose build --build-arg INSTALL_AI=true tradeai
-# .env içinde AI_ENABLED=true yapın
-docker compose up -d
-```
+- Özellikler yalnızca karar anına kadar olan kapanmış mumlardan üretilir.
+- Etiketler sonraki N mumun lehte/hilaf hareketinden türetilir.
+- Veri karıştırılmaz: **%70 öğrenme / %30 test**. Öğrenmenin son %15'i
+  eşik ve tur seçimi (validation) için ayrılır; test hiçbir seçimde kullanılmaz.
+- Bölmeler arasında etiket ufku kadar **embargo** bırakılır.
+- Eşikler yalnızca validation'da seçilir; test bir kez değerlendirilir.
+- Aşırı öğrenme kapısı: test getirisi eğitimin çok küçük bir parçasıysa,
+  walk-forward katları tutarsızsa veya edge negatifse model aktifleşmez.
 
-Bu durumda `AI` stratejisi bot oluşturma ekranında listelenir.
+`AI_ENABLED=true` (Ayarlar → Sistem) olmadan eğitim başlatılamaz. Eski
+TensorFlow/Keras tabanlı `AI.py` artık kullanılmıyor; yeni hat
+`app/ai/` altındadır. Ayrıntılı protokol: `AI_TRAINING.md`.
 
 ---
 
@@ -759,17 +771,23 @@ sonra ölçümü yenilemek için `measure_timeframes` betiğini çalıştırın.
 
 ### Risk kuralları: stop, takipli stop, kâr al, kâr koruma
 
-Strateji tanımına bir **`risk`** bloğu eklenir. Backtest ve canlı bot **aynı** kuralları uygular.
+**Tüm risk ayarları paneldedir:** Botlar → Yeni bot / Düzenle → adım 5 **Risk koruması**.
+Aç/kapat anahtarlarının altındaki **Sayısal kurallar** alanında stop, takipli stop,
+kâr al, kâr koruma ve cooldown değerleri bot bazında girilir (`0` = kapalı).
+Backtest ve canlı bot **aynı** değerleri kullanır; backtest formu boş bırakılırsa
+botun/stratejinin risk bloğu uygulanır.
 
 | Ayar | Anlamı |
 |---|---|
 | `stop_atr` | Girişten **n × ATR(14)** aşağıda sabit stop |
+| `max_stop_pct` | ATR stopun girişten en fazla **%n** aşağıda olması (felaket koruması) |
 | `trail_atr` | Pozisyonun **mum zirvesinden (high)** n × ATR aşağıda takipli stop (kârı kilitler) |
 | `trail_after_pct` | Takipli stop ancak kâr **%n**'yi aştıktan sonra devreye girer (erken pullback'te kesmez) |
 | `profit_exit_donchian` | **Kâr koruma:** pozisyon kârdayken **n mumluk Donchian dibi** kırılırsa çık |
 | `take_profit_atr` | Girişten **n × ATR** yukarıda kâr al |
 | `take_profit_pct` | Girişten **%n** yukarıda kâr al |
 | `cooldown` | Çıkıştan sonra **n mum boyunca yeni giriş yok** (komisyon erozyonunu önler) |
+| `cooldown_min_loss_pct` | Cooldown yalnızca çıkış K/Z'si **-%n** veya daha kötüyse uygulanır (`0` = her çıkışta) |
 
 - Birincil çıkışlar **stop, takipli stop, kâr koruma ve sinyaldir**. **Zaman limiti tamamen kaldırıldı.**
 - Stop ve kâr hedefi **mum içi high/low** ile kontrol edilir (sadece kapanış değil).

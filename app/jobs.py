@@ -26,14 +26,16 @@ JOB_LABELS = {
     "dataset": "Veri seti",
     "strategy_results": "Strateji sonuçları",
     "strategy_analyze_save": "Strateji analizi",
-    "ai_train": "AI eğitimi",
+    "ai_train": "AI model eğitimi",
+    "ai_auto": "AI otomatik öğrenme",
+    "ai_dataset": "AI veri seti",
     "snapshot_record": "Snapshot kaydı",
     "snapshot_verify": "Snapshot doğrulama",
     "backup_create": "Yedek oluşturma",
     "backup_restore": "Yedekten geri yükleme",
 }
 
-ACTIVE_STATUSES = ("queued", "running")
+ACTIVE_STATUSES = ("starting", "queued", "running")
 
 
 def job_label(job_type: str) -> str:
@@ -58,7 +60,7 @@ def _reap_stale() -> int:
     """
     now = datetime.now(timezone.utc)
     reaped = 0
-    for item in db.rows("SELECT * FROM jobs WHERE status IN ('queued','running')"):
+    for item in db.rows("SELECT * FROM jobs WHERE status IN ('starting','queued','running')"):
         stamp = item.get("started_at") or item.get("created_at")
         age = 0.0
         if stamp:
@@ -70,7 +72,7 @@ def _reap_stale() -> int:
             except (ValueError, TypeError):
                 age = 0.0
         stale = False
-        if item["status"] == "queued" and age > 90:
+        if item["status"] in ("starting", "queued") and age > 90:
             stale = True
         elif item["status"] == "running":
             if age > 3600:
@@ -94,19 +96,22 @@ def _reap_stale() -> int:
 def create_job(job_type: str, params: Dict[str, Any]) -> Dict[str, Any]:
     _reap_stale()
     job_id = uuid.uuid4().hex[:12]
+    is_ai = job_type.startswith("ai_")
     db.execute(
         "INSERT INTO jobs(id,type,params_json,status,progress,message,created_at) VALUES(?,?,?,?,?,?,?)",
         (
             job_id,
             job_type,
             json.dumps(params, ensure_ascii=False),
-            "queued",
+            # AI işleri de normal iş sürecinde çalışır. 'starting' durumu,
+            # eski ayrı AI kuyruk işçisinin aynı işi kapmasını önler.
+            "starting" if is_ai else "queued",
             0,
             "Sırada bekliyor",
             db.utcnow(),
         ),
     )
-    running = db.row("SELECT COUNT(*) AS c FROM jobs WHERE status IN ('queued','running')")
+    running = db.row("SELECT COUNT(*) AS c FROM jobs WHERE status IN ('starting','queued','running')")
     # Basit eşzamanlılık sınırı
     if running and int(running["c"]) > settings.MAX_JOBS:
         db.execute(
@@ -122,9 +127,6 @@ def create_job(job_type: str, params: Dict[str, Any]) -> Dict[str, Any]:
 
     log_path = LOG_DIR / "jobs" / f"{job_id}.log"
     log_path.parent.mkdir(parents=True, exist_ok=True)
-    # AI işleri ayrı profil container'ındaki ai_worker tarafından alınır.
-    if job_type.startswith("ai_"):
-        return get_job(job_id)  # type: ignore
     handle = open(log_path, "a", encoding="utf-8")
     env = os.environ.copy()
     env["PYTHONUNBUFFERED"] = "1"
@@ -136,7 +138,10 @@ def create_job(job_type: str, params: Dict[str, Any]) -> Dict[str, Any]:
         stderr=subprocess.STDOUT,
         start_new_session=(os.name != "nt"),
     )
-    db.execute("UPDATE jobs SET pid=? WHERE id=?", (process.pid, job_id))
+    db.execute(
+        "UPDATE jobs SET pid=?, status='running' WHERE id=?",
+        (process.pid, job_id),
+    )
     return get_job(job_id)  # type: ignore
 
 
@@ -206,11 +211,11 @@ def active_jobs(recent_seconds: int = 120, limit: int = 8) -> Dict[str, Any]:
     """Devam eden işler + kısa süre önce bitenler (dashboard kartı için)."""
     _reap_stale()
     active = [_parse(r) for r in db.rows(
-        "SELECT * FROM jobs WHERE status IN ('queued','running') ORDER BY created_at ASC LIMIT ?",
+        "SELECT * FROM jobs WHERE status IN ('starting','queued','running') ORDER BY created_at ASC LIMIT ?",
         (limit,),
     )]
     recent = [_parse(r) for r in db.rows(
-        "SELECT * FROM jobs WHERE status NOT IN ('queued','running') "
+        "SELECT * FROM jobs WHERE status NOT IN ('starting','queued','running') "
         "ORDER BY COALESCE(finished_at, created_at) DESC LIMIT 6"
     )]
 
