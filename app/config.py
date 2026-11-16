@@ -139,6 +139,11 @@ class Settings(metaclass=_SettingsMeta):
     SECRET_KEY = os.getenv("TRADEAI_SECRET_KEY", "")
     SESSION_HOURS = _int("TRADEAI_SESSION_HOURS", 12)
     COOKIE_SECURE = _bool("TRADEAI_COOKIE_SECURE", False)
+    # Aynı tarayıcıda iki panel (ör. localhost:8089 + localhost:8080) açılınca
+    # çerezler port ayrımı yapmadığı için oturumlar birbirini ezer. Her örneğe
+    # farklı isim verilerek bu çakışma önlenir.
+    COOKIE_NAME = (os.getenv("TRADEAI_COOKIE_NAME", "tradeai_session").strip()
+                   or "tradeai_session")
 
     # İlk kurulum
     ADMIN_USER = os.getenv("ADMIN_USER", "admin")

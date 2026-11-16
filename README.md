@@ -43,6 +43,19 @@ Kripto para analizi, backtest, tarama ve otomatik alım-satım için **web aray�
 > `docker compose up -d` yeterlidir (yeniden derleme gerekmez). Uygulama yalnızca
 > `127.0.0.1` adresine yayınlanır; dışarı açmak için HTTPS kullanın.
 
+> **Aynı tarayıcıda iki panel** (ör. remote `localhost:8089` + yerel `localhost:8080`)
+> açacaksanız: tarayıcı çerezleri **port ayrımı yapmaz**, aynı adlı çerez ikinci
+> girişte birincinin üzerine yazılır ve iki panel birbirinin oturumunu düşürür.
+> Çözüm: ya panelleri farklı ana makine adlarıyla açın (`http://127.0.0.1:8080` ve
+> `http://localhost:8089`), ya da her örneğe `.env` içinde farklı çerez adı verin:
+>
+> ```bash
+> TRADEAI_COOKIE_NAME=tradeai_remote   # uzak sunucuda
+> ```
+>
+> Değişiklikten sonra `docker compose up -d` (yeniden derleme gerekmez). Giriş
+> yapmış oturumlar yeni çerez adıyla bir kez yeniden giriş ister.
+
 ### AI profili (opsiyonel)
 
 Sadece eğitim/test işleri için AI kuyruk işçisi:

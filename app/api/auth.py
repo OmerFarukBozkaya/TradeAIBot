@@ -6,6 +6,7 @@ from fastapi import APIRouter, Cookie, HTTPException, Request, Response
 from pydantic import BaseModel
 
 from app import db
+from app.config import settings
 from app.security import (
     COOKIE_NAME,
     authenticate,
@@ -41,7 +42,7 @@ async def login(body: LoginBody, request: Request, response: Response):
         token,
         httponly=True,
         samesite="lax",
-        secure=False,
+        secure=settings.COOKIE_SECURE,
         max_age=60 * 60 * 24,
     )
     return {
@@ -60,7 +61,7 @@ async def logout(
 ):
     if tradeai_session:
         delete_session(tradeai_session)
-    response.delete_cookie(COOKIE_NAME)
+    response.delete_cookie(COOKIE_NAME, httponly=True, samesite="lax", secure=settings.COOKIE_SECURE)
     return {"ok": True}
 
 

@@ -11,7 +11,7 @@ from fastapi import Cookie, Header, HTTPException, Request, status
 from app.config import settings
 from app import db
 
-COOKIE_NAME = "tradeai_session"
+COOKIE_NAME = settings.COOKIE_NAME
 MAX_FAILED = 5
 LOCK_MINUTES = 15
 
