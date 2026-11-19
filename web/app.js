@@ -1638,6 +1638,15 @@ function botCard(bot, seriesMap = {}) {
           <span class="dot"></span>${live ? "CANLI" : "TEST"}
         </button>
         ${sparkline(series, { width: 90, height: 26, zeroBased: true, color: chartColor })}
+        <button class="icon-btn" data-action="analysis" data-id="${esc(bot.id)}" type="button"
+          title="İşlem analizi: ne alındı, ne satıldı, ne kadar tutuldu, ne kadar kâr/zarar"
+          aria-label="İşlem analizi">
+          <svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true">
+            <circle cx="10.5" cy="10.5" r="6.2" fill="none" stroke="currentColor" stroke-width="2"/>
+            <line x1="15.2" y1="15.2" x2="20.2" y2="20.2" stroke="currentColor"
+              stroke-width="2" stroke-linecap="round"/>
+          </svg>
+        </button>
       </div>
     </div>
     <div class="stat-grid mt">
@@ -1670,8 +1679,6 @@ function botCard(bot, seriesMap = {}) {
       <button data-action="stop" data-id="${esc(bot.id)}" ${bot.status !== "running" && bot.status !== "stopping" ? "disabled" : ""}>Durdur</button>
       ${pos ? `<button class="sell-btn" data-action="sell" data-id="${esc(bot.id)}" type="button"
         title="Açık pozisyonu hemen piyasa fiyatından sat">Sat</button>` : ""}
-      <button data-action="analysis" data-id="${esc(bot.id)}" type="button"
-        title="İşlem bazında K/Z, tutma süresi ve toplam istatistikler">Analiz</button>
       <button data-action="restart" data-id="${esc(bot.id)}">Yeniden Başlat</button>
       <button data-action="edit" data-id="${esc(bot.id)}" ${bot.status === "running" ? "disabled" : ""}>Düzenle</button>
       <button data-action="duplicate" data-id="${esc(bot.id)}">Kopyala</button>

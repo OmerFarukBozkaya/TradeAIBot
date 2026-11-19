@@ -692,6 +692,28 @@ button.sell-btn:hover {
   background: linear-gradient(180deg, rgba(251,113,133,.34), rgba(251,113,133,.2));
   border-color: rgba(251,113,133,.75);
 }
+
+/* Kartın sağ üstündeki ikon düğmeleri (bölmeli, daire biçimli). */
+button.icon-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  flex: 0 0 auto;
+  border-radius: 50%;
+  border: 1px solid var(--line-strong);
+  background: rgba(148, 163, 184, 0.08);
+  color: var(--text-dim);
+  line-height: 1;
+}
+button.icon-btn:hover {
+  background: rgba(56, 189, 248, 0.16);
+  border-color: rgba(56, 189, 248, 0.55);
+  color: #7dd3fc;
+}
+button.icon-btn svg { display: block; }
 .stat-grid > .stat > small + .muted, .stat-grid .muted.small { font-size: 10.5px; }
 
 /* İşlem analizi tablosu: satırlar sıkışık, sayılar hizalı. */
