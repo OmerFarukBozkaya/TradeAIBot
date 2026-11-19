@@ -2418,12 +2418,32 @@ async function showBotAnalysis(id) {
         <a class="chip" href="/api/trades/export.csv?bot_id=${encodeURIComponent(id)}" download>CSV indir</a>
       </div>
 
-      <div class="stat-grid mt">
-        <div class="stat"><span>Toplam K/Z</span><b class="${pnlClass(s.pnl_money)}">${money(s.pnl_money)}</b><small>${pctText(s.pnl_pct)} · yatırılan ${money(s.invested)}</small></div>
-        <div class="stat"><span>Kazanan / kaybeden</span><b>${fmt(s.wins, 0)} / ${fmt(s.losses, 0)}</b><small>${s.win_rate === null ? "" : fmt(s.win_rate, 1) + "% kazanma"}</small></div>
-        <div class="stat"><span>En iyi / en kötü</span><b class="${pnlClass(s.best)}">${money(s.best)}</b><small>en kötü <span class="${pnlClass(s.worst)}">${money(s.worst)}</span> · ort ${money(s.avg_pnl_money)}</small></div>
-        <div class="stat"><span>Tutma süresi</span><b>${esc(holdText(s.avg_hold_seconds))}</b><small>en kısa ${esc(holdText(s.min_hold_seconds))} · en uzun ${esc(holdText(s.max_hold_seconds))}</small></div>
-        <div class="stat"><span>Kâr faktörü</span><b>${s.profit_factor === null || s.profit_factor === undefined ? "—" : fmt(s.profit_factor, 2)}</b><small>komisyon ${money(-Math.abs(s.fees || 0))}</small></div>
+      <div class="ana-stats mt">
+        <div class="ana-stat">
+          <div class="ana-label">Toplam K/Z</div>
+          <div class="ana-value ${pnlClass(s.pnl_money)}">${money(s.pnl_money)}</div>
+          <div class="ana-hint">${pctText(s.pnl_pct)} · yatırılan ${money(s.invested)}</div>
+        </div>
+        <div class="ana-stat">
+          <div class="ana-label">Kazanan / kaybeden</div>
+          <div class="ana-value">${fmt(s.wins, 0)} / ${fmt(s.losses, 0)}</div>
+          <div class="ana-hint">${s.win_rate === null || s.win_rate === undefined ? "kapalı işlem yok" : fmt(s.win_rate, 1) + "% kazanma"}</div>
+        </div>
+        <div class="ana-stat">
+          <div class="ana-label">En iyi / en kötü</div>
+          <div class="ana-value ${pnlClass(s.best)}">${money(s.best)}</div>
+          <div class="ana-hint">en kötü ${money(s.worst)} · ort ${s.avg_pnl_money === null || s.avg_pnl_money === undefined ? "—" : money(s.avg_pnl_money)}</div>
+        </div>
+        <div class="ana-stat">
+          <div class="ana-label">Tutma süresi</div>
+          <div class="ana-value">${esc(holdText(s.avg_hold_seconds))}</div>
+          <div class="ana-hint">en kısa ${esc(holdText(s.min_hold_seconds))} · en uzun ${esc(holdText(s.max_hold_seconds))}</div>
+        </div>
+        <div class="ana-stat">
+          <div class="ana-label">Kâr faktörü</div>
+          <div class="ana-value">${s.profit_factor === null || s.profit_factor === undefined ? "—" : fmt(s.profit_factor, 2)}</div>
+          <div class="ana-hint">komisyon ${money(-Math.abs(s.fees || 0))}</div>
+        </div>
       </div>
 
       <div class="row between mt">
