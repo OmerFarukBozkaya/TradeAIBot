@@ -694,6 +694,11 @@ button.sell-btn:hover {
 }
 .stat-grid > .stat > small + .muted, .stat-grid .muted.small { font-size: 10.5px; }
 
+/* İşlem analizi tablosu: satırlar sıkışık, sayılar hizalı. */
+.ana-table td, .ana-table th { white-space: nowrap; }
+.ana-table td.mono { font-variant-numeric: tabular-nums; }
+.ana-table tbody tr:hover { background: rgba(148,163,184,.06); }
+
 .empty-state {
   padding: 26px 14px; text-align: center; color: var(--text-dim); font-size: 13px;
   border: 1px dashed var(--line-strong); border-radius: 12px;

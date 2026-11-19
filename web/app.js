@@ -1670,6 +1670,8 @@ function botCard(bot, seriesMap = {}) {
       <button data-action="stop" data-id="${esc(bot.id)}" ${bot.status !== "running" && bot.status !== "stopping" ? "disabled" : ""}>Durdur</button>
       ${pos ? `<button class="sell-btn" data-action="sell" data-id="${esc(bot.id)}" type="button"
         title="Açık pozisyonu hemen piyasa fiyatından sat">Sat</button>` : ""}
+      <button data-action="analysis" data-id="${esc(bot.id)}" type="button"
+        title="İşlem bazında K/Z, tutma süresi ve toplam istatistikler">Analiz</button>
       <button data-action="restart" data-id="${esc(bot.id)}">Yeniden Başlat</button>
       <button data-action="edit" data-id="${esc(bot.id)}" ${bot.status === "running" ? "disabled" : ""}>Düzenle</button>
       <button data-action="duplicate" data-id="${esc(bot.id)}">Kopyala</button>
@@ -1685,6 +1687,7 @@ async function botAction(action, id, mode) {
     else if (action === "stop") { await api(`/bots/${id}/stop`, { method: "POST" }); toast("Bot durduruldu"); }
     else if (action === "restart") { await api(`/bots/${id}/restart`, { method: "POST" }); toast("Bot yeniden başlatıldı"); }
     else if (action === "logs") { return showLogs(id); }
+    else if (action === "analysis") { return showBotAnalysis(id); }
     else if (action === "edit") {
       const bot = (state.bots || []).find((b) => b.id === id);
       if (bot) return openBotForm(bot);
@@ -2331,6 +2334,133 @@ async function openBotForm(existing = null, options = {}) {
     } catch (err) { toast(err.message, true); }
   });
   summary();
+}
+
+/** Tutma süresi: "3 sa 12 dk", "2 gün 4 sa", "45 dk". */
+function holdText(seconds) {
+  const total = Math.floor(Number(seconds));
+  if (!Number.isFinite(total) || total < 0) return "—";
+  if (total < 60) return `${total} sn`;
+  const d = Math.floor(total / 86400);
+  const h = Math.floor((total % 86400) / 3600);
+  const m = Math.floor((total % 3600) / 60);
+  if (d > 0) return `${d} gün${h ? ` ${h} sa` : ""}`;
+  if (h > 0) return `${h} sa${m ? ` ${m} dk` : ""}`;
+  return `${m} dk`;
+}
+
+async function showBotAnalysis(id) {
+  const bot = (state.bots || []).find((b) => b.id === id) || {};
+  let data;
+  try {
+    data = await api(`/trades/bot/${encodeURIComponent(id)}/analysis`);
+  } catch (err) {
+    toast(err.message, true);
+    return;
+  }
+  const s = data.summary || {};
+  const money = (v) => (v === null || v === undefined ? "—" : signedMoney(v));
+  const pctText = (v) => (v === null || v === undefined ? "—" : `${Number(v) > 0 ? "+" : ""}${fmt(v, 2)}%`);
+  const make = () => {
+    const wrap = document.createElement("div");
+    const rows = (data.trades || []).map((t, i) => `
+      <tr>
+        <td class="mono">${(data.trades.length - i)}</td>
+        <td>${esc(t.coin)}</td>
+        <td class="mono small">${esc(fmtTime(t.entry_time))}</td>
+        <td class="mono">${fmt(t.entry_price, 8)}</td>
+        <td class="mono small">${esc(fmtTime(t.exit_time))}</td>
+        <td class="mono">${fmt(t.exit_price, 8)}</td>
+        <td>${fmt(t.quantity, 8)}</td>
+        <td>${esc(holdText(t.hold_seconds))}</td>
+        <td class="${pnlClass(t.pnl_money)}">${money(t.pnl_money)}</td>
+        <td class="${pnlClass(t.pnl_pct)}">${pctText(t.pnl_pct)}</td>
+        <td>${tradeReason(t.exit_reason)}</td>
+      </tr>`).join("");
+    const lots = (data.open_lots || []).map((l) => `
+      <tr>
+        <td>${esc(l.coin)}</td>
+        <td class="mono">${fmt(l.entry_price, 8)}</td>
+        <td>${fmt(l.quantity, 8)}</td>
+        <td>${money(l.invested)}</td>
+        <td class="mono small">${esc(fmtTime(l.entry_time))}</td>
+        <td>${esc(holdText(l.age_seconds))}</td>
+      </tr>`).join("");
+    const coinRows = (data.by_coin || []).map((c) => `
+      <tr>
+        <td>${esc(c.coin)}</td>
+        <td>${fmt(c.trades, 0)}</td>
+        <td>${fmt(c.wins, 0)} / ${fmt(c.losses, 0)}</td>
+        <td>${c.win_rate === null ? "—" : fmt(c.win_rate, 1) + "%"}</td>
+        <td class="${pnlClass(c.pnl_money)}">${money(c.pnl_money)}</td>
+        <td class="${pnlClass(c.pnl_pct)}">${pctText(c.pnl_pct)}</td>
+        <td>${esc(holdText(c.avg_hold_seconds))}</td>
+      </tr>`).join("");
+    const reasonRows = (data.by_exit_reason || []).map((r) => `
+      <tr>
+        <td>${tradeReason(r.reason)}</td>
+        <td>${fmt(r.trades, 0)}</td>
+        <td class="${pnlClass(r.pnl_money)}">${money(r.pnl_money)}</td>
+      </tr>`).join("");
+    wrap.innerHTML = `
+      <div class="row between" style="align-items:flex-start">
+        <div>
+          <div class="row" style="gap:8px;align-items:center">
+            <b>${esc(bot.name || data.bot_id)}</b>
+            <span class="tag ${bot.mode === "live" ? "amber" : "green"}">${esc(bot.mode || "paper")}</span>
+            <span class="tag gray">${esc(bot.period || "")}</span>
+          </div>
+          <div class="muted small" style="margin-top:4px">
+            ${fmt(data.orders, 0)} emir · ${fmt(s.buy_orders, 0)} alış / ${fmt(s.sell_orders, 0)} satış ·
+            ${fmt(s.closed_trades, 0)} kapanan tur${data.limited ? " (son 2000 emir)" : ""}
+          </div>
+        </div>
+        <a class="chip" href="/api/trades/export.csv?bot_id=${encodeURIComponent(id)}" download>CSV indir</a>
+      </div>
+
+      <div class="stat-grid mt">
+        <div class="stat"><span>Toplam K/Z</span><b class="${pnlClass(s.pnl_money)}">${money(s.pnl_money)}</b><small>${pctText(s.pnl_pct)} · yatırılan ${money(s.invested)}</small></div>
+        <div class="stat"><span>Kazanan / kaybeden</span><b>${fmt(s.wins, 0)} / ${fmt(s.losses, 0)}</b><small>${s.win_rate === null ? "" : fmt(s.win_rate, 1) + "% kazanma"}</small></div>
+        <div class="stat"><span>En iyi / en kötü</span><b class="${pnlClass(s.best)}">${money(s.best)}</b><small>en kötü <span class="${pnlClass(s.worst)}">${money(s.worst)}</span> · ort ${money(s.avg_pnl_money)}</small></div>
+        <div class="stat"><span>Tutma süresi</span><b>${esc(holdText(s.avg_hold_seconds))}</b><small>en kısa ${esc(holdText(s.min_hold_seconds))} · en uzun ${esc(holdText(s.max_hold_seconds))}</small></div>
+        <div class="stat"><span>Kâr faktörü</span><b>${s.profit_factor === null || s.profit_factor === undefined ? "—" : fmt(s.profit_factor, 2)}</b><small>komisyon ${money(-Math.abs(s.fees || 0))}</small></div>
+      </div>
+
+      <div class="row between mt">
+        <b class="small">İşlem bazında K/Z</b>
+        <span class="muted small">En yeni en üstte · tutma süresi alıştan satışa</span>
+      </div>
+      <div class="result-scroll mt"><table class="result-table ana-table"><thead><tr>
+        <th>#</th><th>Coin</th><th>Alış</th><th>Alış fiyatı</th><th>Satış</th><th>Satış fiyatı</th>
+        <th>Adet</th><th>Tutma</th><th>K/Z</th><th>K/Z %</th><th>Çıkış nedeni</th>
+      </tr></thead><tbody>${rows || '<tr><td colspan="11" class="muted">Henüz kapanan işlem yok.</td></tr>'}</tbody></table></div>
+
+      ${lots ? `<div class="row between mt"><b class="small">Açık pozisyonlar (henüz satılmadı)</b></div>
+      <div class="result-scroll mt"><table class="result-table"><thead><tr>
+        <th>Coin</th><th>Alış fiyatı</th><th>Adet</th><th>Yatırılan</th><th>Alış</th><th>Elde</th>
+      </tr></thead><tbody>${lots}</tbody></table></div>` : ""}
+
+      <div class="split mt">
+        <div>
+          <b class="small">Coin bazında</b>
+          <div class="result-scroll mt"><table class="result-table"><thead><tr>
+            <th>Coin</th><th>Tur</th><th>K/Y</th><th>Kazanma</th><th>K/Z</th><th>K/Z %</th><th>Ort. tutma</th>
+          </tr></thead><tbody>${coinRows || '<tr><td colspan="7" class="muted">—</td></tr>'}</tbody></table></div>
+        </div>
+        <div>
+          <b class="small">Çıkış nedeni</b>
+          <div class="result-scroll mt"><table class="result-table"><thead><tr>
+            <th>Neden</th><th>Tur</th><th>K/Z</th>
+          </tr></thead><tbody>${reasonRows || '<tr><td colspan="3" class="muted">—</td></tr>'}</tbody></table></div>
+        </div>
+      </div>
+      <p class="muted small" style="margin-top:12px">
+        K/Z, komisyon dahil hesaplanır: alışta ödenen komisyon maliyete eklenir, satışta düşülür.
+        Kısmi satışlarda tek alış birden çok tura bölünür.
+      </p>`;
+    return wrap;
+  };
+  modal("İşlem analizi", make());
 }
 
 async function showLogs(id) {
