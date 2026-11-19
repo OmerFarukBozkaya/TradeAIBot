@@ -673,20 +673,60 @@ function barChart(items, opts = {}) {
 function sparkline(values, opts = {}) {
   const nums = (values || []).map(Number).filter((n) => Number.isFinite(n));
   if (nums.length < 2) return "";
-  const w = opts.width || 120, h = opts.height || 34, pad = 3;
-  const min = Math.min(...nums), max = Math.max(...nums);
+  const w = opts.width || 120, h = opts.height || 34, pad = 4;
+  // Sıfır tabanlı serilerde (kümülatif K/Z) renk, son değerin işaretine göre;
+  // aksi halde trend yönüne göre belirlenir.
+  const zero = opts.zeroBased ? 0 : Math.min(...nums, 0);
+  const min = Math.min(...nums, zero);
+  const max = Math.max(...nums, zero);
   const span = max - min || 1;
-  const pts = nums.map((v, i) => {
-    const x = pad + (i / (nums.length - 1)) * (w - pad * 2);
-    const y = h - pad - ((v - min) / span) * (h - pad * 2);
-    return `${x.toFixed(1)},${y.toFixed(1)}`;
-  }).join(" ");
-  const up = nums[nums.length - 1] >= 0;
-  const color = opts.color || (up ? "#34d399" : "#fb7185");
+  const xAt = (i) => pad + (i / (nums.length - 1)) * (w - pad * 2);
+  const yAt = (v) => h - pad - ((v - min) / span) * (h - pad * 2);
+  const pts = nums.map((v, i) => `${xAt(i).toFixed(1)},${yAt(v).toFixed(1)}`).join(" ");
+  const last = nums[nums.length - 1];
+  const first = nums[0];
+  const rising = opts.zeroBased ? last >= 0 : last >= first;
+  const color = opts.color || (rising ? "#34d399" : "#fb7185");
+  const baseY = yAt(zero).toFixed(1);
+  const area = `${pad},${baseY} ${pts} ${(w - pad).toFixed(1)},${baseY}`;
+  const uid = `spk${Math.abs(Math.round(first * 1e4 + last * 97 + nums.length * 13))}`;
   return `<svg class="sparkline" viewBox="0 0 ${w} ${h}" width="${w}" height="${h}" aria-hidden="true">
+    <defs><linearGradient id="${uid}" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="${color}" stop-opacity=".28"/>
+      <stop offset="100%" stop-color="${color}" stop-opacity="0"/>
+    </linearGradient></defs>
+    <line x1="${pad}" y1="${baseY}" x2="${w - pad}" y2="${baseY}" stroke="currentColor"
+      stroke-opacity=".18" stroke-width="1" stroke-dasharray="2 3"/>
+    <polygon points="${area}" fill="url(#${uid})" stroke="none"/>
     <polyline points="${pts}" fill="none" stroke="${color}" stroke-width="1.8"
       stroke-linejoin="round" stroke-linecap="round"/>
+    <circle cx="${xAt(nums.length - 1).toFixed(1)}" cy="${yAt(last).toFixed(1)}" r="2.2" fill="${color}"/>
   </svg>`;
+}
+
+/** Saniyeyi "1 yıl 2 ay 3 gün 4 saat 5 dk" biçimine çevirir. */
+function uptimeText(seconds) {
+  const total = Math.max(0, Math.floor(Number(seconds) || 0));
+  if (!total) return "—";
+  const units = [
+    ["yıl", 365 * 86400],
+    ["ay", 30 * 86400],
+    ["gün", 86400],
+    ["saat", 3600],
+    ["dk", 60],
+  ];
+  let rest = total;
+  const parts = [];
+  for (const [label, size] of units) {
+    const count = Math.floor(rest / size);
+    if (count > 0) {
+      parts.push(`${count} ${label}`);
+      rest -= count * size;
+    }
+    if (parts.length >= 3) break;
+  }
+  if (!parts.length) parts.push(`${rest} sn`);
+  return parts.join(" ");
 }
 
 /* ------------------------------------------------------------------ */
@@ -1436,6 +1476,9 @@ function botRow(bot, seriesMap = {}) {
   const pos = bot.state && bot.state.position;
   const running = bot.status === "running";
   const series = seriesMap[bot.id] || [];
+  const st = bot.state || {};
+  const totalPnl = botTotalPnl(bot);
+  const chartColor = Number(totalPnl) > 0 ? "#34d399" : Number(totalPnl) < 0 ? "#fb7185" : undefined;
   return `<div class="bot-mini">
     <div class="row between">
       <div class="bot-mini-title">
@@ -1445,14 +1488,15 @@ function botRow(bot, seriesMap = {}) {
         <span class="tag ${bot.mode === "live" ? "amber" : "green"}">${esc(bot.mode)}</span>
       </div>
       <div class="row" style="gap:10px">
-        ${sparkline(series)}
+        ${sparkline(series, { zeroBased: true, color: chartColor })}
         ${statusTag(bot.status)}
       </div>
     </div>
     <div class="row mt bot-mini-meta">
-      <span><span class="muted">Nakit</span> <b>${money(bot.state && bot.state.cash)}</b></span>
-      <span><span class="muted">Toplam K/Z</span> <b data-live="total-${esc(bot.id)}" class="${pnlClass(bot.state && bot.state.total_pnl)}">${bot.state && bot.state.total_pnl !== null && bot.state.total_pnl !== undefined ? signedMoney(bot.state.total_pnl) : "—"}</b></span>
-      <span><span class="muted">İşlem</span> <b>${esc((bot.state && bot.state.trade_count) || 0)}</b></span>
+      <span><span class="muted">Nakit</span> <b>${money(st.cash)}</b></span>
+      <span><span class="muted">Toplam K/Z</span> <b data-live="total-${esc(bot.id)}" class="${pnlClass(totalPnl)}">${signedMoney(totalPnl)}</b></span>
+      <span><span class="muted">İşlem</span> <b>${esc(st.trade_count || 0)}</b></span>
+      <span><span class="muted">aktif</span> <b>${esc(uptimeText(st.uptime_seconds))}</b></span>
       ${pos ? `<span class="tag amber">${esc(pos.coin)} @ ${fmt(pos.entry_price, 6)}</span>
         <span><span class="muted">güncel</span> <b data-live="price-${esc(bot.id)}">${fmt(pos.last_price, 8)}</b></span>
         <span><b data-live="rowpnl-${esc(bot.id)}" class="${pnlClass(pos.unrealized_pnl_pct)}">${Number(pos.unrealized_pnl_pct) > 0 ? "+" : ""}${fmt(pos.unrealized_pnl_pct, 2)}%</b></span>` : '<span class="muted">pozisyon yok</span>'}
@@ -1570,6 +1614,9 @@ function botCard(bot, seriesMap = {}) {
   const live = bot.mode === "live";
   const series = seriesMap[bot.id] || [];
   const liveLocked = !state.liveUnlocked;
+  const st = bot.state || {};
+  const totalPnl = botTotalPnl(bot);
+  const chartColor = Number(totalPnl) > 0 ? "#34d399" : Number(totalPnl) < 0 ? "#fb7185" : undefined;
   return `<div class="card bot-card ${running ? "is-running" : ""} ${live ? "is-live" : ""}">
     <div class="row between">
       <div class="row" style="gap:12px;align-items:flex-start">
@@ -1577,6 +1624,10 @@ function botCard(bot, seriesMap = {}) {
         <div>
           <div class="bot-name">${esc(bot.name)}</div>
           <div class="muted bot-sub">${esc(bot.period)} · ${listTag}${esc(coins)} · ${esc(specs || "strateji yok")}</div>
+          <div class="muted bot-sub" title="Botun ilk başlatıldığı andan itibaren geçen süre">
+            ⏱ aktif ${esc(uptimeText(st.uptime_seconds))}
+            ${st.started_at ? `<span class="muted">· başlangıç ${esc(fmtIso(st.started_at))}</span>` : ""}
+          </div>
         </div>
       </div>
       <div class="row">
@@ -1586,14 +1637,17 @@ function botCard(bot, seriesMap = {}) {
           title="${live ? "Test moduna al" : liveLocked ? "Önce canlı işlem anahtarını aç" : "Canlı moda geç"}">
           <span class="dot"></span>${live ? "CANLI" : "TEST"}
         </button>
-        ${sparkline(series, { width: 90, height: 26 })}
+        ${sparkline(series, { width: 90, height: 26, zeroBased: true, color: chartColor })}
       </div>
     </div>
     <div class="stat-grid mt">
-      <div><div class="muted">Nakit</div><div class="stat small">${money(bot.state && bot.state.cash)}</div></div>
-      <div><div class="muted">Toplam K/Z</div><div class="stat small ${pnlClass(bot.state && bot.state.total_pnl)}" data-live="total-${esc(bot.id)}">${bot.state && bot.state.total_pnl !== null && bot.state.total_pnl !== undefined ? signedMoney(bot.state.total_pnl) : "—"}</div></div>
-      <div><div class="muted">Anlık (açık)</div><div class="stat small ${pnlClass(bot.state && bot.state.unrealized_pnl)}" data-live="unreal-${esc(bot.id)}">${bot.state && bot.state.unrealized_pnl !== null && bot.state.unrealized_pnl !== undefined ? signedMoney(bot.state.unrealized_pnl) : "—"}</div></div>
-      <div><div class="muted">Portföy değeri</div><div class="stat small" data-live="equity-${esc(bot.id)}">${money(bot.state && bot.state.equity)}</div></div>
+      <div><div class="muted">Nakit</div><div class="stat small">${money(st.cash)}</div></div>
+      <div><div class="muted">Toplam K/Z</div><div class="stat small ${pnlClass(totalPnl)}" data-live="total-${esc(bot.id)}">${signedMoney(totalPnl)}</div>
+        <div class="muted small">${st.total_pnl_pct === null || st.total_pnl_pct === undefined ? "" : `${Number(st.total_pnl_pct) > 0 ? "+" : ""}${fmt(st.total_pnl_pct, 2)}%`}</div></div>
+      <div><div class="muted">Anlık (açık)</div><div class="stat small ${pnlClass(st.unrealized_pnl)}" data-live="unreal-${esc(bot.id)}">${st.unrealized_pnl === null || st.unrealized_pnl === undefined ? "—" : signedMoney(st.unrealized_pnl)}</div>
+        <div class="muted small">gerçekleşen ${signedMoney(st.total_realized_pnl)}</div></div>
+      <div><div class="muted">Portföy değeri</div><div class="stat small" data-live="equity-${esc(bot.id)}">${money(st.equity)}</div>
+        <div class="muted small">başlangıç ${money(st.initial_cash)}</div></div>
     </div>
     ${pos ? `
     <div class="position-strip mt">
@@ -1614,6 +1668,8 @@ function botCard(bot, seriesMap = {}) {
     <div class="row mt">
       <button data-action="start" data-id="${esc(bot.id)}" ${bot.status === "running" ? "disabled" : ""}>Başlat</button>
       <button data-action="stop" data-id="${esc(bot.id)}" ${bot.status !== "running" && bot.status !== "stopping" ? "disabled" : ""}>Durdur</button>
+      ${pos ? `<button class="sell-btn" data-action="sell" data-id="${esc(bot.id)}" type="button"
+        title="Açık pozisyonu hemen piyasa fiyatından sat">Sat</button>` : ""}
       <button data-action="restart" data-id="${esc(bot.id)}">Yeniden Başlat</button>
       <button data-action="edit" data-id="${esc(bot.id)}" ${bot.status === "running" ? "disabled" : ""}>Düzenle</button>
       <button data-action="duplicate" data-id="${esc(bot.id)}">Kopyala</button>
@@ -1654,6 +1710,28 @@ async function botAction(action, id, mode) {
       if (!ok) return;
       const res = await api(`/bots/${id}/duplicate`, { method: "POST", body: { name: name.trim() } });
       toast(`Kopyalandı: ${res.name}`);
+    }
+    else if (action === "sell") {
+      const bot = (state.bots || []).find((b) => b.id === id) || {};
+      const pos = (bot.state || {}).position;
+      if (!pos) { toast("Açık pozisyon yok"); return; }
+      const live = bot.mode === "live";
+      const ok = await confirmDialog(
+        "Manuel satış",
+        `${pos.coin} pozisyonu hemen satılsın mı?\n\n` +
+          `• Adet: ${fmt(pos.quantity, 8)}\n` +
+          `• Giriş: ${fmt(pos.entry_price, 8)}\n` +
+          `• Güncel: ${fmt(pos.last_price, 8)} (K/Z ${fmt(pos.unrealized_pnl_pct, 2)}%)\n` +
+          (live
+            ? "• CANLI modda gerçek piyasa emri gönderilecek.\n"
+            : "• Test modunda sanal satış yapılacak.\n") +
+          "\nSatış birkaç saniye içinde uygulanır.",
+        live ? "Canlı sat" : "Sat",
+        live,
+      );
+      if (!ok) return;
+      const res = await api(`/bots/${id}/sell`, { method: "POST", body: {} });
+      toast(res.started ? "Satış istendi; bot satış için başlatıldı" : "Satış istendi, birkaç saniye içinde uygulanacak");
     }
     else if (action === "delete") {
       if (!confirm("Bu bot silinsin mi? Geçmiş işlemler korunur.")) return;

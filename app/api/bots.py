@@ -53,6 +53,12 @@ class DuplicateBody(BaseModel):
     mode: Optional[str] = None
 
 
+class SellBody(BaseModel):
+    password: Optional[str] = None
+    price: Optional[float] = None
+    note: Optional[str] = None
+
+
 def _builtin_label(name: str) -> str:
     from app.strategies.service import list_builtin
 
@@ -187,6 +193,39 @@ def _enrich_risk(config: Dict[str, Any]) -> None:
     config["risk"] = risk
 
 
+def _money_pnl(bot_id: str, fee: float) -> Optional[Dict[str, float]]:
+    """Botun **komisyon dahil** nakit akışından gerçek K/Z'sini hesaplar.
+
+    Kart ile logların aynı sayıyı göstermesi için tek doğru kaynak işlem
+    tablosudur (durum dosyası yeniden başlatmalarda/canlı bakiyede bozulabilir):
+
+        nakit_akışı = Σ satış(tutar − komisyon) − Σ alış(tutar + komisyon)
+
+    Açık pozisyon varsa çıkış komisyonu düşülerek bugünkü değeri eklenir.
+    Hiç işlem yoksa ``None`` döner (eski kayıtlar durum dosyasından okunur).
+    """
+    rows = db.rows(
+        "SELECT side, quantity, price, fee FROM trades WHERE bot_id=? ORDER BY created_at",
+        (bot_id,),
+    )
+    if not rows:
+        return None
+    flow = 0.0
+    bought = 0.0
+    for row in rows:
+        qty = float(row.get("quantity") or 0)
+        price = float(row.get("price") or 0)
+        fee_amount = row.get("fee")
+        fee_amount = qty * price * fee if fee_amount is None else float(fee_amount)
+        amount = qty * price
+        if str(row.get("side")).upper() == "SELL":
+            flow += amount - fee_amount
+        else:
+            flow -= amount + fee_amount
+            bought += amount + fee_amount
+    return {"flow": round(flow, 6), "bought": round(bought, 6), "trades": len(rows)}
+
+
 def _serialize(bot: Dict[str, Any]) -> Dict[str, Any]:
     item = dict(bot)
     item["config"] = json.loads(item.pop("config_json"))
@@ -196,18 +235,68 @@ def _serialize(bot: Dict[str, Any]) -> Dict[str, Any]:
     state = bot_state.load_state(item["id"]) or {}
     position = _live_position(state.get("position"), item["config"].get("risk"))
     cash = float(state.get("cash") or 0)
-    pos_value = float((position or {}).get("value") or 0)
     initial = float(state.get("initial_cash") or 0)
-    equity = cash + pos_value
+
+    fee = float(settings.PAPER_FEE or 0.001)
+    if item.get("mode") == "live":
+        fee = float(item["config"].get("fee") or fee)
+    money = _money_pnl(item["id"], fee)
+    realized_state = float(state.get("total_realized_pnl") or 0)
+
+    # Açık pozisyonun piyasa değeri ve brüt (komisyon öncesi) K/Z'si.
+    pos_value = 0.0
+    unrealized = 0.0
+    if position:
+        qty = float(position.get("quantity") or 0)
+        price = float(position.get("last_price") or position.get("entry_price") or 0)
+        entry = float(position.get("entry_price") or 0)
+        pos_value = qty * price
+        unrealized = (price - entry) * qty
+
+    if money is not None and (initial > 0 or money["bought"] > 0):
+        # Tek doğru kaynak işlem geçmişi: komisyon dahil nakit akışı + açık
+        # pozisyonun piyasa değeri. Böylece kart, loglardaki işlemlerin
+        # toplamıyla tutarlı olur ve durum dosyası kaymasından etkilenmez.
+        capital = initial if initial > 0 else float(money["bought"])
+        equity = capital + float(money["flow"]) + pos_value
+        total_pnl = equity - capital
+        realized = total_pnl - unrealized
+    else:
+        # İşlem kaydı olmayan eski bot: durum dosyası tek kaynak.
+        capital = initial
+        equity = cash + pos_value
+        total_pnl = (equity - initial) if initial > 0 else (realized_state + unrealized)
+        realized = realized_state
+
+    # Botun ne kadar süredir çalıştığı: ilk başlatma zamanı → şimdi.
+    started_at = state.get("started_at") or item.get("created_at") or item.get("updated_at")
+    uptime = None
+    if started_at:
+        try:
+            from datetime import datetime, timezone
+
+            text = str(started_at).replace("Z", "+00:00")
+            started = datetime.fromisoformat(text)
+            if started.tzinfo is None:
+                started = started.replace(tzinfo=timezone.utc)
+            uptime = max(0, int((datetime.now(timezone.utc) - started).total_seconds()))
+        except (TypeError, ValueError):
+            uptime = None
+
     item["state"] = {
         "cash": state.get("cash"),
         "position": position,
-        "total_realized_pnl": state.get("total_realized_pnl"),
-        "unrealized_pnl": (position or {}).get("unrealized_pnl"),
-        "equity": round(equity, 4),
-        "total_pnl": round(equity - initial, 4) if initial > 0 else None,
-        "total_pnl_pct": round((equity / initial - 1) * 100, 2) if initial > 0 else None,
+        "total_realized_pnl": round(realized, 4),
+        "unrealized_pnl": round(unrealized, 4) if position else None,
+        "equity": equity,
+        "initial_cash": round(capital, 4) if capital else None,
+        "total_pnl": round(total_pnl, 4),
+        "total_pnl_pct": round(total_pnl / capital * 100, 2) if capital > 0 else None,
+        "realized_pnl_pct": round(realized / capital * 100, 2) if capital > 0 else None,
+        "pnl_source": "trades" if money is not None else "state",
         "trade_count": state.get("trade_count"),
+        "started_at": started_at,
+        "uptime_seconds": uptime,
         "last_update": state.get("last_update"),
         "last_error": state.get("last_error"),
         "reconciliation_required": state.get("reconciliation_required", False),
@@ -474,6 +563,45 @@ async def stop_bot(bot_id: str):
         return supervisor.stop(bot_id)
     except Exception as exc:
         raise HTTPException(400, str(exc))
+
+
+@router.post("/{bot_id}/sell")
+async def sell_position(bot_id: str, body: Optional[SellBody] = None):
+    """Manuel satış: açık pozisyonu kapatır.
+
+    Çalışan botta istek komut dosyasıyla motora iletilir; motor birkaç saniye
+    içinde piyasa fiyatından (veya verilen fiyattan) satar. Bot durmuşsa ve
+    açık pozisyon varsa satışı uygulayabilmesi için bot yeniden başlatılır.
+    """
+    from app.supervisor import supervisor
+
+    bot = db.row("SELECT * FROM bots WHERE id=?", (bot_id,))
+    if not bot:
+        raise HTTPException(404, "Bot bulunamadı")
+    state = bot_state.load_state(bot_id) or {}
+    position = state.get("position")
+    if not position:
+        raise HTTPException(400, "Açık pozisyon yok")
+    if body and body.password:
+        _require_password(body.password)
+
+    running = bot["status"] in {"running", "stopping"}
+    bot_state.request_sell(bot_id, price=(body.price if body else None), note=(body.note if body else "") or "panel")
+    db.log_event(bot_id, "Panelden manuel satış istendi", "info")
+    if not running:
+        try:
+            supervisor.start(bot_id)
+        except Exception as exc:  # noqa: BLE001
+            bot_state.clear_sell(bot_id)
+            raise HTTPException(400, f"Satış için bot başlatılamadı: {exc}")
+    return {
+        "ok": True,
+        "queued": True,
+        "started": not running,
+        "coin": position.get("coin"),
+        "quantity": position.get("quantity"),
+        "note": "Satış birkaç saniye içinde uygulanır; sonuç kartta ve loglarda görünür.",
+    }
 
 
 @router.post("/{bot_id}/restart")

@@ -681,6 +681,19 @@ pre {
 .position-strip .live-tick { animation: livePulse 1.6s ease-in-out infinite; }
 @keyframes livePulse { 0%, 100% { opacity: 1; } 50% { opacity: .55; } }
 
+/* Manuel satış: diğer düğmelerden ayrışsın, yanlışlıkla basılmayacak kadar net. */
+button.sell-btn {
+  background: linear-gradient(180deg, rgba(251,113,133,.22), rgba(251,113,133,.12));
+  border: 1px solid rgba(251,113,133,.5);
+  color: #ffd9df;
+  font-weight: 650;
+}
+button.sell-btn:hover {
+  background: linear-gradient(180deg, rgba(251,113,133,.34), rgba(251,113,133,.2));
+  border-color: rgba(251,113,133,.75);
+}
+.stat-grid > .stat > small + .muted, .stat-grid .muted.small { font-size: 10.5px; }
+
 .empty-state {
   padding: 26px 14px; text-align: center; color: var(--text-dim); font-size: 13px;
   border: 1px dashed var(--line-strong); border-radius: 12px;

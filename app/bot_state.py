@@ -36,3 +36,38 @@ def clear_stop(bot_id: str) -> None:
 
 def stop_requested(bot_id: str) -> bool:
     return stop_path(bot_id).exists()
+
+
+# ---------------------------------------------------------------------------
+# Manuel satış komutu
+#
+# Bot ayrı bir süreçte çalıştığı için panelden gelen "sat" isteği bir komut
+# dosyasıyla iletilir. Motor her döngüde ve mum beklerken (birkaç saniyede bir)
+# bu dosyayı kontrol eder, pozisyonu kapatır ve dosyayı siler.
+# ---------------------------------------------------------------------------
+def sell_path(bot_id: str) -> Path:
+    return STATE_DIR / f"{bot_id}.sell"
+
+
+def request_sell(bot_id: str, price: Optional[float] = None, note: str = "") -> None:
+    payload: Dict[str, Any] = {"requested_at": db.utcnow(), "note": note}
+    if price:
+        payload["price"] = float(price)
+    db.atomic_write_json(sell_path(bot_id), payload)
+
+
+def sell_requested(bot_id: str) -> Optional[Dict[str, Any]]:
+    """Bekleyen manuel satış isteğini döndürür (yoksa None)."""
+    path = sell_path(bot_id)
+    if not path.exists():
+        return None
+    payload = db.read_json(path, {}) or {}
+    return payload if isinstance(payload, dict) else {}
+
+
+def clear_sell(bot_id: str) -> None:
+    try:
+        sell_path(bot_id).unlink()
+    except OSError:
+        pass
+

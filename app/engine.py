@@ -17,6 +17,7 @@ from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
 from app import db, bot_state
+from app import live_prices
 from app.config import settings
 from app.notifications import notifier
 from app.strategies.service import build_evaluator, normalize_specs
@@ -184,7 +185,7 @@ class TradingEngine:
             db.log_event(bot_id, message, level)
         except Exception as exc:  # noqa: BLE001
             print(f"[log] olay yazılamadı: {exc}", flush=True)
-        stamp = datetime.now().strftime("%H:%M:%S")
+        stamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         print(f"[{stamp}] {level.upper():7s} {message}", flush=True)
 
     # ------------------------------------------------------------------
@@ -315,6 +316,9 @@ class TradingEngine:
             print(f"[save_state] durum yazılamadı: {exc}", flush=True)
 
     def _run_cycle(self) -> None:
+        # Panelden gelen manuel satış isteği her şeyden önce uygulanır.
+        if self._handle_sell_request():
+            return
         # Canlı modda borsa gerçeği yerel kayda göre önceliklidir:
         # kullanıcı elle satış yaptıysa pozisyon burada kapatılır.
         if self.mode == "live" and self.state.get("position"):
@@ -365,6 +369,48 @@ class TradingEngine:
                 self.state["last_error"] = None
             self._wait_for_candle()
 
+    def _last_price(self, coin: str) -> float:
+        """Son bilinen fiyat: canlı fiyat → mum kapanışı → pozisyon fiyatı."""
+        try:
+            live = live_prices.prices([coin]).get(coin)
+            if live:
+                return float(live)
+        except Exception:  # noqa: BLE001 - fiyat servisi geçici olarak kapalı olabilir
+            pass
+        position = self.state.get("position") or {}
+        try:
+            data = self._data(coin)
+            return float(data["close"][-1])
+        except Exception:  # noqa: BLE001
+            return float(position.get("last_price") or position.get("entry_price") or 0)
+
+    def _handle_sell_request(self) -> bool:
+        """Panelden istenen manuel satışı uygular.
+
+        Döndürür: istek işlendi mi (döngüde pozisyon yönetimini atlamak için).
+        """
+        request = bot_state.sell_requested(self.bot_id)
+        if request is None:
+            return False
+        position = self.state.get("position")
+        try:
+            if not position:
+                self._log(self.bot_id, "Manuel satış isteği alındı ama açık pozisyon yok", "warning")
+            else:
+                coin = str(position.get("coin") or "")
+                price = float(request.get("price") or 0)
+                if price <= 0:
+                    price = self._last_price(coin)
+                self._log(
+                    self.bot_id,
+                    f"Manuel satış isteği alındı: {coin} @ {price:.8f}",
+                    "info",
+                )
+                self._close_position(price, "manuel")
+        finally:
+            bot_state.clear_sell(self.bot_id)
+        return True
+
     # ------------------------------------------------------------------
     # Zamanlama
     # ------------------------------------------------------------------
@@ -382,6 +428,13 @@ class TradingEngine:
             if self.stop_event or bot_state.stop_requested(self.bot_id):
                 return
             self.heartbeat()
+            # Mum bekleme sırasında da panelden gelen manuel satışı uygula.
+            if bot_state.sell_requested(self.bot_id) is not None:
+                try:
+                    self._handle_sell_request()
+                except Exception as exc:  # noqa: BLE001
+                    self._log(self.bot_id, f"Manuel satış hatası: {exc}", "error")
+                    bot_state.clear_sell(self.bot_id)
             # Mum bekleme sırasında da elle satışı yakala (yaklaşık 30 saniyede bir).
             if self.mode == "live" and self.state.get("position"):
                 if time.time() - last_sync >= 30:
