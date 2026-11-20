@@ -197,6 +197,8 @@ function toast(message, isError = false) {
   el._t = setTimeout(() => el.classList.add("hidden"), 4000);
 }
 function modal(title, content) {
+  // Mobilde menü açıkken modal açılırsa çekmeceyi kapat.
+  try { closeNav(); } catch (e) { /* henüz hazır değilse yoksay */ }
   $("#modal-title").textContent = title;
   const body = $("#modal-body");
   body.innerHTML = "";
@@ -845,7 +847,48 @@ $("#logout").addEventListener("click", async () => {
   state.user = null; state.csrf = null; showLogin();
 });
 
+/* ------------------------------------------------------------------ */
+/* Mobil menü (çekmece)                                                */
+/* ------------------------------------------------------------------ */
+const MOBILE_NAV_QUERY = window.matchMedia("(max-width: 1020px)");
+
+function setNavOpen(open) {
+  const sidebar = document.querySelector(".sidebar");
+  const backdrop = $("#nav-backdrop");
+  const toggle = $("#nav-toggle");
+  if (!sidebar || !backdrop) return;
+  const show = !!open && MOBILE_NAV_QUERY.matches;
+  sidebar.classList.toggle("open", show);
+  backdrop.classList.toggle("hidden", !show);
+  document.body.classList.toggle("nav-open", show);
+  if (toggle) toggle.setAttribute("aria-expanded", show ? "true" : "false");
+}
+
+function closeNav() { setNavOpen(false); }
+
+function setupMobileNav() {
+  const toggle = $("#nav-toggle");
+  const backdrop = $("#nav-backdrop");
+  if (toggle) {
+    toggle.addEventListener("click", () => {
+      const sidebar = document.querySelector(".sidebar");
+      setNavOpen(!(sidebar && sidebar.classList.contains("open")));
+    });
+  }
+  if (backdrop) backdrop.addEventListener("click", closeNav);
+  // Menüden bir sayfa seçilince çekmeceyi kapat.
+  $$("#nav a").forEach((a) => a.addEventListener("click", closeNav));
+  // Masaüstüne dönünce çekmece durumunu temizle.
+  const onChange = () => { if (!MOBILE_NAV_QUERY.matches) closeNav(); };
+  if (MOBILE_NAV_QUERY.addEventListener) MOBILE_NAV_QUERY.addEventListener("change", onChange);
+  else if (MOBILE_NAV_QUERY.addListener) MOBILE_NAV_QUERY.addListener(onChange);
+  document.addEventListener("keydown", (e) => {
+    if (e.key === "Escape") closeNav();
+  });
+}
+
 async function boot() {
+  setupMobileNav();
   if (!state.catalog) state.catalog = await api("/strategies/indicators");
   await loadCatalog();
   try {

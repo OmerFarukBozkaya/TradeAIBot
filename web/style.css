@@ -693,8 +693,9 @@ button.sell-btn:hover {
   border-color: rgba(251,113,133,.75);
 }
 
-/* Kartın sağ üstündeki ikon düğmeleri (bölmeli, daire biçimli). */
-button.icon-btn {
+/* Kartın sağ üstündeki ikon düğmeleri (daire biçimli). Yalnızca bot kartına
+   uygulanır; üst çubuk/modal ikonları temel .icon-btn stilini korur. */
+.bot-card button.icon-btn {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -708,12 +709,12 @@ button.icon-btn {
   color: var(--text-dim);
   line-height: 1;
 }
-button.icon-btn:hover {
+.bot-card button.icon-btn:hover {
   background: rgba(56, 189, 248, 0.16);
   border-color: rgba(56, 189, 248, 0.55);
   color: #7dd3fc;
 }
-button.icon-btn svg { display: block; }
+.bot-card button.icon-btn svg { width: 15px; height: 15px; fill: none; }
 .stat-grid > .stat > small + .muted, .stat-grid .muted.small { font-size: 10.5px; }
 
 /* İşlem analizi tablosu: satırlar sıkışık, sayılar hizalı. */
@@ -1870,3 +1871,299 @@ select.ind-select {
 .risk-num-note { margin-top: 12px; padding: 10px 12px; border-radius: 10px; border: 1px solid rgba(52,211,153,.22); background: rgba(52,211,153,.06); font-size: 12px; line-height: 1.6; color: var(--muted, #b6c6da); }
 .risk-num-note b { color: var(--text, #e2e8f0); }
 .risk-num-grid input.just-set { border-color: #34d399; box-shadow: 0 0 0 2px rgba(52,211,153,.28); }
+.ai-arch-card { border: 1px solid rgba(139,92,246,.28); background: linear-gradient(150deg, rgba(139,92,246,.07), rgba(56,189,248,.04)); }
+.arch-groups { margin-top: 14px; }
+.arch-group-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 8px; margin-top: 8px; }
+.arch-group { align-items: flex-start !important; gap: 8px; padding: 9px 10px; border: 1px solid rgba(148,163,184,.16); border-radius: 10px; background: rgba(15,23,42,.3); }
+.arch-group input { margin-top: 3px; }
+.arch-group small { display: block; line-height: 1.45; margin-top: 2px; }
+.ds-card { border: 1px solid rgba(52,211,153,.22); background: linear-gradient(150deg, rgba(52,211,153,.05), rgba(56,189,248,.03)); }
+.ds-list { display: flex; flex-direction: column; gap: 6px; }
+.ds-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 8px 10px; border: 1px solid rgba(148,163,184,.16); border-radius: 10px; background: rgba(15,23,42,.3); }
+.ds-row.is-pinned { border-color: rgba(52,211,153,.45); background: rgba(52,211,153,.07); }
+.ds-main { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.ds-main b { font-size: 13px; }
+.ai-master-card { border: 1px solid rgba(56,189,248,.4); background: linear-gradient(150deg, rgba(56,189,248,.10), rgba(139,92,246,.06)); }
+.pf-simple { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 12px; margin-top: 14px; }
+.pf-field { display: flex; flex-direction: column; gap: 5px; }
+.pf-label { display: flex; flex-direction: column; gap: 5px; font-size: 12.5px; font-weight: 650; color: var(--text, #e2e8f0); }
+.pf-label input, .pf-label select { font-weight: 500; }
+.pf-help { margin: 0; font-size: 11.5px; line-height: 1.5; color: var(--muted, #93a4bd); }
+.pf-rec { align-self: flex-start; font-size: 10.5px; padding: 3px 8px; border-radius: 7px; border: 1px dashed rgba(56,189,248,.5); background: rgba(56,189,248,.09); color: #7dd3fc; cursor: pointer; }
+.pf-rec:hover { background: rgba(56,189,248,.18); }
+.pf-advanced { margin-top: 14px; }
+.pf-advanced > summary { cursor: pointer; padding: 10px 14px; border-radius: 10px; background: rgba(148,163,184,.08); }
+.pf-section-title { margin: 16px 0 8px; font-size: 12px; font-weight: 750; text-transform: uppercase; letter-spacing: .07em; color: var(--muted, #93a4bd); }.pf-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px; }
+.pf-advanced input.just-set, .pf-advanced select.just-set { border-color: #34d399; box-shadow: 0 0 0 2px rgba(52,211,153,.28); }
+
+/* ==========================================================================
+   MOBİL UYUMLULUK
+   --------------------------------------------------------------------------
+   Telefon ve tabletlerde panelin okunabilir kalması için:
+   - Kenar çubuğu çekmeceye dönüşür (hamburger).
+   - Üst çubuk sadeleşir, yapışkan kalır.
+   - Kartlar tek sütuna iner, tablolar yatay kaydırılır.
+   - Dokunma hedefleri en az 40px, form alanları 16px (iOS zoom yok).
+   ========================================================================== */
+
+/* Yeni eklenen öğelerin varsayılan (masaüstü) durumu */
+.nav-toggle { display: none !important; }
+.nav-backdrop { display: none; }
+.nav-backdrop.hidden { display: none; }
+
+/* Dokunmatik cihazlarda hover animasyonları takılmasın */
+@media (hover: none) {
+  button:hover, .card:hover, nav a:hover svg { transform: none; }
+}
+
+/* ---------- Geniş tablet / küçük dizüstü ---------- */
+@media (max-width: 1100px) {
+  .dash-grid { grid-template-columns: minmax(0, 1fr); }
+  .topbar-inner { grid-template-columns: minmax(160px, auto) 1fr auto; gap: 14px; }
+}
+
+/* ---------- Tablet ve telefon: çekmece menü ---------- */
+@media (max-width: 1020px) {
+  html, body { overflow-x: hidden; }
+  #app { grid-template-columns: minmax(0, 1fr); }
+
+  .sidebar {
+    position: fixed;
+    top: 0; bottom: 0; left: 0;
+    width: min(86vw, 310px);
+    height: 100%;
+    max-height: 100dvh;
+    z-index: 95;
+    transform: translateX(-104%);
+    transition: transform .22s cubic-bezier(.2,.9,.25,1);
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    /* 1020px kuralındaki yatay düzeni iptal et */
+    flex-direction: column;
+    flex-wrap: nowrap;
+    align-items: stretch;
+    gap: 0;
+    padding: 18px 14px 16px;
+    border-right: 1px solid var(--line);
+    border-bottom: none;
+  }
+  .sidebar.open { transform: translateX(0); box-shadow: 30px 0 80px -20px rgba(0, 0, 0, .85); }
+  .brand { padding: 4px 8px 18px; }
+  .brand-text { display: inline; }
+  nav { flex-direction: column; flex-wrap: nowrap; gap: 2px; }
+  nav a { padding: 12px 12px; font-size: 14px; }
+  nav a span { display: inline; }
+  nav a.active::before { display: block; }
+  .sidebar-footer {
+    margin-top: auto; margin-left: 0;
+    padding-top: 12px; border-top: 1px solid var(--line);
+  }
+  .username { display: inline; }
+
+  .nav-backdrop {
+    display: block;
+    position: fixed; inset: 0; z-index: 90;
+    background: rgba(3, 6, 12, .64);
+    backdrop-filter: blur(3px);
+    -webkit-backdrop-filter: blur(3px);
+    animation: fadeIn .16s ease;
+  }
+  .nav-backdrop.hidden { display: none; }
+  body.nav-open { overflow: hidden; }
+
+  .nav-toggle {
+    display: inline-flex !important;
+    align-items: center; justify-content: center;
+    flex: 0 0 auto;
+    width: 38px; height: 38px;
+    border-radius: 10px;
+    border: 1px solid var(--line-strong);
+    background: rgba(148, 163, 184, .09);
+    color: var(--text-dim);
+  }
+  .nav-toggle svg { width: 20px; height: 20px; fill: currentColor; }
+  .nav-toggle:active { background: rgba(56, 189, 248, .18); }
+
+  main { padding: 0 14px 48px; min-width: 0; }
+  #content { min-width: 0; }
+
+  /* Üst çubuk: yapışkan, tek satır */
+  .topbar {
+    position: sticky; top: 0; z-index: 60;
+    padding: 8px 0 6px;
+    margin-bottom: 10px;
+    background: linear-gradient(180deg, rgba(6, 10, 18, .94), rgba(6, 10, 18, .78));
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+  }
+  .topbar-inner {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 9px 11px;
+    border-radius: 14px;
+  }
+  .topbar-left { flex: 1 1 auto; flex-direction: row; align-items: center; gap: 9px; min-width: 0; }
+  .topbar-heading { min-width: 0; display: flex; flex-direction: column; gap: 1px; }
+  .topbar h2 { font-size: 17px; }
+  .eyebrow { font-size: 9.5px; letter-spacing: .06em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .topbar-sub, .topbar-stats, .clock-wrap { display: none; }
+  .topbar-right { flex: 0 0 auto; gap: 8px; }
+  .topbar-right .icon-btn { width: 38px; height: 38px; }
+  .live-toggle { padding: 6px 9px; }
+  .live-toggle .lt-text { display: none; }
+  .live-toggle .lt-state { font-size: 11px; }
+
+  /* Kartlar */
+  .card { padding: 16px 14px; border-radius: 14px; }
+  .hero-card { padding: 18px 16px; }
+  .hero-title { font-size: 23px; gap: 9px; }
+  .hero-sub { font-size: 12px; line-height: 1.55; }
+  .hero-body { gap: 14px; }
+  .hero-body > .row { width: 100%; }
+  .hero-body > .row > button { flex: 1 1 140px; }
+
+  .grid.c2, .grid.c3 { grid-template-columns: minmax(0, 1fr); }
+  .grid.c4 { grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); }
+  .dash-grid, .dash-grid2, .split { grid-template-columns: minmax(0, 1fr); }
+  .grid.c4 > .card { padding: 14px 14px; }
+  .grid.c4 > .card .stat { font-size: 22px; }
+  .grid.c4 > .card .muted { font-size: 11px; }
+
+  /* Başlıklar */
+  h1, h2 { letter-spacing: -0.02em; }
+  .page-head { flex-direction: column; align-items: flex-start; gap: 8px; }
+  .page-head .row { width: 100%; }
+
+  /* Tablolar: her zaman yatay kaydırılabilir */
+  .result-scroll {
+    max-height: 62vh;
+    -webkit-overflow-scrolling: touch;
+    border-radius: 10px;
+    /* Sağ kenarda kaydırılabilirlik ipucu */
+    background:
+      linear-gradient(90deg, transparent 92%, rgba(56,189,248,.10)) right / 22px 100% no-repeat,
+      transparent;
+  }
+  .result-scroll::-webkit-scrollbar { height: 8px; }
+  .result-scroll::-webkit-scrollbar-thumb { background: rgba(120,156,210,.35); border-radius: 8px; }
+  .card > table {
+    display: block;
+    width: 100%;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+  .result-table { font-size: 11.5px; }
+  .result-table th, .result-table td { padding: 7px 8px; white-space: nowrap; }
+  /* Yalnızca gerçekten geniş tablolar sabit taban genişliği alır; dar
+     tablolar ekrana sığar, gereksiz kaydırma çubuğu çıkmaz. */
+  .ana-table, .trade-table, .cmp-table { min-width: 620px; }
+  .ind-table { min-width: 100%; }
+  .ind-table th.sticky-col, .ind-table td.time-cell { min-width: 96px; }
+  .cmp-table td:nth-child(2) { min-width: 140px; }
+
+  /* Düğmeler: dokunma hedefi */
+  button { min-height: 38px; }
+  button.small { min-height: 32px; }
+  /* Bot kartı aksiyonları: iki sütunlu ızgara, eşit genişlik */
+  .bot-card > .row.mt {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
+  }
+  .bot-card > .row.mt > button { width: 100%; min-height: 40px; }
+  /* "Sil" tek başına ortalanmasın; tam satır kaplasın */
+  .bot-card > .row.mt > button.ghost { grid-column: 1 / -1; }
+  .bot-card button.icon-btn { width: 38px; height: 38px; }
+  .bot-card button.icon-btn svg { width: 18px; height: 18px; }
+
+  /* Bot kartı */
+  .bot-card .position-strip { gap: 10px; font-size: 11.5px; }
+  .bot-card .position-strip > span { white-space: nowrap; }
+  .bot-card .bot-sub { font-size: 11.5px; line-height: 1.45; }
+
+  /* Modal: neredeyse tam ekran */
+  .overlay { padding: 10px; }
+  .modal-card {
+    width: 100%;
+    max-width: 100%;
+    max-height: 92vh;
+    padding: 16px 14px 18px;
+    border-radius: 16px;
+  }
+  .modal-head h3 { font-size: 14px; }
+  .modal-card .stat-grid > .stat > b { font-size: 17px; }
+  .modal-card .split { grid-template-columns: minmax(0, 1fr); gap: 14px; }
+
+  /* Form alanları: iOS'ta odaklanınca zoom olmasın */
+  input, select, textarea { font-size: 16px; }
+  .condition .row > * { min-width: 100%; }
+
+  /* Özet kutucukları */
+  .ana-stats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .ana-stat { padding: 10px 11px; }
+  .ana-value { font-size: 16px; }
+  .stat-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+  .stat-grid > .stat { padding: 9px 10px; }
+  .stat-grid > .stat > b { font-size: 17px; }
+  .stat-grid > .stat > span { font-size: 9.5px; }
+  .stat-grid > .stat > small { font-size: 10px; }
+
+  /* AI eğitimi / mimari formları */
+  .pf-simple, .pf-grid, .arch-group-grid { grid-template-columns: minmax(0, 1fr); }
+  .pf-advanced > summary { font-size: 12.5px; }
+
+  /* Coin listeleri */
+  .lists-layout { grid-template-columns: minmax(0, 1fr); }
+
+  /* Grafikler */
+  .chart-big { font-size: 20px; }
+  .donut-wrap { gap: 12px; padding: 6px 0; }
+  .donut-legend { min-width: 110px; }
+  .chart-svg { height: auto !important; min-height: 180px; }
+
+  /* Toast: ekran genişliğinde, alt güvenli alan */
+  .toast {
+    left: 12px; right: 12px; bottom: 12px;
+    max-width: none;
+  }
+
+  /* Uzun metinler taşmasın */
+  .mono, .tag { overflow-wrap: anywhere; }
+  pre { max-width: 100%; overflow-x: auto; }
+}
+
+/* ---------- Telefon ---------- */
+@media (max-width: 560px) {
+  main { padding: 0 10px 44px; }
+  .card { padding: 14px 12px; }
+  .hero-title { font-size: 21px; }
+  .hero-body > .row > button { flex: 1 1 100%; }
+  .topbar h2 { font-size: 16px; }
+  .stat-grid, .ana-stats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .bot-card button.icon-btn { width: 36px; height: 36px; }
+  .modal-head { padding-bottom: 10px; }
+  .modal-card { max-height: 94vh; }
+}
+
+/* ---------- Çok dar telefon ---------- */
+@media (max-width: 380px) {
+  .stat-grid, .ana-stats { grid-template-columns: minmax(0, 1fr); }
+  .grid.c4 { grid-template-columns: minmax(0, 1fr); }
+  .hero-title { font-size: 19px; }
+  .live-toggle .lt-state { display: none; }
+}
+
+/* ---------- Yatay telefon: menü tam yükseklik ---------- */
+@media (max-width: 1020px) and (orientation: landscape) and (max-height: 520px) {
+  .sidebar { width: min(64vw, 320px); }
+  .brand { padding-bottom: 10px; }
+  nav a { padding: 9px 12px; }
+}
+
+/* ---------- Yazdırma ---------- */
+@media print {
+  .sidebar, .topbar, .toast, #nav-backdrop, .bot-card .row.mt { display: none !important; }
+  #app { display: block; }
+  main { padding: 0; }
+}

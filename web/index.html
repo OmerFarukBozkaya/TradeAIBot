@@ -6,7 +6,7 @@
   <meta name="theme-color" content="#06080f">
   <title>TradeAIBot</title>
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Cdefs%3E%3ClinearGradient id='g' x1='0' y1='0' x2='1' y2='1'%3E%3Cstop offset='0' stop-color='%2338bdf8'/%3E%3Cstop offset='1' stop-color='%238b5cf6'/%3E%3C/linearGradient%3E%3C/defs%3E%3Crect width='64' height='64' rx='16' fill='%230a0f1c'/%3E%3Cpath d='M14 44 L26 30 L34 38 L50 18' fill='none' stroke='url(%23g)' stroke-width='5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E">
-  <link rel="stylesheet" href="/static/style.css?v=83">
+  <link rel="stylesheet" href="/static/style.css?v=84">
 </head>
 <body>
   <div class="bg-layer" aria-hidden="true">
@@ -107,15 +107,22 @@
         </button>
       </div>
     </aside>
+    <div id="nav-backdrop" class="nav-backdrop hidden" aria-hidden="true"></div>
 
     <main>
       <header class="topbar">
         <div class="topbar-inner">
           <div class="topbar-left">
-            <span class="eyebrow">TradeAIBot <span class="crumb-sep">/</span> <span id="view-crumb">Dashboard</span></span>
-            <div class="topbar-title">
-              <h2 id="view-title">Dashboard</h2>
-              <span class="topbar-sub" id="view-sub">Genel bakış ve performans</span>
+            <button class="icon-btn nav-toggle" id="nav-toggle" type="button"
+              title="Menü" aria-label="Menüyü aç" aria-expanded="false" aria-controls="nav">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 5h18v2H3V5Zm0 6h18v2H3v-2Zm0 6h18v2H3v-2Z"/></svg>
+            </button>
+            <div class="topbar-heading">
+              <span class="eyebrow">TradeAIBot <span class="crumb-sep">/</span> <span id="view-crumb">Dashboard</span></span>
+              <div class="topbar-title">
+                <h2 id="view-title">Dashboard</h2>
+                <span class="topbar-sub" id="view-sub">Genel bakış ve performans</span>
+              </div>
             </div>
           </div>
 
@@ -172,6 +179,6 @@
 
   <div id="toast" class="toast hidden"></div>
 
-  <script src="/static/app.js?v=102"></script>
+  <script src="/static/app.js?v=104"></script>
 </body>
 </html>
