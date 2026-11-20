@@ -259,6 +259,16 @@ def _serialize(bot: Dict[str, Any]) -> Dict[str, Any]:
         open_cost = pos_qty * pos_entry * (1 + fee)
         open_net = pos_qty * pos_price * (1 - fee)
     unrealized = (open_net - open_cost) if position else 0.0
+    # Fiyat farkından doğan (komisyon öncesi) kâr/zarar: kullanıcı güncel
+    # fiyatla alış fiyatını kıyasladığında gördüğü sayı budur.
+    unrealized_gross = (pos_price - pos_entry) * pos_qty if position else 0.0
+    unrealized_gross_pct = (
+        (pos_price / pos_entry - 1) * 100 if (position and pos_entry > 0) else 0.0
+    )
+    # Pozisyon için ödenen/ödenecek komisyon (giriş + tahmini çıkış).
+    position_fees = (
+        (pos_qty * pos_entry * fee) + (pos_qty * pos_price * fee) if position else 0.0
+    )
 
     if money is not None and (initial > 0 or money["bought"] > 0):
         # Tek doğru kaynak işlem geçmişi. Açık pozisyonun alışı nakit akışında
@@ -302,12 +312,18 @@ def _serialize(bot: Dict[str, Any]) -> Dict[str, Any]:
         "total_pnl": round(total_pnl, 4),
         "total_pnl_pct": round(total_pnl / capital * 100, 2) if capital > 0 else None,
         "realized_pnl_pct": round(realized / capital * 100, 2) if capital > 0 else None,
-        # Açık pozisyonun kendi K/Z'si (net). Kartta "pozisyon anlık" olarak
-        # gösterilir; toplam K/Z ile karışmasın diye ayrı tutulur.
+        # Açık pozisyonun kendi K/Z'si. Kartta **brüt** (fiyat farkı) ana sayı,
+        # komisyon dahil net ise alt bilgi olarak gösterilir; böylece güncel
+        # fiyat − alış fiyatı kıyaslaması birebir tutar.
         "position_pnl": round(unrealized, 4) if position else None,
         "position_pnl_pct": (
             round(unrealized / open_cost * 100, 2) if (position and open_cost > 0) else None
         ),
+        "position_pnl_gross": round(unrealized_gross, 4) if position else None,
+        "position_pnl_gross_pct": round(unrealized_gross_pct, 2) if position else None,
+        "position_fees": round(position_fees, 4) if position else None,
+        "total_pnl_gross": round(realized + unrealized_gross, 4),
+        "commission_total": round(realized + unrealized_gross - total_pnl, 4),
         "position_cost": round(open_cost, 4) if position else None,
         "position_value": round(pos_market, 4) if position else None,
         "position_net_value": round(open_net, 4) if position else None,
@@ -389,6 +405,11 @@ def _live_position(
         pos["cost"] = round(cost, 4)
         pos["value"] = round(price * qty, 4)
         pos["net_value"] = round(net_value, 4)
+        # "Pozisyon ne kadar karda?" sorusunun en doğrudan cevabı: fiyat farkı.
+        # Kullanıcı güncel fiyatla alışı kıyasladığında bu sayıyı görmeli;
+        # komisyon etkisi ayrı alanda (net) verilir.
+        pos["pnl_gross"] = round((price - entry) * qty, 4)
+        pos["pnl_gross_pct"] = round((price / entry - 1) * 100, 2) if entry > 0 else 0.0
         pos["unrealized_pnl"] = round(net_value - cost, 4)
         pos["unrealized_pnl_pct"] = round((net_value - cost) / cost * 100, 2) if cost > 0 else 0.0
         if stop:

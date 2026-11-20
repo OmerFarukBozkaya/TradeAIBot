@@ -74,16 +74,17 @@ function applyLiveValues(bots) {
     unrealSum += Number(st.position_pnl !== undefined ? st.position_pnl : st.unrealized_pnl) || 0;
     set(`total-${b.id}`, signedMoney(total), pnlClass(total));
     set(`realized-${b.id}`, signedMoney(st.total_realized_pnl), pnlClass(st.total_realized_pnl));
+    // Pozisyon kutusu fiyat farkını (brüt) gösterir.
     set(`pospnl-${b.id}`,
-      st.position ? signedMoney(st.position_pnl) : "—",
-      st.position ? pnlClass(st.position_pnl) : "");
+      st.position ? signedMoney(st.position_pnl_gross) : "—",
+      st.position ? pnlClass(st.position_pnl_gross) : "");
     set(`equity-${b.id}`, money(st.equity));
     const pos = st.position;
     if (pos) {
       set(`price-${b.id}`, fmt(pos.last_price, 8));
       set(`rowpnl-${b.id}`,
-        `${Number(st.position_pnl_pct) > 0 ? "+" : ""}${fmt(st.position_pnl_pct, 2)}%`,
-        pnlClass(st.position_pnl_pct));
+        `${Number(st.position_pnl_gross_pct) > 0 ? "+" : ""}${fmt(st.position_pnl_gross_pct, 2)}%`,
+        pnlClass(st.position_pnl_gross_pct));
       if (pos.stop_price) {
         set(`stop-${b.id}`, fmt(pos.stop_price, 8));
         set(`stopdist-${b.id}`, stopDistanceText(pos.stop_distance_pct));
@@ -1530,13 +1531,17 @@ function posPnlHtml(bot) {
   const st = (bot && bot.state) || {};
   const total = botTotalPnl(bot);
   const hasPos = !!st.position;
-  const posPnl = st.position_pnl !== undefined ? st.position_pnl : st.unrealized_pnl;
-  const posPct = st.position_pnl_pct;
-  const totalPct = st.total_pnl_pct;
   const coin = hasPos ? st.position.coin : "";
+  // Pozisyon: (güncel − alış) × adet → komisyon hariç. Kullanıcı fiyatları
+  // kıyasladığında gördüğü sayı budur; net etkisi alt satırda.
+  const gross = hasPos ? st.position_pnl_gross : null;
+  const grossPct = hasPos ? st.position_pnl_gross_pct : null;
+  const net = hasPos ? st.position_pnl : null;
+  const totalPct = st.total_pnl_pct;
+  const totalGross = st.total_pnl_gross;
   return `
     <div class="pnl-box pnl-main">
-      <div class="pnl-label" title="Kapanan işlemler + açık pozisyonun anlık değeri (komisyon dahil)">
+      <div class="pnl-label" title="Kapanan işlemler + açık pozisyon, komisyon düşülmüş net">
         Bot toplam K/Z
       </div>
       <div class="pnl-value ${pnlClass(total)}" data-live="total-${esc(bot.id)}">${signedMoney(total)}</div>
@@ -1544,18 +1549,24 @@ function posPnlHtml(bot) {
         totalPct === null || totalPct === undefined
           ? ""
           : `${Number(totalPct) > 0 ? "+" : ""}${fmt(totalPct, 2)}% · `
-      }${hasPos ? "açık pozisyon dahil" : "pozisyon yok"}</div>
+      }net (komisyon dahil)${
+        totalGross === null || totalGross === undefined
+          ? ""
+          : ` · brüt ${signedMoney(totalGross)}`
+      }</div>
     </div>
     <div class="pnl-box">
-      <div class="pnl-label" title="Açık pozisyonu şimdi satsan: giriş+çıkış komisyonu düşülmüş net kâr/zarar">
+      <div class="pnl-label" title="Güncel fiyat − alış fiyatı (komisyon hariç)">
         Pozisyon (anlık)
       </div>
-      <div class="pnl-value ${hasPos ? pnlClass(posPnl) : ""}" data-live="pospnl-${esc(bot.id)}">${
-        hasPos ? signedMoney(posPnl) : "—"
+      <div class="pnl-value ${hasPos ? pnlClass(gross) : ""}" data-live="pospnl-${esc(bot.id)}">${
+        hasPos ? signedMoney(gross) : "—"
       }</div>
       <div class="pnl-hint">${
         hasPos
-          ? `${posPct === null || posPct === undefined ? "" : `${Number(posPct) > 0 ? "+" : ""}${fmt(posPct, 2)}% · `}${esc(coin)}`
+          ? `${grossPct === null || grossPct === undefined ? "" : `${Number(grossPct) > 0 ? "+" : ""}${fmt(grossPct, 2)}% · `}${esc(coin)}${
+              net === null || net === undefined ? "" : ` · satarsan ${signedMoney(net)}`
+            }`
           : "açık pozisyon yok"
       }</div>
     </div>`;
@@ -1583,7 +1594,7 @@ function botRow(bot, seriesMap = {}) {
     </div>
     <div class="row mt bot-mini-meta">
       <span><span class="muted">Toplam K/Z</span> <b data-live="total-${esc(bot.id)}" class="${pnlClass(totalPnl)}">${signedMoney(totalPnl)}</b></span>
-      ${pos ? `<span><span class="muted">Pozisyon</span> <b data-live="pospnl-${esc(bot.id)}" class="${pnlClass(st.position_pnl)}">${signedMoney(st.position_pnl)}</b></span>` : ""}
+      ${pos ? `<span><span class="muted">Pozisyon</span> <b data-live="pospnl-${esc(bot.id)}" class="${pnlClass(st.position_pnl_gross)}">${signedMoney(st.position_pnl_gross)}</b></span>` : ""}
       <span><span class="muted">İşlem</span> <b>${esc(st.trade_count || 0)}</b></span>
       <span><span class="muted">aktif</span> <b>${esc(uptimeText(st.uptime_seconds))}</b></span>
       ${pos ? `<span class="tag amber">${esc(pos.coin)} @ ${fmt(pos.entry_price, 6)}</span>
@@ -1748,11 +1759,16 @@ function botCard(bot, seriesMap = {}) {
       <div class="pnl-box">
         <div class="pnl-label" title="Kapanan işlemlerin net kâr/zararı">Kapalı işlemler</div>
         <div class="pnl-value ${pnlClass(st.total_realized_pnl)}" data-live="realized-${esc(bot.id)}">${signedMoney(st.total_realized_pnl)}</div>
-        <div class="pnl-hint">${fmt(st.trade_count, 0)} işlem · komisyon dahil</div>
+        <div class="pnl-hint">${fmt(st.trade_count, 0)} işlem · net${
+          st.commission_total === null || st.commission_total === undefined || Math.abs(st.commission_total) < 0.005
+            ? ""
+            : ` · komisyon ${money(-Math.abs(st.commission_total))}`
+        }</div>
       </div>
     </div>
     <p class="pnl-note">
-      Bot toplam = kapalı işlemler ${pos ? "+ pozisyon" : ""} · tüm değerler komisyon dahil net
+      <b>Bot toplam</b> komisyon dahil net (gerçek para). <b>Pozisyon</b> güncel fiyat − alış fiyatı
+      (komisyon hariç); satarken komisyon düşülür.
     </p>
     ${pos ? `
     <div class="position-strip mt">

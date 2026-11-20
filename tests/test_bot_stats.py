@@ -124,6 +124,39 @@ def test_total_equals_realized_plus_position(monkeypatch):
     assert state["initial_cash"] == pytest.approx(100.0)
 
 
+def test_position_gross_pnl_matches_price_difference(monkeypatch):
+    """Pozisyonun brüt K/Z'si tam olarak (güncel − alış) × adet olmalı.
+
+    Kullanıcı güncel fiyatla alış fiyatını kıyasladığında bu sayıyı görür;
+    komisyon etkisi yalnızca net alanda olur.
+    """
+    from app import live_prices
+
+    monkeypatch.setattr(live_prices, "prices", lambda symbols: {"BTCUSDT": 110.0})
+    bot_id = "bot_stats_gross"
+    _state(
+        bot_id,
+        position={"coin": "BTCUSDT", "quantity": 2.0, "entry_price": 100.0, "last_price": 100.0},
+    )
+    _trade(bot_id, "BUY", 2.0, 100.0, 0.2)
+
+    state = bots_api._serialize(_bot(bot_id))["state"]
+    # (110 − 100) × 2 = +20 → ham fiyat farkı
+    assert state["position_pnl_gross"] == pytest.approx(20.0, abs=1e-6)
+    assert state["position_pnl_gross_pct"] == pytest.approx(10.0, abs=1e-6)
+    # Net: 220×0,999 − 200×1,001 = 219,78 − 200,20 = 19,58
+    assert state["position_pnl"] == pytest.approx(19.58, abs=1e-6)
+    # Net farkı komisyondan gelir ve pozitif alanda net < brüt olur.
+    assert state["position_pnl"] < state["position_pnl_gross"]
+    assert state["position_fees"] == pytest.approx(0.42, abs=1e-6)
+    # Toplam brüt = kapalı brüt + pozisyon brüt; henüz kapanan yok.
+    assert state["total_pnl_gross"] == pytest.approx(20.0, abs=1e-6)
+    # Komisyon maliyeti (brüt − net). Kartta eksi olarak gösterilir.
+    assert state["commission_total"] == pytest.approx(0.42, abs=1e-6)
+    # Toplam yine net.
+    assert state["total_pnl"] == pytest.approx(19.58, abs=1e-6)
+
+
 def test_uptime_is_reported():
     bot_id = "bot_stats_3"
     _state(bot_id, started_at="2020-01-01T00:00:00+00:00")
