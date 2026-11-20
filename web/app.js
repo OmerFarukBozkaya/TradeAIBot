@@ -71,15 +71,19 @@ function applyLiveValues(bots) {
     const st = b.state || {};
     const total = botTotalPnl(b);
     totalSum += total;
-    unrealSum += Number(st.unrealized_pnl) || 0;
-    set(`unreal-${b.id}`, st.unrealized_pnl === null || st.unrealized_pnl === undefined ? "—" : signedMoney(st.unrealized_pnl), pnlClass(st.unrealized_pnl));
-    set(`total-${b.id}`, st.total_pnl === null || st.total_pnl === undefined ? "—" : signedMoney(st.total_pnl), pnlClass(st.total_pnl));
+    unrealSum += Number(st.position_pnl !== undefined ? st.position_pnl : st.unrealized_pnl) || 0;
+    set(`total-${b.id}`, signedMoney(total), pnlClass(total));
+    set(`realized-${b.id}`, signedMoney(st.total_realized_pnl), pnlClass(st.total_realized_pnl));
+    set(`pospnl-${b.id}`,
+      st.position ? signedMoney(st.position_pnl) : "—",
+      st.position ? pnlClass(st.position_pnl) : "");
     set(`equity-${b.id}`, money(st.equity));
     const pos = st.position;
     if (pos) {
       set(`price-${b.id}`, fmt(pos.last_price, 8));
-      set(`pnlpct-${b.id}`, `${fmt(pos.unrealized_pnl_pct, 2)}%`, pnlClass(pos.unrealized_pnl_pct));
-      set(`rowpnl-${b.id}`, `${Number(pos.unrealized_pnl_pct) > 0 ? "+" : ""}${fmt(pos.unrealized_pnl_pct, 2)}%`, pnlClass(pos.unrealized_pnl_pct));
+      set(`rowpnl-${b.id}`,
+        `${Number(st.position_pnl_pct) > 0 ? "+" : ""}${fmt(st.position_pnl_pct, 2)}%`,
+        pnlClass(st.position_pnl_pct));
       if (pos.stop_price) {
         set(`stop-${b.id}`, fmt(pos.stop_price, 8));
         set(`stopdist-${b.id}`, stopDistanceText(pos.stop_distance_pct));
@@ -90,10 +94,10 @@ function applyLiveValues(bots) {
   if (tb) {
     tb.textContent = signedMoney(totalSum);
     tb.className = pnlClass(totalSum);
-    tb.title = `Toplam K/Z = gerçekleşen + anlık açık K/Z (anlık: ${signedMoney(unrealSum)})`;
+    tb.title = `Tüm botların toplam K/Z'si (komisyon dahil net). Açık pozisyonların anlık kısmı: ${signedMoney(unrealSum)}`;
   }
   set("dash-total", signedMoney(totalSum), pnlClass(totalSum));
-  set("dash-unreal", `anlık ${signedMoney(unrealSum)}`, pnlClass(unrealSum));
+  set("dash-unreal", `pozisyonlarda ${signedMoney(unrealSum)}`, pnlClass(unrealSum));
   return { totalSum, unrealSum };
 }
 async function refreshLivePnl() {
@@ -1040,7 +1044,7 @@ async function refreshTopbar() {
     const running = bots.filter((b) => b.status === "running").length;
     const open = bots.filter((b) => b.state && b.state.position).length;
     const pnl = bots.reduce((sum, b) => sum + botTotalPnl(b), 0);
-    const unreal = bots.reduce((sum, b) => sum + (Number(b.state && b.state.unrealized_pnl) || 0), 0);
+    const unreal = bots.reduce((sum, b) => sum + (Number(b.state && b.state.position_pnl) || 0), 0);
     const total = summary.total || {};
     const wins = Number(total.wins || 0), losses = Number(total.losses || 0);
     const winRate = wins + losses ? `${Math.round((wins / (wins + losses)) * 100)}%` : "—";
@@ -1076,7 +1080,7 @@ async function renderDashboard(root) {
     bots: bots.map((b) => [b.id, b.status, b.mode, b.auto_restart, b.state && b.state.cash,
       b.state && b.state.trade_count, b.state && b.state.last_update,
       b.state && b.state.total_realized_pnl, !!(b.state && b.state.position),
-      b.state && b.state.unrealized_pnl]),
+      b.state && b.state.position_pnl]),
     events: events.map((e) => e.id),
     totals: summary.total || {},
     stats: stats.totals || {},
@@ -1103,7 +1107,7 @@ async function renderDashboard(root) {
   (stats.by_bot || []).forEach((b) => { if (b.bot_id) seriesMap[b.bot_id] = b.series; });
   const modes = stats.modes || { paper: 0, live: 0 };
   const totalPnl = bots.reduce((sum, b) => sum + botTotalPnl(b), 0);
-  const unrealizedPnl = bots.reduce((sum, b) => sum + (Number(b.state && b.state.unrealized_pnl) || 0), 0);
+  const unrealizedPnl = bots.reduce((sum, b) => sum + (Number(b.state && b.state.position_pnl) || 0), 0);
 
   root.innerHTML = `
     <div class="card hero-card">
@@ -1515,6 +1519,48 @@ function kpi(label, value, sub, icon) {
   </div>`;
 }
 
+/* ------------------------------------------------------------------ */
+/* K/Z kutuları: "bot toplam" ile "pozisyon anlık" ayrımı               */
+/* ------------------------------------------------------------------ */
+/**
+ * İki net sayı üretir: botun toplam K/Z'si ve açık pozisyonun anlık K/Z'si.
+ * İkisi de komisyon dahildir; toplam = kapalı işlemler + pozisyon.
+ */
+function posPnlHtml(bot) {
+  const st = (bot && bot.state) || {};
+  const total = botTotalPnl(bot);
+  const hasPos = !!st.position;
+  const posPnl = st.position_pnl !== undefined ? st.position_pnl : st.unrealized_pnl;
+  const posPct = st.position_pnl_pct;
+  const totalPct = st.total_pnl_pct;
+  const coin = hasPos ? st.position.coin : "";
+  return `
+    <div class="pnl-box pnl-main">
+      <div class="pnl-label" title="Kapanan işlemler + açık pozisyonun anlık değeri (komisyon dahil)">
+        Bot toplam K/Z
+      </div>
+      <div class="pnl-value ${pnlClass(total)}" data-live="total-${esc(bot.id)}">${signedMoney(total)}</div>
+      <div class="pnl-hint">${
+        totalPct === null || totalPct === undefined
+          ? ""
+          : `${Number(totalPct) > 0 ? "+" : ""}${fmt(totalPct, 2)}% · `
+      }${hasPos ? "açık pozisyon dahil" : "pozisyon yok"}</div>
+    </div>
+    <div class="pnl-box">
+      <div class="pnl-label" title="Açık pozisyonu şimdi satsan: giriş+çıkış komisyonu düşülmüş net kâr/zarar">
+        Pozisyon (anlık)
+      </div>
+      <div class="pnl-value ${hasPos ? pnlClass(posPnl) : ""}" data-live="pospnl-${esc(bot.id)}">${
+        hasPos ? signedMoney(posPnl) : "—"
+      }</div>
+      <div class="pnl-hint">${
+        hasPos
+          ? `${posPct === null || posPct === undefined ? "" : `${Number(posPct) > 0 ? "+" : ""}${fmt(posPct, 2)}% · `}${esc(coin)}`
+          : "açık pozisyon yok"
+      }</div>
+    </div>`;
+}
+
 function botRow(bot, seriesMap = {}) {
   const pos = bot.state && bot.state.position;
   const running = bot.status === "running";
@@ -1536,13 +1582,13 @@ function botRow(bot, seriesMap = {}) {
       </div>
     </div>
     <div class="row mt bot-mini-meta">
-      <span><span class="muted">Nakit</span> <b>${money(st.cash)}</b></span>
       <span><span class="muted">Toplam K/Z</span> <b data-live="total-${esc(bot.id)}" class="${pnlClass(totalPnl)}">${signedMoney(totalPnl)}</b></span>
+      ${pos ? `<span><span class="muted">Pozisyon</span> <b data-live="pospnl-${esc(bot.id)}" class="${pnlClass(st.position_pnl)}">${signedMoney(st.position_pnl)}</b></span>` : ""}
       <span><span class="muted">İşlem</span> <b>${esc(st.trade_count || 0)}</b></span>
       <span><span class="muted">aktif</span> <b>${esc(uptimeText(st.uptime_seconds))}</b></span>
       ${pos ? `<span class="tag amber">${esc(pos.coin)} @ ${fmt(pos.entry_price, 6)}</span>
         <span><span class="muted">güncel</span> <b data-live="price-${esc(bot.id)}">${fmt(pos.last_price, 8)}</b></span>
-        <span><b data-live="rowpnl-${esc(bot.id)}" class="${pnlClass(pos.unrealized_pnl_pct)}">${Number(pos.unrealized_pnl_pct) > 0 ? "+" : ""}${fmt(pos.unrealized_pnl_pct, 2)}%</b></span>` : '<span class="muted">pozisyon yok</span>'}
+        <span><b data-live="rowpnl-${esc(bot.id)}" class="${pnlClass(st.position_pnl_pct)}">${Number(st.position_pnl_pct) > 0 ? "+" : ""}${fmt(st.position_pnl_pct, 2)}%</b></span>` : '<span class="muted">pozisyon yok</span>'}
     </div>
   </div>`;
 }
@@ -1563,7 +1609,7 @@ async function renderBots(root) {
     bots: bots.map((b) => [b.id, b.status, b.mode, b.auto_restart, b.state && b.state.cash,
       b.state && b.state.trade_count, b.state && b.state.last_update,
       b.state && b.state.total_realized_pnl, !!(b.state && b.state.position),
-      b.state && b.state.unrealized_pnl, b.state && b.state.position && b.state.position.last_price]),
+      b.state && b.state.position_pnl, b.state && b.state.position && b.state.position.last_price]),
     live: state.liveUnlocked,
   });
   if (root.dataset.sig === signature && root.dataset.view === "bots") {
@@ -1692,15 +1738,22 @@ function botCard(bot, seriesMap = {}) {
         </button>
       </div>
     </div>
-    <div class="stat-grid mt">
-      <div><div class="muted">Nakit</div><div class="stat small">${money(st.cash)}</div></div>
-      <div><div class="muted">Toplam K/Z</div><div class="stat small ${pnlClass(totalPnl)}" data-live="total-${esc(bot.id)}">${signedMoney(totalPnl)}</div>
-        <div class="muted small">${st.total_pnl_pct === null || st.total_pnl_pct === undefined ? "" : `${Number(st.total_pnl_pct) > 0 ? "+" : ""}${fmt(st.total_pnl_pct, 2)}%`}</div></div>
-      <div><div class="muted">Anlık (açık)</div><div class="stat small ${pnlClass(st.unrealized_pnl)}" data-live="unreal-${esc(bot.id)}">${st.unrealized_pnl === null || st.unrealized_pnl === undefined ? "—" : signedMoney(st.unrealized_pnl)}</div>
-        <div class="muted small">gerçekleşen ${signedMoney(st.total_realized_pnl)}</div></div>
-      <div><div class="muted">Portföy değeri</div><div class="stat small" data-live="equity-${esc(bot.id)}">${money(st.equity)}</div>
-        <div class="muted small">başlangıç ${money(st.initial_cash)}</div></div>
+    <div class="pnl-row mt">
+      ${posPnlHtml(bot)}
+      <div class="pnl-box">
+        <div class="pnl-label">Portföy değeri</div>
+        <div class="pnl-value" data-live="equity-${esc(bot.id)}">${money(st.equity)}</div>
+        <div class="pnl-hint">başlangıç ${money(st.initial_cash)}${st.cash !== null && st.cash !== undefined ? ` · nakit ${money(st.cash)}` : ""}</div>
+      </div>
+      <div class="pnl-box">
+        <div class="pnl-label" title="Kapanan işlemlerin net kâr/zararı">Kapalı işlemler</div>
+        <div class="pnl-value ${pnlClass(st.total_realized_pnl)}" data-live="realized-${esc(bot.id)}">${signedMoney(st.total_realized_pnl)}</div>
+        <div class="pnl-hint">${fmt(st.trade_count, 0)} işlem · komisyon dahil</div>
+      </div>
     </div>
+    <p class="pnl-note">
+      Bot toplam = kapalı işlemler ${pos ? "+ pozisyon" : ""} · tüm değerler komisyon dahil net
+    </p>
     ${pos ? `
     <div class="position-strip mt">
       <span class="tag amber">${esc(pos.coin)}</span>
@@ -1708,7 +1761,8 @@ function botCard(bot, seriesMap = {}) {
       <span>giriş <b>${fmt(pos.entry_price, 8)}</b></span>
       <span>güncel <b data-live="price-${esc(bot.id)}">${fmt(pos.last_price, 8)}</b>
         <span class="muted small">${pos.price_source === "live" ? "canlı" : "mum"}</span></span>
-      <span>K/Z <b data-live="pnlpct-${esc(bot.id)}" class="${pnlClass(pos.unrealized_pnl_pct)}">${fmt(pos.unrealized_pnl_pct, 2)}%</b></span>
+      <span>maliyet <b>${money(pos.cost)}</b></span>
+      <span>şimdi satsan <b>${money(pos.net_value)}</b></span>
       ${pos.stop_price ? `<span>stop <b data-live="stop-${esc(bot.id)}">${fmt(pos.stop_price, 8)}</b>
         <span class="muted small" data-live="stopdist-${esc(bot.id)}">${stopDistanceText(pos.stop_distance_pct)}</span></span>` : ""}
       <span>mum <b>${esc(pos.candles || 0)}</b></span>

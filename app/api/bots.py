@@ -233,40 +233,47 @@ def _serialize(bot: Dict[str, Any]) -> Dict[str, Any]:
     _enrich_coin_list(item["config"])
     _enrich_risk(item["config"])
     state = bot_state.load_state(item["id"]) or {}
-    position = _live_position(state.get("position"), item["config"].get("risk"))
     cash = float(state.get("cash") or 0)
     initial = float(state.get("initial_cash") or 0)
 
     fee = float(settings.PAPER_FEE or 0.001)
     if item.get("mode") == "live":
         fee = float(item["config"].get("fee") or fee)
+    position = _live_position(state.get("position"), item["config"].get("risk"), fee=fee)
     money = _money_pnl(item["id"], fee)
     realized_state = float(state.get("total_realized_pnl") or 0)
 
-    # Açık pozisyonun piyasa değeri ve brüt (komisyon öncesi) K/Z'si.
-    pos_value = 0.0
-    unrealized = 0.0
+    # Açık pozisyon: alış maliyeti (komisyon dahil) ve satarsan eline geçecek
+    # net değer. K/Z **net** hesaplanır ki "anlık" ile "toplam" birbirini tutsun.
+    pos_qty = 0.0
+    pos_price = 0.0
+    pos_entry = 0.0
+    pos_market = 0.0
+    open_cost = 0.0
+    open_net = 0.0
     if position:
-        qty = float(position.get("quantity") or 0)
-        price = float(position.get("last_price") or position.get("entry_price") or 0)
-        entry = float(position.get("entry_price") or 0)
-        pos_value = qty * price
-        unrealized = (price - entry) * qty
+        pos_qty = float(position.get("quantity") or 0)
+        pos_price = float(position.get("last_price") or position.get("entry_price") or 0)
+        pos_entry = float(position.get("entry_price") or 0)
+        pos_market = pos_qty * pos_price
+        open_cost = pos_qty * pos_entry * (1 + fee)
+        open_net = pos_qty * pos_price * (1 - fee)
+    unrealized = (open_net - open_cost) if position else 0.0
 
     if money is not None and (initial > 0 or money["bought"] > 0):
-        # Tek doğru kaynak işlem geçmişi: komisyon dahil nakit akışı + açık
-        # pozisyonun piyasa değeri. Böylece kart, loglardaki işlemlerin
-        # toplamıyla tutarlı olur ve durum dosyası kaymasından etkilenmez.
+        # Tek doğru kaynak işlem geçmişi. Açık pozisyonun alışı nakit akışında
+        # negatif durduğu için geri eklenir; kalan kısım gerçekten kapanmış
+        # işlemlerin net K/Z'sidir.
         capital = initial if initial > 0 else float(money["bought"])
-        equity = capital + float(money["flow"]) + pos_value
-        total_pnl = equity - capital
-        realized = total_pnl - unrealized
+        realized = float(money["flow"]) + open_cost
+        total_pnl = realized + unrealized
+        equity = capital + total_pnl
     else:
         # İşlem kaydı olmayan eski bot: durum dosyası tek kaynak.
         capital = initial
-        equity = cash + pos_value
-        total_pnl = (equity - initial) if initial > 0 else (realized_state + unrealized)
         realized = realized_state
+        total_pnl = realized + unrealized
+        equity = capital + total_pnl if capital > 0 else cash + pos_market
 
     # Botun ne kadar süredir çalıştığı: ilk başlatma zamanı → şimdi.
     started_at = state.get("started_at") or item.get("created_at") or item.get("updated_at")
@@ -284,15 +291,27 @@ def _serialize(bot: Dict[str, Any]) -> Dict[str, Any]:
             uptime = None
 
     item["state"] = {
-        "cash": state.get("cash"),
+        # Kuruş yuvarlamasından kalan eksi artıklar gösterilmesin. Durum
+        # dosyası hiç yoksa (yeni/kopya bot) nakit "bilinmiyor" kalır.
+        "cash": round(max(cash, 0.0), 4) if state.get("cash") is not None else None,
         "position": position,
         "total_realized_pnl": round(realized, 4),
         "unrealized_pnl": round(unrealized, 4) if position else None,
-        "equity": equity,
+        "equity": round(equity, 4),
         "initial_cash": round(capital, 4) if capital else None,
         "total_pnl": round(total_pnl, 4),
         "total_pnl_pct": round(total_pnl / capital * 100, 2) if capital > 0 else None,
         "realized_pnl_pct": round(realized / capital * 100, 2) if capital > 0 else None,
+        # Açık pozisyonun kendi K/Z'si (net). Kartta "pozisyon anlık" olarak
+        # gösterilir; toplam K/Z ile karışmasın diye ayrı tutulur.
+        "position_pnl": round(unrealized, 4) if position else None,
+        "position_pnl_pct": (
+            round(unrealized / open_cost * 100, 2) if (position and open_cost > 0) else None
+        ),
+        "position_cost": round(open_cost, 4) if position else None,
+        "position_value": round(pos_market, 4) if position else None,
+        "position_net_value": round(open_net, 4) if position else None,
+        "fee_pct": round(fee * 100, 3),
         "pnl_source": "trades" if money is not None else "state",
         "trade_count": state.get("trade_count"),
         "started_at": started_at,
@@ -335,10 +354,15 @@ def _stop_price(pos: Dict[str, Any], risk: Dict[str, Any]) -> Optional[float]:
 
 
 def _live_position(
-    position: Optional[Dict[str, Any]], risk: Optional[Dict[str, Any]] = None
+    position: Optional[Dict[str, Any]],
+    risk: Optional[Dict[str, Any]] = None,
+    fee: float = 0.0,
 ) -> Optional[Dict[str, Any]]:
-    """Pozisyonu anlık fiyatla zenginleştirir (gerçekleşmemiş K/Z dahil).
+    """Pozisyonu anlık fiyatla zenginleştirir.
 
+    ``unrealized_pnl`` **komisyon dahil nettir**: giriş komisyonu maliyete
+    eklenir, çıkış komisyonu satış gelirinden düşülür. Böylece pozisyonun
+    "şimdi satsam elime ne geçer" değeri ile karttaki toplam K/Z tutarlı olur.
     Canlı fiyat alınamazsa motorun son mum kapanış fiyatı kullanılır.
     """
     if not position:
@@ -357,11 +381,16 @@ def _live_position(
     stop = _stop_price(pos, risk or {})
     if stop:
         pos["stop_price"] = round(float(stop), 8)
+    rate = max(0.0, float(fee or 0.0))
     if price and entry and qty:
+        cost = qty * entry * (1 + rate)
+        net_value = qty * price * (1 - rate)
         pos["last_price"] = round(price, 8)
-        pos["unrealized_pnl"] = round((price - entry) * qty, 4)
-        pos["unrealized_pnl_pct"] = round((price / entry - 1) * 100, 2)
+        pos["cost"] = round(cost, 4)
         pos["value"] = round(price * qty, 4)
+        pos["net_value"] = round(net_value, 4)
+        pos["unrealized_pnl"] = round(net_value - cost, 4)
+        pos["unrealized_pnl_pct"] = round((net_value - cost) / cost * 100, 2) if cost > 0 else 0.0
         if stop:
             pos["stop_distance_pct"] = round((price / float(stop) - 1) * 100, 2)
     return pos

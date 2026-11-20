@@ -82,12 +82,46 @@ def test_open_position_moves_total_pnl(monkeypatch):
     )
     _trade(bot_id, "BUY", 1.0, 100.0, 0.1)
     state = bots_api._serialize(_bot(bot_id))["state"]
-    # equity = 100 − 100.1 + 120 = 119.9 → K/Z = 19.9
-    assert state["equity"] == pytest.approx(119.9, abs=1e-6)
-    assert state["total_pnl"] == pytest.approx(19.9, abs=1e-6)
-    assert state["unrealized_pnl"] == pytest.approx(20.0, abs=1e-6)
-    # Gerçekleşen = toplam − anlık (giriş komisyonu burada kalır).
-    assert state["total_realized_pnl"] == pytest.approx(-0.1, abs=1e-6)
+    # Net K/Z: maliyet 100×1,001 = 100,10; satarsan 120×0,999 = 119,88.
+    assert state["unrealized_pnl"] == pytest.approx(19.78, abs=1e-6)
+    assert state["total_pnl"] == pytest.approx(19.78, abs=1e-6)
+    assert state["equity"] == pytest.approx(119.78, abs=1e-6)
+    # Yalnızca açık pozisyon var: kapalı işlem kârı yok.
+    assert state["total_realized_pnl"] == pytest.approx(0.0, abs=1e-6)
+    # Pozisyon kutusu toplamla aynı sayıyı gösterir; karışma olmaz.
+    assert state["position_pnl"] == pytest.approx(state["total_pnl"], abs=1e-6)
+    assert state["position_cost"] == pytest.approx(100.1, abs=1e-6)
+    assert state["position_net_value"] == pytest.approx(119.88, abs=1e-6)
+
+
+def test_total_equals_realized_plus_position(monkeypatch):
+    """Toplam K/Z = kapanan işlemler + açık pozisyon; iki sayı karışmaz."""
+    from app import live_prices
+
+    monkeypatch.setattr(live_prices, "prices", lambda symbols: {"BTCUSDT": 110.0})
+    bot_id = "bot_stats_sum"
+    _state(
+        bot_id,
+        position={"coin": "BTCUSDT", "quantity": 1.0, "entry_price": 100.0, "last_price": 100.0},
+    )
+    # Bir kapanan tur (kârlı) + bir açık pozisyon.
+    _trade(bot_id, "BUY", 1.0, 50.0, 0.05)
+    _trade(bot_id, "SELL", 1.0, 60.0, 0.06)
+    _trade(bot_id, "BUY", 1.0, 100.0, 0.10)
+
+    state = bots_api._serialize(_bot(bot_id))["state"]
+    total = state["total_pnl"]
+    realized = state["total_realized_pnl"]
+    position = state["position_pnl"]
+    # Kimlik: toplam = kapanan + pozisyon (yuvarlama toleransıyla).
+    assert total == pytest.approx(realized + position, abs=1e-3)
+    # Kapanan kısım komisyon dahil: (60−0,06) − (50+0,05) = 9,89
+    assert realized == pytest.approx(9.89, abs=1e-6)
+    # Pozisyon net: 110×0,999 − 100×1,001 = 9,79
+    assert position == pytest.approx(9.79, abs=1e-6)
+    assert total == pytest.approx(19.68, abs=1e-6)
+    assert state["equity"] == pytest.approx(119.68, abs=1e-6)
+    assert state["initial_cash"] == pytest.approx(100.0)
 
 
 def test_uptime_is_reported():

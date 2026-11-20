@@ -717,6 +717,70 @@ button.sell-btn:hover {
 .bot-card button.icon-btn svg { width: 15px; height: 15px; fill: none; }
 .stat-grid > .stat > small + .muted, .stat-grid .muted.small { font-size: 10.5px; }
 
+/* K/Z kutuları: "bot toplam" ve "pozisyon anlık" ayrı, büyük ve net. */
+.pnl-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1.3fr) repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+@media (max-width: 1180px) {
+  /* Dar masaüstü/tablet: 2 × 2, ana kutu ve son kutu tam satır. */
+  .pnl-row { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .pnl-main { grid-column: 1 / -1; }
+  .pnl-row > .pnl-box:last-child { grid-column: 1 / -1; }
+}
+.pnl-box {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+  padding: 11px 13px;
+  border-radius: 12px;
+  border: 1px solid var(--line);
+  background: linear-gradient(180deg, rgba(148, 163, 184, .07), rgba(148, 163, 184, .02));
+}
+.pnl-main {
+  border-color: var(--line-strong);
+  background: linear-gradient(180deg, rgba(56, 189, 248, .10), rgba(56, 189, 248, .02));
+}
+.pnl-label {
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: .07em;
+  color: var(--muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.pnl-value {
+  font-size: 21px;
+  font-weight: 750;
+  letter-spacing: -.02em;
+  line-height: 1.2;
+  font-variant-numeric: tabular-nums;
+  color: var(--text);
+}
+.pnl-main .pnl-value { font-size: 25px; }
+.pnl-value.pos { color: var(--green); }
+.pnl-value.neg { color: var(--red); }
+.pnl-hint {
+  font-size: 11px;
+  line-height: 1.35;
+  color: var(--muted);
+  /* Kısa ekranlarda kırpılmasın; en fazla iki satır. */
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.pnl-note {
+  margin: 8px 0 0;
+  font-size: 11px;
+  color: var(--muted);
+  line-height: 1.45;
+}
+
 /* İşlem analizi tablosu: satırlar sıkışık, sayılar hizalı. */
 .ana-table td, .ana-table th { white-space: nowrap; }
 .ana-table td.mono { font-variant-numeric: tabular-nums; }
@@ -2103,6 +2167,10 @@ select.ind-select {
   .ana-stats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .ana-stat { padding: 10px 11px; }
   .ana-value { font-size: 16px; }
+  .pnl-row { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .pnl-main { grid-column: 1 / -1; }
+  .pnl-value { font-size: 19px; }
+  .pnl-main .pnl-value { font-size: 23px; }
   .stat-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
   .stat-grid > .stat { padding: 9px 10px; }
   .stat-grid > .stat > b { font-size: 17px; }

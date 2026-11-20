@@ -138,14 +138,19 @@ def test_serialize_computes_equity_and_total(monkeypatch):
     }
     item = bots_api._serialize(row)
     state = item["state"]
-    assert state["unrealized_pnl"] == 10.0
-    assert state["equity"] == 100.0  # 40 nakit + 60 pozisyon
-    assert state["total_pnl"] == 0.0
+    # K/Z komisyon dahil nettir: maliyet 0,5×100×1,001 = 50,05;
+    # satarsan eline 0,5×120×0,999 = 59,94 geçer → +9,89.
+    assert state["unrealized_pnl"] == pytest.approx(9.89, abs=1e-6)
+    assert state["position_pnl"] == pytest.approx(9.89, abs=1e-6)
+    assert state["position_pnl_pct"] == pytest.approx(19.76, abs=0.05)
+    # equity = başlangıç + toplam K/Z (likidasyon değeri)
+    assert state["equity"] == pytest.approx(109.89, abs=1e-6)
+    assert state["total_pnl"] == pytest.approx(9.89, abs=1e-6)
     assert state["position"]["price_source"] == "live"
 
 
 def test_topbar_total_includes_unrealized(monkeypatch):
-    """Toplam K/Z = nakit + pozisyon - başlangıç (gerçekleşmemiş dahil)."""
+    """Toplam K/Z açık pozisyonun anlık (net) kısmını da içerir."""
     monkeypatch.setattr(live_prices, "prices", lambda symbols: {"ETHUSDT": 200.0})
     bot_id = "bot_live_test2"
     _state(
@@ -165,6 +170,9 @@ def test_topbar_total_includes_unrealized(monkeypatch):
         "auto_restart": 1,
     }
     state = bots_api._serialize(row)["state"]
-    assert state["equity"] == 150.0
-    assert state["total_pnl"] == 50.0
-    assert state["total_pnl_pct"] == 50.0
+    # Açık pozisyonun gerçekleşmemiş kısmı toplam K/Z'ye dahildir (net).
+    assert state["total_pnl"] == pytest.approx(state["unrealized_pnl"], abs=1e-6)
+    # 0,5×200×0,999 = 99,90 gelir; maliyet 0,5×100×1,001 = 50,05 → +49,85
+    assert state["total_pnl"] == pytest.approx(49.85, abs=1e-6)
+    assert state["equity"] == pytest.approx(149.85, abs=1e-6)
+    assert state["total_pnl_pct"] == pytest.approx(49.85, abs=0.02)

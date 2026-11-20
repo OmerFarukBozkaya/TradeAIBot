@@ -131,6 +131,14 @@ class TradingEngine:
         return self._default_state()
 
     def _save_state(self) -> None:
+        # Kuruş yuvarlaması nakdi eksiye düşürebiliyordu; anlamlı bir borç
+        # değilse sıfıra sabitle (kartta eksi nakit görünmesin).
+        try:
+            cash = float(self.state.get("cash") or 0)
+        except (TypeError, ValueError):
+            cash = 0.0
+        if -1.0 < cash < 0.0:
+            self.state["cash"] = 0.0
         self.state["last_update"] = utcnow()
         bot_state.save_state(self.bot_id, self.state)
 
@@ -760,7 +768,11 @@ class TradingEngine:
             f"ALIM sinyali: {coin} @ {price:.8f} ({self._evaluator_name(evaluator)})",
             "info",
         )
-        size_pct = math.ceil(self.state["cash"] * self.max_position_pct * 100) / 100
+        # Kuruş yukarı yuvarlamak nakdi eksiye düşürebiliyordu (0,01 USDT
+        # tavana yuvarlanıp mevcut nakdi aşıyordu). Aşağı yuvarla ve nakitle sınırla.
+        cash_now = float(self.state.get("cash") or 0)
+        size_pct = math.floor(cash_now * self.max_position_pct * 100) / 100
+        size_pct = max(0.0, min(size_pct, cash_now))
         if self.mode == "live":
             self._open_live(coin, price, evaluator, result, atr_value)
         else:
@@ -786,11 +798,20 @@ class TradingEngine:
             min_qty = self.binance.get_coin_minQTY(coin) or 0.0
         except Exception:
             pass
-        qty = _floor_step(cash_available / (exec_price * (1 + self.fee)), min_qty)
+        # Harcanabilir tutar mevcut nakdi asla aşmamalı (komisyon payı dahil).
+        cash_now = float(self.state.get("cash") or 0)
+        budget = min(float(cash_available or 0), cash_now)
+        if budget <= 0:
+            return
+        qty = _floor_step(budget / (exec_price * (1 + self.fee)), min_qty)
         if qty <= 0 or qty * exec_price < 5:
             return
         fee_amount = qty * exec_price * self.fee
-        self.state["cash"] = round(self.state["cash"] - (qty * exec_price) - fee_amount, 8)
+        cash_after = cash_now - (qty * exec_price) - fee_amount
+        if cash_after < 0:
+            # Kayan nokta/min-adet yuvarlaması: kalanı sıfıra sabitle.
+            cash_after = 0.0
+        self.state["cash"] = round(cash_after, 8)
         self._set_position(coin, qty, exec_price, evaluator, result, atr=atr_value)
         self._record_trade(coin, "BUY", qty, exec_price, fee_amount, None, "sinyal")
         notifier.send(
