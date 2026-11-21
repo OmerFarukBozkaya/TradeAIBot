@@ -14,6 +14,7 @@ from app.api.ai import router as ai_router
 from app.api.auth import router as auth_router
 from app.api.bots import router as bots_router
 from app.api.coin_lists import router as coin_lists_router
+from app.api.market import router as market_router
 from app.api.settings_api import router as settings_router
 from app.api.strategies import router as strategies_router
 from app.api.system_api import router as system_router
@@ -87,6 +88,7 @@ app.include_router(coin_lists_router, prefix="/api/coin-lists", tags=["coin-list
 app.include_router(strategies_router, prefix="/api/strategies", tags=["strategies"], dependencies=_protected)
 app.include_router(analysis_router, prefix="/api/analysis", tags=["analysis"], dependencies=_protected)
 app.include_router(ai_router, prefix="/api/ai", tags=["ai"], dependencies=_protected)
+app.include_router(market_router, prefix="/api/market", tags=["market"], dependencies=_protected)
 app.include_router(trades_router, prefix="/api", tags=["trades"], dependencies=_protected)
 app.include_router(settings_router, prefix="/api/settings", tags=["settings"], dependencies=_protected)
 app.include_router(system_router, prefix="/api/system", tags=["system"], dependencies=_protected)

@@ -92,6 +92,9 @@ def load_market_data(
     limit: int = 20000,
     source: str = "binance",
     csv_path: str = "",
+    asset_class: str = "",
+    start: str = "",
+    end: str = "",
 ) -> Tuple[Dict[str, Any], Dict[str, Any]]:
     """Veriyi kronolojik sırayla döndürür. Meta bilgisi rapora girer."""
     limit = max(500, min(int(limit), 250_000))
@@ -99,13 +102,14 @@ def load_market_data(
         data = load_csv(csv_path, limit)
         meta = {"source": "csv", "path": csv_path, "requested": limit}
     else:
-        from app.job_runner import _history
-        from core import Binance
+        from app.market_data import load_history
 
-        client = Binance()
-        data, history_meta = _history(client, coin.upper(), period, limit)
+        data, history_meta = load_history(
+            coin.upper(), period, limit, source=source or "auto",
+            asset_class=asset_class, start=start or None, end=end or None,
+        )
         data = _normalise_market(data)
-        meta = {**dict(history_meta or {}), "source": "binance"}
+        meta = {**dict(history_meta or {}), "source": history_meta.get("source") or source}
 
     if not data.get("close"):
         raise RuntimeError("Veri boş döndü")

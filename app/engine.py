@@ -28,6 +28,7 @@ INTERVAL_SECONDS = {
     "5m": 300,
     "15m": 900,
     "30m": 1800,
+    "45m": 2700,
     "1h": 3600,
     "2h": 7200,
     "4h": 14400,
@@ -35,6 +36,9 @@ INTERVAL_SECONDS = {
     "8h": 28800,
     "12h": 43200,
     "1d": 86400,
+    "3d": 259200,
+    "1w": 604800,
+    "1M": 2592000,
 }
 
 
@@ -300,6 +304,7 @@ class TradingEngine:
             f"Bot Başladı | {self.bot_name}",
             f"Bot: {self.bot_name}\nMod: {self.mode}\nPeriyot: {self.period}\nNakit: {self.state['cash']:.2f}\n"
             f"Strateji: {', '.join(self._evaluator_name(ev) for ev in self.evaluators)}",
+            kind="start",
         )
         try:
             self._loop()
@@ -580,6 +585,7 @@ class TradingEngine:
             notifier.send(
                 f"Kısmi manuel satış | {self.bot_name}",
                 f"Bot: {self.bot_name}\n{coin}\nSatılan: {sold:g}\nKalan: {actual:g}\nFiyat: {price:.8f}",
+                kind="sell",
             )
             return changes
         if actual > local * 1.02:
@@ -667,6 +673,7 @@ class TradingEngine:
             f"Manuel satış | {self.bot_name}",
             f"Bot: {self.bot_name}\n{coin} borsada elle satılmış.\nAdet: {local_qty:g}\nTahmini fiyat: {price:.8f}\n"
             f"K/Z: {pnl_pct:+.2f}%\nPozisyon kapatıldı, nakit {usdt:.2f} USDT.",
+            kind="sell",
         )
 
     # ------------------------------------------------------------------
@@ -768,15 +775,24 @@ class TradingEngine:
             f"ALIM sinyali: {coin} @ {price:.8f} ({self._evaluator_name(evaluator)})",
             "info",
         )
-        # Kuruş yukarı yuvarlamak nakdi eksiye düşürebiliyordu (0,01 USDT
-        # tavana yuvarlanıp mevcut nakdi aşıyordu). Aşağı yuvarla ve nakitle sınırla.
+        # Pozisyon boyutu: `risk_per_trade_pct` verilmişse stop mesafesine göre
+        # hesaplanır (her işlemde kaybedilecek tutar sabit); yoksa eskisi gibi
+        # nakit × max_position_pct.
+        from app import risk as risk_rules
+
         cash_now = float(self.state.get("cash") or 0)
-        size_pct = math.floor(cash_now * self.max_position_pct * 100) / 100
-        size_pct = max(0.0, min(size_pct, cash_now))
+        stop_hint, _kind = risk_rules.effective_stop(
+            price, atr_value, price, self.risk
+        )
+        budget = risk_rules.position_budget(
+            cash_now, price, stop_hint, self.risk, self.max_position_pct
+        )
+        budget = math.floor(budget * 100) / 100
+        budget = max(0.0, min(budget, cash_now))
         if self.mode == "live":
-            self._open_live(coin, price, evaluator, result, atr_value)
+            self._open_live(coin, price, evaluator, result, atr_value, budget)
         else:
-            self._open_paper(coin, price, size_pct, evaluator, result, atr_value)
+            self._open_paper(coin, price, budget, evaluator, result, atr_value)
 
     def _atr_value(self, data) -> float:
         """Girişteki ATR(14): stop ve takipli stop seviyeleri buna göre ölçülür."""
@@ -817,9 +833,10 @@ class TradingEngine:
         notifier.send(
             f"AL | {self.bot_name}",
             f"Bot: {self.bot_name}\n{coin} alındı\nAdet: {qty}\nFiyat: {exec_price:.8f}\nMod: paper",
+            kind="buy",
         )
 
-    def _open_live(self, coin, price, evaluator, result, atr_value=0.0) -> None:
+    def _open_live(self, coin, price, evaluator, result, atr_value=0.0, budget=None) -> None:
         usdt = 0.0
         try:
             for item in self.binance.client.get_account()["balances"]:
@@ -830,6 +847,8 @@ class TradingEngine:
             self._log(self.bot_id, f"USDT bakiyesi okunamadı: {exc}", "error")
             return
         available = usdt * self.max_position_pct
+        if budget is not None:
+            available = min(available, float(budget))
         if available < 10:
             self._log(self.bot_id, "Yetersiz nakit", "warning")
             return
@@ -856,6 +875,7 @@ class TradingEngine:
         notifier.send(
             f"AL | {self.bot_name}",
             f"Bot: {self.bot_name}\n{coin} alındı\nAdet: {executed}\nFiyat: {avg:.8f}\nMod: LIVE",
+            kind="buy",
         )
 
     def _set_position(self, coin, qty, price, evaluator, result, order_id=None, atr=0.0) -> None:
@@ -874,7 +894,6 @@ class TradingEngine:
             "direnc": None,
             "opened_at": utcnow(),
             "candles": 0,
-            "durum_list": [],
             "strategy_id": evaluator.id,
             "strategy_version": evaluator.version,
             "entry_signal": result.get("buy_detail"),
@@ -963,6 +982,9 @@ class TradingEngine:
             (utcnow(), price, pnl_pct, self.bot_id, coin),
         )
         self.state["position"] = None
+        # Çıkış nedeni dağılımı (panelde gösterilir).
+        counters = self.state.setdefault("exit_reasons", {})
+        counters[reason or "signal"] = int(counters.get(reason or "signal", 0)) + 1
         # Stop/kâr sonrası hemen yeniden girişi engelle (komisyon erozyonu).
         self._apply_cooldown(pnl_pct)
         self._save_state()
@@ -974,13 +996,97 @@ class TradingEngine:
         notifier.send(
             f"SAT | {self.bot_name}",
             f"Bot: {self.bot_name}\n{coin} satıldı\nAdet: {qty}\nFiyat: {price:.8f}\nK/Z: {pnl_pct:.2f}%\nNeden: {reason}",
+            kind="sell",
+        )
+
+    def _partial_close(self, price, reason, fraction) -> None:
+        """Pozisyonun bir kısmını satar; kalan kısım takibe devam eder.
+
+        Kısmi satıştan sonra stop en az giriş fiyatına çekilir (``stop_floor``),
+        yani kalan pozisyon kâr garantili devam eder.
+        """
+        position = self.state.get("position")
+        if not position:
+            return
+        fraction = max(0.0, min(float(fraction or 0.0), 1.0))
+        if fraction <= 0:
+            return
+        coin = position["coin"]
+        entry = float(position["entry_price"])
+        qty_total = float(position.get("quantity") or 0)
+        if qty_total <= 0:
+            return
+        qty = qty_total * fraction
+        min_qty = 0.0
+        if self.mode == "live":
+            try:
+                min_qty = self.binance.get_coin_minQTY(coin) or 0.0
+            except Exception:
+                pass
+        sold = _floor_step(qty, min_qty) if min_qty else qty
+        remaining = qty_total - sold
+        # Kalan kısım 5 USDT'nin altındaysa tamamen kapat (borsa minimumu).
+        if sold <= 0 or remaining * price < 5:
+            self._close_position(price, reason)
+            return
+        if self.mode == "live":
+            try:
+                order = self.binance.market_sell(coin, sold)
+                executed = float(order.get("executedQty") or sold)
+                quote = float(order.get("cummulativeQuoteQty") or (executed * price))
+                avg = quote / executed if executed else price
+                fee_amount = quote * self.fee
+                self.state["cash"] = round(float(self.state["cash"]) + quote - fee_amount, 8)
+                self._record_trade(
+                    coin, "SELL", executed, avg, fee_amount, str(order.get("orderId")),
+                    reason, (avg / entry - 1) * 100,
+                )
+                sold, price = executed, avg
+            except Exception as exc:
+                self._log(self.bot_id, f"Kısmi satış emri hatası {coin}: {exc}", "error")
+                return
+        else:
+            exec_price = price * (1 - self.slippage)
+            fee_amount = sold * exec_price * self.fee
+            self.state["cash"] = round(
+                float(self.state["cash"]) + (sold * exec_price) - fee_amount, 8
+            )
+            self._record_trade(
+                coin, "SELL", sold, exec_price, fee_amount, None, reason,
+                (exec_price / entry - 1) * 100,
+            )
+            price = exec_price
+
+        position["quantity"] = round(float(position.get("quantity") or 0) - sold, 10)
+        position["partial_taken"] = True
+        position["stop_floor"] = entry
+        position["stop_price"] = round(entry, 8)
+        self.state["total_realized_pnl"] = round(
+            float(self.state.get("total_realized_pnl", 0)) + (price - entry) * sold, 8
+        )
+        db.execute(
+            "UPDATE positions SET quantity=? WHERE bot_id=? AND coin=? AND status='open'",
+            (position["quantity"], self.bot_id, coin),
+        )
+        self._save_state()
+        self._log(
+            self.bot_id,
+            f"KISMİ SATIŞ {coin} | {reason} | {sold:g} @ {price:.8f} | "
+            f"kalan {position['quantity']:g}",
+            "info",
+        )
+        notifier.send(
+            f"Kısmi satış | {self.bot_name}",
+            f"Bot: {self.bot_name}\n{coin}\nSatılan: {sold:g}\nKalan: {position['quantity']:g}\n"
+            f"Fiyat: {price:.8f}\nNeden: {reason}",
+            kind="sell",
         )
 
     # ------------------------------------------------------------------
     # Pozisyon yönetimi
     # ------------------------------------------------------------------
     def _manage_position(self) -> None:
-        from core import Stratejiler
+        from app import risk as risk_rules
 
         position = self.state["position"]
         coin = position["coin"]
@@ -999,100 +1105,111 @@ class TradingEngine:
         result = evaluator.evaluate(data)
         self._record_signal(coin, evaluator, result, "SELL" if result.get("sell") else "HOLD", price)
 
-        sells: List[str] = []
-
-        # --- ATR stop / takipli stop (backtest ile aynı kurallar) ---
         entry = float(position["entry_price"])
         highest = float(position.get("highest_price") or entry)
         atr_base = float(position.get("atr") or 0.0)
-        stop_price = None
         if atr_base <= 0:
             atr_base = self._atr_value(data)
             position["atr"] = atr_base
-        if atr_base > 0:
-            stop_atr = float(self.risk.get("stop_atr") or 0)
-            trail_atr = float(self.risk.get("trail_atr") or 0)
-            trail_after = float(self.risk.get("trail_after_pct") or 0)
-            stop_price = entry - stop_atr * atr_base if stop_atr > 0 else None
-            # Üst sınır: stop, girişten en fazla `max_stop_pct` kadar aşağıda olabilir
-            # (yüksek volatiliteli coinlerde 35×ATR işlevsiz kalıyor).
-            max_stop_pct = float(self.risk.get("max_stop_pct") or 0)
-            if stop_price is not None and max_stop_pct > 0:
-                stop_price = max(stop_price, entry * (1 - max_stop_pct / 100))
-            armed = True
-            if trail_atr > 0 and trail_after > 0:
-                armed = highest >= entry * (1 + trail_after / 100)
-            if trail_atr > 0 and armed:
-                trail = highest - trail_atr * atr_base
-                stop_price = trail if stop_price is None else max(stop_price, trail)
-            if stop_price is not None and float(low[-1]) <= stop_price:
-                sells.append("takipli-stop" if (trail_atr > 0 and armed and
-                                                 (stop_atr <= 0 or trail >= entry - stop_atr * atr_base))
-                             else "stop")
 
-        if result.get("sell"):
-            sells.append("sinyal")
+        # --- Stop / takipli stop / breakeven / kâr al (backtest ile ortak) ---
+        stop_price, stop_kind = risk_rules.effective_stop(
+            entry, atr_base, highest, self.risk, floor=position.get("stop_floor")
+        )
+        target = risk_rules.target_price(entry, atr_base, self.risk)
+        partial_target = risk_rules.partial_target_price(entry, atr_base, self.risk)
 
-        # Kâr koruma: kârdayken kısa vadeli yapı kırılırsa çık (hızlı çıkış).
-        profit_don = int(self.risk.get("profit_exit_donchian") or 0)
-        if profit_don > 0 and price > entry and len(close) >= profit_don + 3:
+        exit_reason: Optional[str] = None
+        exit_price: Optional[float] = None
+        partial_price: Optional[float] = None
+
+        candle_open = float(data["open"][-1]) if data.get("open") else None
+
+        def _stop_fill(level: float) -> float:
+            """Gap'te açılıştan, aksi halde stop seviyesinden çık (kötümser)."""
+            if candle_open is not None and candle_open <= level:
+                return candle_open
+            return level
+
+        if stop_price is not None and float(low[-1]) <= stop_price:
+            exit_reason = stop_kind
+            exit_price = _stop_fill(stop_price)
+        elif target is not None and float(high[-1]) >= target:
+            exit_reason = "take-profit"
+            exit_price = target
+        elif result.get("sell"):
+            exit_reason = "sinyal"
+        else:
+            # Kâr koruma: kârdayken kısa vadeli yapı kırılırsa çık (hızlı çıkış).
+            profit_don = int(self.risk.get("profit_exit_donchian") or 0)
+            if profit_don > 0 and price > entry and len(close) >= profit_don + 3:
+                try:
+                    from app.strategies.registry import IndicatorCache
+
+                    lower = IndicatorCache(data).compute(
+                        "DONCHIAN", {"length": profit_don}, "lower"
+                    )
+                    if (
+                        lower[-2] is not None and lower[-3] is not None
+                        and float(close[-1]) < float(lower[-2])
+                        and float(close[-2]) >= float(lower[-3])
+                    ):
+                        exit_reason = "profit-exit"
+                except Exception as exc:
+                    self._log(self.bot_id, f"Kâr koruma hatası: {exc}", "warning")
+
+        # --- Eski (panelde seçilebilen) destek / dinamik / sabit stop ---
+        if exit_reason is None and self.risk.get("support_stop"):
             try:
-                from app.strategies.registry import IndicatorCache
-
-                lower = IndicatorCache(data).compute("DONCHIAN", {"length": profit_don}, "lower")
-                if (
-                    lower[-2] is not None and lower[-3] is not None
-                    and float(close[-1]) < float(lower[-2])
-                    and float(close[-2]) >= float(lower[-3])
-                ):
-                    sells.append("kâr-koruma")
-            except Exception as exc:
-                self._log(self.bot_id, f"Kâr koruma hatası: {exc}", "warning")
-
-        if self.risk.get("support_stop"):
-            try:
-                destek, direnc, stop = Stratejiler.destek_stop_lose(
-                    position["entry_price"], position.get("destek"), position.get("direnc"), close, low
-                )
-                if stop == "STOP-LOSE":
-                    sells.append("destek-stop")
-                else:
-                    position["destek"] = destek
-                    position["direnc"] = direnc
+                refresh = risk_rules.support_refresh(self.risk)
+                age = int(position.get("candles", 0)) - int(position.get("destek_at", -refresh))
+                if position.get("destek") is None or age >= refresh:
+                    destek, direnc, stop = risk_rules.support_stop(
+                        entry, position.get("destek"), position.get("direnc"),
+                        close, low, self.risk,
+                    )
+                    position["destek_at"] = int(position.get("candles", 0))
+                    if stop == "STOP-LOSE":
+                        exit_reason = "destek-stop"
+                    else:
+                        position["destek"] = destek
+                        position["direnc"] = direnc
+                elif risk_rules.support_break(price, position.get("destek"), self.risk):
+                    # Aramalar arasında saklanan seviye her mumda kontrol edilir.
+                    exit_reason = "destek-stop"
             except Exception as exc:
                 self._log(self.bot_id, f"Destek stop hatası: {exc}", "warning")
 
-        if self.risk.get("dynamic_stop"):
+        if exit_reason is None and self.risk.get("dynamic_stop"):
             try:
-                check, highest, stop_level = Stratejiler.dinamik_stop_lose(
-                    high, low, close, position.get("highest_price")
+                from app.strategies.registry import IndicatorCache
+
+                adx_values = IndicatorCache(data).compute("ADX", {"length": 14}, "adx")
+                level = risk_rules.dynamic_stop_level(
+                    highest, atr_base, adx_values[-1], self.risk
                 )
-                position["highest_price"] = highest or position.get("highest_price")
-                if check == "STOP-LOSE":
-                    sells.append("dinamik-stop")
+                if risk_rules.dynamic_stop_hit(price, level, self.risk):
+                    exit_reason = "dinamik-stop"
             except Exception as exc:
                 self._log(self.bot_id, f"Dinamik stop hatası: {exc}", "warning")
 
-        if self.risk.get("static_stop"):
-            try:
-                if Stratejiler.static_stop_lose(close, position["entry_price"]) == "STOP-LOSE":
-                    sells.append("statik-stop")
-            except Exception as exc:
-                self._log(self.bot_id, f"Statik stop hatası: {exc}", "warning")
+        if exit_reason is None and self.risk.get("static_stop"):
+            level = risk_rules.static_stop_price(entry, self.risk)
+            if level is not None and float(low[-1]) <= level:
+                exit_reason = "statik-stop"
+                exit_price = _stop_fill(level)
 
-        if self.risk.get("take_profit"):
-            try:
-                pnl = (price / position["entry_price"] - 1) * 100
-                if pnl > 5:
-                    position.setdefault("durum_list", []).append(pnl)
-                ort, signal = Stratejiler.take_profit(position.get("durum_list") or [])
-                if signal == "TAKE-PROFIT":
-                    sells.append("take-profit")
-            except Exception as exc:
-                self._log(self.bot_id, f"Take profit hatası: {exc}", "warning")
+        # --- Kısmi kâr al: pozisyonun bir kısmını sat, kalanı takibe bırak ---
+        if (
+            exit_reason is None
+            and partial_target is not None
+            and not position.get("partial_taken")
+            and float(high[-1]) >= partial_target
+        ):
+            partial_price = partial_target
 
         position["candles"] = int(position.get("candles", 0)) + 1
-        # Anlık durum: son fiyat, gerçekleşmemiş K/Z ve aktif stop seviyesi.
+        # Anlık durum: son fiyat, gerçekleşmemiş K/Z ve aktif seviyeler.
         qty_now = float(position.get("quantity") or 0)
         position["last_price"] = price
         position["last_price_at"] = utcnow()
@@ -1100,11 +1217,16 @@ class TradingEngine:
         position["unrealized_pnl_pct"] = round((price / entry - 1) * 100, 2) if entry else 0.0
         if stop_price is not None:
             position["stop_price"] = round(float(stop_price), 8)
+        position["take_profit_price"] = round(float(target), 8) if target is not None else None
         # Zaman limiti kaldırıldı: pozisyon yalnızca sinyal veya stop ile kapanır.
         self._save_state()
 
-        if sells:
-            self._close_position(price, sells[0])
+        if exit_reason:
+            self._close_position(exit_price if exit_price is not None else price, exit_reason)
+        elif partial_price is not None:
+            self._partial_close(
+                partial_price, "take-profit-partial", risk_rules.partial_fraction(self.risk)
+            )
         else:
             pnl = (price / float(position["entry_price"]) - 1) * 100
             self._log(

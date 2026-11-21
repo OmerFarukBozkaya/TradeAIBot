@@ -108,7 +108,24 @@ def _bot_config(body: BotBody) -> Dict[str, Any]:
         except Exception as exc:
             raise HTTPException(400, f"Strateji hatası: {exc}")
     if body.period not in settings.SUPPORTED_PERIODS:
-        raise HTTPException(400, f"Desteklenmeyen periyot: {body.period}")
+        from app.market_data.periods import parse_period
+
+        # Büyük harf / Türkçe yazım kabul edilsin (2H, 1Gun, 1W ...).
+        try:
+            period = parse_period(body.period).text
+        except ValueError:
+            raise HTTPException(
+                400,
+                f"Desteklenmeyen periyot: {body.period}. "
+                f"Kullanılabilir: {', '.join(settings.SUPPORTED_PERIODS)}",
+            )
+        if period not in settings.SUPPORTED_PERIODS:
+            raise HTTPException(
+                400,
+                f"Canlı/test botlar için desteklenmeyen periyot: {period}. "
+                f"Kullanılabilir: {', '.join(settings.SUPPORTED_PERIODS)}",
+            )
+        body = body.model_copy(update={"period": period})
     if body.cash <= 0:
         raise HTTPException(400, "Nakit pozitif olmalı")
 
@@ -142,6 +159,19 @@ def _bot_config(body: BotBody) -> Dict[str, Any]:
         if not coins:
             coins = coin_lists.normalize_coins(listed["coins"])
         coin_list_meta = {"id": listed["id"], "name": listed["name"], "count": listed["count"]}
+
+    # Canlı/paper bot motoru Binance emir altyapısını kullanır. Altın, hisse ve
+    # TEFAS yalnızca test/backtest/analiz içindir; bot evrenine giremez.
+    from app.market_data import is_live_symbol
+
+    unsupported = [coin for coin in coins if not is_live_symbol(coin)]
+    if unsupported:
+        preview = ", ".join(unsupported[:5])
+        raise HTTPException(
+            400,
+            f"Botlar yalnızca Binance kripto sembolleriyle çalışabilir. "
+            f"Test/backtest için kullanın: {preview}",
+        )
 
     config = {
         "period": body.period,
@@ -330,6 +360,7 @@ def _serialize(bot: Dict[str, Any]) -> Dict[str, Any]:
         "fee_pct": round(fee * 100, 3),
         "pnl_source": "trades" if money is not None else "state",
         "trade_count": state.get("trade_count"),
+        "exit_reasons": state.get("exit_reasons") or {},
         "started_at": started_at,
         "uptime_seconds": uptime,
         "last_update": state.get("last_update"),
@@ -341,24 +372,17 @@ def _serialize(bot: Dict[str, Any]) -> Dict[str, Any]:
 
 
 def _stop_price(pos: Dict[str, Any], risk: Dict[str, Any]) -> Optional[float]:
-    """Pozisyonun etkin stop seviyesi (ATR stop + takipli stop + % tavan)."""
+    """Pozisyonun etkin stop seviyesi (canlı motorla aynı kurallar)."""
+    from app import risk as risk_rules
+
     entry = float(pos.get("entry_price") or 0)
     if not entry:
         return None
     atr = float(pos.get("atr") or 0)
-    stop: Optional[float] = None
-    if atr > 0:
-        stop_atr = float(risk.get("stop_atr") or 0)
-        trail_atr = float(risk.get("trail_atr") or 0)
-        trail_after = float(risk.get("trail_after_pct") or 0)
-        highest = float(pos.get("highest_price") or entry)
-        stop = entry - stop_atr * atr if stop_atr > 0 else None
-        armed = True
-        if trail_atr > 0 and trail_after > 0:
-            armed = highest >= entry * (1 + trail_after / 100)
-        if trail_atr > 0 and armed:
-            trail = highest - trail_atr * atr
-            stop = trail if stop is None else max(stop, trail)
+    highest = float(pos.get("highest_price") or entry)
+    stop, _kind = risk_rules.effective_stop(
+        entry, atr, highest, risk, floor=pos.get("stop_floor")
+    )
     if stop is None:
         existing = pos.get("stop_price")
         # Eski kayıtta stop varsa onu da tavana tabi tut.
@@ -397,6 +421,18 @@ def _live_position(
     stop = _stop_price(pos, risk or {})
     if stop:
         pos["stop_price"] = round(float(stop), 8)
+    from app import risk as risk_rules
+
+    entry_atr = float(pos.get("atr") or 0)
+    target = risk_rules.target_price(entry, entry_atr, risk or {})
+    if target is not None:
+        pos["take_profit_price"] = round(float(target), 8)
+        if price:
+            pos["take_profit_distance_pct"] = round((float(target) / price - 1) * 100, 2)
+    partial_target = risk_rules.partial_target_price(entry, entry_atr, risk or {})
+    if partial_target is not None and not pos.get("partial_taken"):
+        pos["partial_target_price"] = round(float(partial_target), 8)
+    pos["breakeven_armed"] = bool(pos.get("stop_floor"))
     rate = max(0.0, float(fee or 0.0))
     if price and entry and qty:
         cost = qty * entry * (1 + rate)

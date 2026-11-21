@@ -11,8 +11,9 @@ from typing import Any, Dict, Optional
 import numpy as np
 
 from app.ai import artifacts
-from app.ai.features import build_features
-from app.ai.model import predict_positive
+from app.ai.features import build_features, warmup_for
+from app.ai.model import predict_sequence, predict_signals
+from app.ai.sequence import SequenceData
 
 
 class AIModelStrategy:
@@ -29,19 +30,29 @@ class AIModelStrategy:
         self.feature_names = list(
             self.bundle.get("feature_names") or self.manifest.get("feature_names") or []
         )
-        self.fill_values = np.asarray(
-            self.bundle.get("fill_values") or [0.0] * len(self.feature_names), dtype=float
-        )
+        fill_raw = self.bundle.get("fill_values")
+        if fill_raw is None:
+            fill_raw = [0.0] * len(self.feature_names)
+        self.fill_values = np.asarray(fill_raw, dtype=float)
         thresholds = self.bundle.get("thresholds") or self.manifest.get("thresholds") or {}
         self.buy_threshold = float(thresholds.get("buy") or 0.6)
         self.sell_threshold = float(thresholds.get("sell") or 0.6)
         self.horizon = int(self.bundle.get("horizon") or self.manifest.get("params", {}).get("horizon") or 12)
+        self.feature_groups = self.bundle.get("feature_groups") or []
+        self.output_mode = str(self.bundle.get("output_mode") or "dual_binary")
+        self.is_sequence = self.bundle.get("sequence_model") is not None
+        self.seq_window = int(self.bundle.get("seq_window") or 24)
+        self.trend_filter = bool(self.bundle.get("trend_filter", False))
+        self.spec = self.bundle.get("spec") or self.manifest.get("params") or {}
         self.id = self.model_id
         self.name = self.manifest.get("name") or self.model_id
         self.version = int(version or self.manifest.get("version") or 1)
-        self.warmup = 210
+        base_warmup = warmup_for(self.feature_groups) if self.feature_groups else 210
+        self.warmup = max(base_warmup, self.seq_window + 1) if self.is_sequence else base_warmup
         self.definition = {
             "ai_model": self.model_id,
+            "output_mode": self.output_mode,
+            "feature_groups": self.feature_groups,
             "thresholds": {
                 "buy": self.buy_threshold,
                 "sell": self.sell_threshold,
@@ -53,18 +64,45 @@ class AIModelStrategy:
     # Çıkarım
     # ------------------------------------------------------------------
     def _predict(self, data: Dict[str, Any]) -> Dict[str, Any]:
-        feature = build_features(data)
+        feature = build_features(data, self.feature_groups)
+        frame = feature["frame"]
         X = feature["X"]
-        if X.size and self.fill_values.size == X.shape[1]:
-            X = np.where(np.isfinite(X), X, self.fill_values)
-        buy = predict_positive(self.bundle["buy_model"], X) if len(X) else np.array([])
-        sell = predict_positive(self.bundle["sell_model"], X) if len(X) else np.array([])
+        # Model kendi eğitildiği kolon şemasını bekler. Yeni sürümde özellik
+        # seti değişmiş olabilir; eksik kolonlar NaN, fazlalar atılır.
+        if self.feature_names and list(frame.columns) != list(self.feature_names):
+            frame = frame.reindex(columns=self.feature_names)
+            X = frame.to_numpy(dtype=float)
+        n = len(feature["close"])
+        if self.is_sequence:
+            buy = np.full(n, np.nan)
+            sell = np.full(n, np.nan)
+            if n > self.seq_window:
+                try:
+                    seq = SequenceData.from_bundle(X, self.bundle)
+                    pos = np.arange(self.seq_window - 1, n)
+                    p_buy, p_sell = predict_sequence(self.bundle, seq, pos)
+                    buy[pos] = p_buy
+                    sell[pos] = p_sell
+                except Exception:
+                    buy = np.full(n, 0.0)
+                    sell = np.full(n, 0.0)
+        else:
+            if X.size and self.fill_values.size == X.shape[1]:
+                X = np.where(np.isfinite(X), X, self.fill_values)
+            buy, sell = predict_signals(self.bundle, X) if len(X) else (np.array([]), np.array([]))
+        trend_ok = np.ones(n, dtype=bool)
+        if self.trend_filter:
+            from app.ai.labels import _ema
+
+            close = np.asarray(feature["close"], dtype=float)
+            trend_ok = (_ema(close, 20) > _ema(close, 50)) & (_ema(close, 50) > _ema(close, 200))
         return {
-            "length": len(feature["close"]),
-            "feature_names": feature["feature_names"],
-            "frame": feature["frame"],
+            "length": n,
+            "feature_names": self.feature_names or feature["feature_names"],
+            "frame": frame,
             "buy_prob": buy,
             "sell_prob": sell,
+            "trend_ok": trend_ok,
             "close": feature["close"],
             "warmup": max(self.warmup, int(feature.get("warmup") or 0)),
         }
@@ -101,7 +139,14 @@ class AIModelStrategy:
             buy_p = 0.0
         if not np.isfinite(sell_p):
             sell_p = 0.0
-        buy = buy_p >= self.buy_threshold and sell_p < self.sell_threshold
+        gate = True
+        if self.trend_filter:
+            # ``trend_ok`` bir numpy dizisidir; ``or`` ile varsayılan vermek
+            # dizinin tamamını bool'a çevirmeye çalışıp hata verir.
+            trend = prepared.get("trend_ok")
+            if trend is not None and 0 <= idx < len(trend):
+                gate = bool(trend[idx])
+        buy = buy_p >= self.buy_threshold and sell_p < self.sell_threshold and gate
         sell = sell_p >= self.sell_threshold
         feature_snapshot = {}
         try:
@@ -119,6 +164,8 @@ class AIModelStrategy:
             "sell_probability": round(sell_p, 6),
             "buy_threshold": self.buy_threshold,
             "sell_threshold": self.sell_threshold,
+            "trend_ok": gate,
+            "engine": "sequence" if self.is_sequence else "tabular",
             "features": feature_snapshot,
         }
         result["buy"] = bool(buy)

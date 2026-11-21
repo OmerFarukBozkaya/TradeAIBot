@@ -19,6 +19,8 @@ from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional
 
 from app import db
+from app.ai.features import GROUPS
+from app.ai.spec import normalize_spec, validate_spec
 
 SETTINGS_KEY = "ai_autopilot"
 MAX_FAILURES_BACKOFF = 6
@@ -84,6 +86,9 @@ DEFAULTS: Dict[str, Any] = {
     "preset": "balanced",
     "interval_hours": 24,
     "limit": 25000,
+    "dataset_id": "",
+    "auto_snapshot": True,
+    "spec": None,
     "last_run_at": None,
     "last_model_id": None,
     "last_status": None,
@@ -114,12 +119,47 @@ def load_settings() -> Dict[str, Any]:
 def save_settings(values: Dict[str, Any]) -> Dict[str, Any]:
     current = load_settings()
     allowed = {
-        "enabled", "coin", "period", "preset", "interval_hours", "limit",
+        "enabled", "coin", "period", "preset", "interval_hours", "limit", "spec",
+        "dataset_id", "auto_snapshot",
     }
     for key in allowed:
         if key not in values:
             continue
         value = values[key]
+        if key == "dataset_id":
+            text = str(value or "").strip()
+            if text:
+                from app.ai import datasets
+
+                meta = datasets.manifest(text)
+                if not meta:
+                    raise ValueError("Veri seti bulunamadı")
+                current["dataset_id"] = text
+                current["coin"] = str(meta.get("coin") or current.get("coin"))
+                current["period"] = str(meta.get("period") or current.get("period"))
+            else:
+                current["dataset_id"] = ""
+            continue
+        if key == "auto_snapshot":
+            current["auto_snapshot"] = bool(value)
+            continue
+        if key == "spec":
+            # Sessizce varsayılana düşmek yerine açık hata ver: kullanıcı
+            # yanlış grup seçtiğini görsün.
+            if isinstance(value, dict):
+                raw_groups = value.get("feature_groups")
+                if raw_groups is not None:
+                    if not raw_groups:
+                        raise ValueError("En az bir özellik grubu seçilmeli")
+                    unknown = [str(g) for g in raw_groups if str(g) not in GROUPS]
+                    if unknown:
+                        raise ValueError(f"Bilinmeyen özellik grubu: {', '.join(unknown)}")
+            spec = normalize_spec(value)
+            errors = validate_spec(spec)
+            if errors:
+                raise ValueError("; ".join(errors))
+            current["spec"] = spec
+            continue
         if key == "enabled":
             current[key] = bool(value)
         elif key == "interval_hours":
@@ -133,8 +173,12 @@ def save_settings(values: Dict[str, Any]) -> Dict[str, Any]:
             except (TypeError, ValueError):
                 pass
         elif key == "period":
-            text = str(value or "1h")
-            current[key] = text if text in {"15m", "1h", "4h", "1d"} else "1h"
+            from app.market_data.periods import parse_period
+
+            try:
+                current[key] = parse_period(str(value or "1h")).text
+            except ValueError:
+                current[key] = "1h"
         elif key == "preset":
             text = str(value or "balanced")
             current[key] = text if text in PRESETS else "balanced"
@@ -302,6 +346,10 @@ def build_params(cfg: Dict[str, Any], trigger: str = "auto") -> Dict[str, Any]:
         "iterations": preset.get("iterations", 5),
         "patience": preset.get("patience", 2),
         "min_trades": preset.get("min_trades", 10),
+        "spec": normalize_spec(cfg.get("spec")),
+        "dataset_id": str(cfg.get("dataset_id") or ""),
+        "auto_snapshot": bool(cfg.get("auto_snapshot", True)),
+        "refresh_data": bool(cfg.get("refresh_data", False)),
         "notes": f"Otomatik öğrenme ({preset['label']}) · tetik: {trigger}",
         "_preset": preset_name,
         "_trigger": trigger,
@@ -323,6 +371,13 @@ def run_once(trigger: str = "manual") -> Dict[str, Any]:
     params.pop("_trigger", None)
     preset = PRESETS[preset_name]
 
+    # Her zamanlanmış tur, mevcut şampiyonun bilgisinden başlar. Böylece
+    # tekrar tekrar eğitim sıfırdan başlamaz, birikimli ilerler.
+    champion = _active_champion(params["coin"], params["period"])
+    if champion:
+        params["parent_model_id"] = champion["id"]
+        params["warm_start"] = True
+
     try:
         result = train_model(params)
     except Exception as exc:
@@ -339,7 +394,6 @@ def run_once(trigger: str = "manual") -> Dict[str, Any]:
     model_id = manifest["id"]
     gate = evaluate_gate(report, preset)
 
-    champion = _active_champion(params["coin"], params["period"])
     champion_score = None
     decision = "candidate"
     reason = ""
@@ -372,9 +426,13 @@ def run_once(trigger: str = "manual") -> Dict[str, Any]:
         if champion:
             artifacts.set_status(champion["id"], "candidate")
         artifacts.set_status(model_id, "active")
-    elif decision == "rejected":
-        artifacts.set_status(model_id, "archived")
-    # "kept" → aday olarak kalır, listelenir ve incelenebilir.
+    else:
+        # "rejected" veya "kept": yeni model diske bırakılmaz, liste şişmesin.
+        # Rapor ai_last_auto ayarında ve günlükte kalır.
+        try:
+            artifacts.delete_model(model_id)
+        except Exception:
+            pass
 
     cfg["last_run_at"] = _iso(_now())
     cfg["last_model_id"] = model_id
@@ -399,7 +457,7 @@ def run_once(trigger: str = "manual") -> Dict[str, Any]:
         "champion_id": (champion or {}).get("id"),
         "champion_score": champion_score,
     })
-    return {"ok": True, "model_id": model_id, "decision": decision, "reason": reason, "gate": gate}
+    return {"ok": True, "model_id": model_id, "decision": decision, "reason": reason, "gate": gate, "report": report}
 
 
 def _record_run(model_id: Optional[str], status: str, reason: str, metrics: Dict[str, Any]) -> None:

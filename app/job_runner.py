@@ -14,6 +14,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Any, Dict, List, Optional
 
 from app import db
+from app import risk as risk_rules
 from app.config import settings
 from app.strategies.compiler import CompiledStrategy
 from app.strategies.registry import IndicatorCache, catalog
@@ -41,13 +42,37 @@ _INTERVAL_MS = {
 }
 
 
-def _history(client, coin: str, period: str, limit: int) -> tuple:
+def _history(
+    client,
+    coin: str,
+    period: str,
+    limit: int,
+    source: str = "binance",
+    asset_class: str = "",
+    start: Optional[str] = None,
+    end: Optional[str] = None,
+) -> tuple:
     """`limit` 1000'den büyükse geçmişi sayfalayarak çeker.
 
-    Döndürür: (veri, meta). `meta` çekilen ham satır sayısını, tekrarları ve
-    kaç sayfa istendiğini taşır (veri kalitesi raporu için).
+    Kripto dışı semboller, serbest periyotlar ve Yahoo/TEFAS kaynakları
+    ``app.market_data`` katmanına yönlendirilir. Döndürür: (veri, meta).
+    `meta` çekilen ham satır sayısını, tekrarları ve kaç sayfa istendiğini
+    taşır (veri kalitesi raporu için).
     """
     limit = max(1, int(limit))
+    requested_source = str(source or "auto").strip().lower()
+    if requested_source in {"auto", "yahoo", "tefas"} or asset_class in {"metal", "stock", "fund"}:
+        from app.market_data import load_history
+
+        return load_history(
+            coin, period, limit, source=requested_source,
+            asset_class=asset_class, start=start, end=end,
+        )
+    if period not in _INTERVAL_MS:
+        from app.market_data import load_history
+
+        return load_history(coin, period, limit, source="binance", start=start, end=end)
+    client = client or _client()
     meta = {"requested": limit, "raw_rows": 0, "duplicates_removed": 0, "pages": 0}
     if limit <= 1000:
         data = client.get_coin_data(coin, period, limit)
@@ -156,6 +181,14 @@ def _data_report(data: Dict[str, Any], period: str, meta: Dict[str, Any]) -> Dic
         "span_text": _format_span((opendate[-1] - opendate[0]) if n > 1 else 0),
         "complete": n >= int(meta.get("requested") or 0),
         "shortfall": max(0, int(meta.get("requested") or 0) - n),
+        "source": meta.get("source"),
+        "asset_class": meta.get("asset_class"),
+        "base_period": meta.get("base_period"),
+        "resampled": bool(meta.get("resampled")),
+        "cached": bool(meta.get("cached")),
+        "has_ohlc": meta.get("has_ohlc", True),
+        "intraday_limited": bool(meta.get("intraday_limited")),
+        "cache_error": meta.get("cache_error"),
     }
 
     # --- temizlik kontrolleri ---
@@ -177,17 +210,91 @@ def _data_report(data: Dict[str, Any], period: str, meta: Dict[str, Any]) -> Dic
             bad_price += 1
 
     step = _INTERVAL_MS.get(period)
+    if not step:
+        from app.market_data.periods import parse_period
+
+        try:
+            step = parse_period(period).ms
+        except ValueError:
+            step = None
+    try:
+        from app.market_data.periods import parse_period as _parse_period
+
+        period_obj = _parse_period(period)
+    except ValueError:
+        period_obj = None
+
+    # Hisse/altın/TEFAS verisi işlem günü takvimine uyar: hafta sonu ve resmi
+    # tatilde mum yoktur. Bu yüzden boşluk ölçümü takvim günü değil işlem
+    # günü (business day) üzerinden yapılır.
+    session_based = (
+        meta.get("asset_class") in {"stock", "metal", "fund"} and n > 1
+    )
+
+    def _business_between(first_ms: float, last_ms: float) -> int:
+        import datetime as _dt
+
+        start = _dt.datetime.fromtimestamp(float(first_ms) / 1000.0, _dt.timezone.utc).date()
+        end = _dt.datetime.fromtimestamp(float(last_ms) / 1000.0, _dt.timezone.utc).date()
+        count = 0
+        cur = start + _dt.timedelta(days=1)
+        while cur < end:
+            if cur.weekday() < 5:
+                count += 1
+            cur += _dt.timedelta(days=1)
+        return count
+
+    # Bir barda beklenen işlem günü sayısı (yaklaşık).
+    sessions_per_bar = None
+    if period_obj is not None:
+        per_unit = period_obj.unit
+        if per_unit == "d":
+            sessions_per_bar = max(1, period_obj.count)
+        elif per_unit == "w":
+            sessions_per_bar = 5 * period_obj.count
+        elif per_unit == "M":
+            sessions_per_bar = 21 * period_obj.count
+        elif per_unit == "y":
+            sessions_per_bar = 252 * period_obj.count
+
+    # Kripto/intraday için beklenen adım: serinin medyanı (ay/yıl gibi
+    # değişken uzunluktaki periyotlarda sabit ms yanlış "boşluk" üretiyordu).
+    median_step = step
+    if n > 3 and not session_based:
+        deltas = sorted(opendate[i] - opendate[i - 1] for i in range(1, n))
+        median_step = deltas[len(deltas) // 2] or step
+
     gaps = 0
     missing = 0
-    if step and n > 1:
+    # Eşik: günlükte tatil toleransı yüksek, hafta/ay/yılda bir bar atlanınca
+    # yakalanmalı. Eksik mum, "kaç bar atlandı" olarak hesaplanır.
+    unit = period_obj.unit if period_obj is not None else ""
+    intraday_session = session_based and unit in {"m", "h"}
+    threshold_multiplier = 4.0 if unit == "d" else 1.9
+    if n > 1:
         for i in range(1, n):
             delta = opendate[i] - opendate[i - 1]
-            if delta > step * 1.5:
-                gaps += 1
-                missing += max(0, int(round(delta / step)) - 1)
+            if intraday_session:
+                # Hisse/altın intraday: gece, hafta sonu, resmi tatil ve günlük
+                # bakım araları normaldir. Zaman temelli boşluk ölçümü bu
+                # serilerde yanlış pozitif üretir; boşluk raporlanmaz.
+                continue
+            elif session_based and sessions_per_bar:
+                span_sessions = _business_between(opendate[i - 1], opendate[i]) + 1
+                if span_sessions > sessions_per_bar * threshold_multiplier:
+                    skipped = max(1, int(round(span_sessions / sessions_per_bar)) - 1)
+                    gaps += 1
+                    missing += skipped
+            elif median_step:
+                if delta > median_step * 1.5:
+                    gaps += 1
+                    missing += max(0, int(round(delta / median_step)) - 1)
 
-    expected = int(report["span_ms"] / step) + 1 if step and n else n
+    # Kapsama: eksik mum sayısına göre (takvim tahmini yerine sayılan veri).
+    expected = n + missing
     report["clean"] = (nan == 0 and bad_ohlc == 0 and bad_price == 0 and gaps == 0)
+    report["session_based"] = bool(session_based)
+    report["intraday_session"] = bool(intraday_session)
     report["nan_count"] = nan
     report["bad_ohlc_count"] = bad_ohlc
     report["bad_price_count"] = bad_price
@@ -283,50 +390,92 @@ def _risk_exit(
     atr: List[Optional[float]],
     risk: Dict[str, Any],
 ) -> Optional[tuple]:
-    """Açık pozisyon için stop / kâr al / zaman aşımı kontrolü.
+    """Açık pozisyon için stop / takipli stop / breakeven / kâr al kontrolü.
 
-    Döndürür: (çıkış_fiyatı, neden) veya None. Mum içi (high/low) kullanılır;
-    stop seviyesi ile kâr hedefi aynı mumda vurulursa **stop** önce sayılır
-    (kötümser varsayım).
+    Kurallar `app.risk` ile canlı motorla **ortaktır**. Döndürür:
+    ``(çıkış_fiyatı, neden)`` veya ``None``. Mum içi (high/low) kullanılır;
+    stop ile kâr hedefi aynı mumda vurulursa **stop** önce sayılır (kötümser).
     """
     high = float(data["high"][idx])
     low = float(data["low"][idx])
-    close = float(data["close"][idx])
+    open_price = float(data["open"][idx]) if data.get("open") else None
     entry = float(position["entry"])
-    base_atr = position.get("atr") or 0.0
+    base_atr = position.get("atr") or (atr[idx] if atr and idx < len(atr) else 0.0)
 
-    stop_atr = float(risk.get("stop_atr") or 0)
-    trail_atr = float(risk.get("trail_atr") or 0)
-    trail_after = float(risk.get("trail_after_pct") or 0)
-    tp_atr = float(risk.get("take_profit_atr") or 0)
-    tp_pct = float(risk.get("take_profit_pct") or 0)
-
-    stop_price = None
-    if base_atr > 0:
-        if stop_atr > 0:
-            stop_price = entry - stop_atr * base_atr
-            # Üst sınır: stop, girişten en fazla `max_stop_pct` kadar aşağıda olabilir.
-            # Yüksek volatiliteli coinlerde 35×ATR neredeyse %100'e yaklaşıp
-            # işlevsiz kalıyor ("felaket koruması" bile denemez).
-            max_stop_pct = float(risk.get("max_stop_pct") or 0)
-            if max_stop_pct > 0:
-                stop_price = max(stop_price, entry * (1 - max_stop_pct / 100))
-        armed = True
-        if trail_atr > 0 and trail_after > 0:
-            # Takipli stop ancak kâr eşiği aşıldıktan sonra devreye girer;
-            # erken pullback'lerde pozisyonu kesmez.
-            armed = float(position.get("highest") or entry) >= entry * (1 + trail_after / 100)
-        if trail_atr > 0 and armed:
-            trail = float(position.get("highest") or entry) - trail_atr * base_atr
-            stop_price = trail if stop_price is None else max(stop_price, trail)
-
+    stop_price, stop_kind = risk_rules.effective_stop(
+        entry,
+        base_atr,
+        float(position.get("highest") or entry),
+        risk,
+        floor=position.get("stop_floor"),
+    )
     if stop_price is not None and low <= stop_price:
-        return (min(stop_price, high), "stop")
+        # Gap'te (mum stopun altında açıldı) açılış fiyatından çıkılır; aksi
+        # halde stop seviyesinden. İkisi de kötümser senaryodur.
+        exit_price = open_price if (open_price is not None and open_price <= stop_price) else stop_price
+        return (min(exit_price, high), stop_kind)
 
-    if tp_pct > 0 and high >= entry * (1 + tp_pct / 100):
-        return (entry * (1 + tp_pct / 100), "take-profit")
-    if tp_atr > 0 and base_atr > 0 and high >= entry + tp_atr * base_atr:
-        return (entry + tp_atr * base_atr, "take-profit")
+    target = risk_rules.target_price(entry, base_atr, risk)
+    if target is not None and high >= target:
+        return (target, "take-profit")
+
+    return None
+
+
+def _legacy_stop_exit(
+    position: Dict[str, Any],
+    data: Dict[str, Any],
+    idx: int,
+    atr: List[Optional[float]],
+    adx: List[Any],
+    risk: Dict[str, Any],
+) -> Optional[tuple]:
+    """Eski (panelde hâlâ seçilebilen) destek / dinamik / sabit stop kuralları.
+
+    Canlı motorla aynı sırayla ve aynı fiyatlarla çalışır.
+    """
+    entry = float(position["entry"])
+    high = float(data["high"][idx])
+    low = float(data["low"][idx])
+    open_price = float(data["open"][idx]) if data.get("open") else None
+    close = float(data["close"][idx])
+
+    if risk.get("support_stop"):
+        refresh = risk_rules.support_refresh(risk)
+        due = position.get("destek") is None or idx - int(position.get("destek_at", -refresh)) >= refresh
+        if due:
+            destek, direnc, stop = risk_rules.support_stop(
+                entry,
+                position.get("destek"),
+                position.get("direnc"),
+                data["close"],
+                data["low"],
+                risk,
+                end=idx + 1,
+            )
+            position["destek_at"] = idx
+            if stop == "STOP-LOSE":
+                return (close, "destek-stop")
+            position["destek"] = destek
+            position["direnc"] = direnc
+        # Aramalar arasında saklanan seviye yine de her mumda kontrol edilir.
+        elif risk_rules.support_break(close, position.get("destek"), risk):
+            return (close, "destek-stop")
+
+    if risk.get("dynamic_stop"):
+        base_atr = position.get("atr") or (atr[idx] if atr and idx < len(atr) else 0.0)
+        adx_value = adx[idx] if adx and idx < len(adx) else None
+        level = risk_rules.dynamic_stop_level(
+            float(position.get("highest") or entry), base_atr, adx_value, risk
+        )
+        if risk_rules.dynamic_stop_hit(close, level, risk):
+            return (close, "dinamik-stop")
+
+    if risk.get("static_stop"):
+        level = risk_rules.static_stop_price(entry, risk)
+        if level is not None and low <= level:
+            exit_price = open_price if (open_price is not None and open_price <= level) else level
+            return (min(exit_price, high), "statik-stop")
 
     return None
 
@@ -390,6 +539,10 @@ def run_backtest(params: Dict[str, Any]) -> Dict[str, Any]:
     period = params.get("period", "1h")
     limit = max(200, min(int(params.get("limit", 1000)), 250000))
     job_id = params.get("_job_id")
+    source = str(params.get("source") or "auto")
+    asset_class = str(params.get("asset_class") or "")
+    start = params.get("start") or None
+    end = params.get("end") or None
     cash = float(params.get("cash", 100.0))
     initial_cash = cash
     fee = float(params.get("fee", settings.PAPER_FEE))
@@ -406,9 +559,11 @@ def run_backtest(params: Dict[str, Any]) -> Dict[str, Any]:
         if not isinstance(history_meta, dict):
             history_meta = {"requested": limit, "raw_rows": len(data["close"]), "pages": 0}
     else:
-        client = _client()
         _progress(job_id, 10, f"{limit} mum veri çekiliyor")
-        data, history_meta = _history(client, coin, period, limit)
+        data, history_meta = _history(
+            None, coin, period, limit, source=source,
+            asset_class=asset_class, start=start, end=end,
+        )
     _progress(job_id, 30, f"{len(data['close'])} mum alındı, backtest çalışıyor")
     n = len(data["close"])
     data_report = _data_report(data, period, history_meta)
@@ -416,13 +571,19 @@ def run_backtest(params: Dict[str, Any]) -> Dict[str, Any]:
     if hasattr(evaluator, "prepare"):
         evaluator.prepare(data)
 
-    # Risk ayarları: istekte verilirse o, yoksa strateji tanımındaki `risk`
+    # Risk ayarları: istekte verilirse o, yoksa strateji tanımındaki `risk`.
+    # Panel varsayılanları (settings.DEFAULT_RISK) en altta durur; böylece
+    # aynı bot ayarıyla backtest ve canlı motor aynı kuralları uygular.
     risk = params.get("risk")
     if not isinstance(risk, dict) or not risk:
         definition = getattr(evaluator, "definition", None) or {}
         risk = definition.get("risk") if isinstance(definition, dict) else None
-    risk = risk if isinstance(risk, dict) else {}
+    risk = {**settings.DEFAULT_RISK, **(risk if isinstance(risk, dict) else {})}
     atr = _atr_series(data) if risk else []
+    adx: List[Any] = []
+    if risk.get("dynamic_stop"):
+        adx = IndicatorCache(data).compute("ADX", {"length": 14}, "adx")
+    max_position_pct = float(params.get("max_position_pct", 100) or 100) / 100.0
     profit_don = int(risk.get("profit_exit_donchian") or 0)
     profit_lower: Optional[List[Optional[float]]] = None
     if profit_don > 0:
@@ -450,7 +611,14 @@ def run_backtest(params: Dict[str, Any]) -> Dict[str, Any]:
 
         if position is None and result["buy"] and idx > cooldown_until:
             exec_price = price * (1 + slippage)
-            qty = cash / (exec_price * (1 + fee))
+            entry_atr = (atr[idx] if atr and idx < len(atr) else None) or 0.0
+            stop_price, _kind = risk_rules.effective_stop(
+                exec_price, entry_atr, exec_price, risk
+            )
+            budget = risk_rules.position_budget(
+                cash, exec_price, stop_price, risk, max_position_pct
+            )
+            qty = budget / (exec_price * (1 + fee))
             if qty * exec_price >= 5:
                 cost = qty * exec_price
                 cash -= cost + cost * fee
@@ -461,7 +629,9 @@ def run_backtest(params: Dict[str, Any]) -> Dict[str, Any]:
                     "time": candle_time,
                     "index": idx,
                     "highest": price,
-                    "atr": (atr[idx] if atr and idx < len(atr) else None) or 0.0,
+                    "atr": entry_atr,
+                    "destek": None,
+                    "direnc": None,
                 }
         elif position is not None:
             candle_high = float(data["high"][idx])
@@ -473,7 +643,9 @@ def run_backtest(params: Dict[str, Any]) -> Dict[str, Any]:
             if risk:
                 hit = _risk_exit(position, data, idx, atr, risk)
                 if hit:
-                    exit_price, reason = hit
+                    # Stop/kâr al seviyesinden çıkarken de kayma uygulanır
+                    # (canlı/paper motorla aynı varsayım).
+                    exit_price, reason = hit[0] * (1 - slippage), hit[1]
 
             if exit_price is None and result["sell"]:
                 exit_price, reason = price * (1 - slippage), "signal"
@@ -487,6 +659,51 @@ def run_backtest(params: Dict[str, Any]) -> Dict[str, Any]:
                 and _profit_exit(profit_lower, data["close"], idx, float(position["entry"]))
             ):
                 exit_price, reason = price * (1 - slippage), "profit-exit"
+
+            if exit_price is None and risk:
+                legacy = _legacy_stop_exit(position, data, idx, atr, adx, risk)
+                if legacy:
+                    exit_price, reason = legacy[0] * (1 - slippage), legacy[1]
+
+            # Kısmi kâr al: pozisyonun bir kısmını sat, kalanı takip et.
+            # (Canlı motorla aynı sıra: kısmi satış yalnızca tam çıkış yoksa.)
+            if exit_price is None and risk and not position.get("partial_taken"):
+                entry = float(position["entry"])
+                partial = risk_rules.partial_target_price(
+                    entry, position.get("atr") or 0.0, risk
+                )
+                fraction = risk_rules.partial_fraction(risk)
+                if partial is not None and fraction > 0 and candle_high >= partial:
+                    partial_price = partial * (1 - slippage)
+                    sold = position["qty"] * fraction
+                    remaining = position["qty"] - sold
+                    if remaining * partial_price < 5:
+                        # Kalan kısım borsa minimumunun altında: tamamını sat.
+                        exit_price, reason = partial_price, "take-profit"
+                    elif sold > 0:
+                        proceeds = sold * partial_price
+                        cash += proceeds - proceeds * fee
+                        exit_reasons["take-profit-partial"] = (
+                            exit_reasons.get("take-profit-partial", 0) + 1
+                        )
+                        trades.append(
+                            {
+                                "entry_time": position["time"],
+                                "exit_time": candle_time,
+                                "entry": entry,
+                                "exit": partial_price,
+                                "qty": sold,
+                                "pnl_pct": (partial_price / entry - 1) * 100,
+                                "candles": idx - position["index"],
+                                "reason": "take-profit-partial",
+                                "entry_idx": position["index"],
+                                "exit_idx": idx,
+                            }
+                        )
+                        position["partial_taken"] = True
+                        # Kalan kısmın stopu en az girişe çekilir (risksiz devam).
+                        position["stop_floor"] = entry
+                        position["qty"] = remaining
 
             if exit_price is not None:
                 proceeds = position["qty"] * exit_price
@@ -676,6 +893,11 @@ def run_backtest(params: Dict[str, Any]) -> Dict[str, Any]:
             "profit_exit_donchian": profit_don,
             "take_profit_atr": risk.get("take_profit_atr") or 0,
             "take_profit_pct": risk.get("take_profit_pct") or 0,
+            "breakeven_pct": risk.get("breakeven_pct") or 0,
+            "partial_tp_pct": risk.get("partial_tp_pct") or 0,
+            "partial_tp_atr": risk.get("partial_tp_atr") or 0,
+            "partial_tp_fraction": risk.get("partial_tp_fraction") or 0,
+            "risk_per_trade_pct": risk.get("risk_per_trade_pct") or 0,
             "cooldown": risk.get("cooldown") or 0,
             "cooldown_min_loss_pct": risk.get("cooldown_min_loss_pct") or 0,
             "exit_reasons": exit_reasons,
@@ -745,6 +967,10 @@ def run_backtest_all(params: Dict[str, Any]) -> Dict[str, Any]:
     limit = max(200, min(int(params.get("limit", 20000)), 250000))
     cash = float(params.get("cash", 100.0))
     job_id = params.get("_job_id")
+    source = str(params.get("source") or "auto")
+    asset_class = str(params.get("asset_class") or "")
+    start = params.get("start") or None
+    end = params.get("end") or None
     include_archived = bool(params.get("include_archived"))
 
     items = collect_all_specs(include_archived)
@@ -759,7 +985,10 @@ def run_backtest_all(params: Dict[str, Any]) -> Dict[str, Any]:
             raise RuntimeError("Seçilen strateji bulunamadı")
 
     _progress(job_id, 5, f"{len(items)} strateji için veri çekiliyor")
-    data, history_meta = _history(_client(), coin, period, limit)
+    data, history_meta = _history(
+        None, coin, period, limit, source=source,
+        asset_class=asset_class, start=start, end=end,
+    )
     report = _data_report(data, period, history_meta)
 
     rows: List[Dict[str, Any]] = []
@@ -784,6 +1013,9 @@ def run_backtest_all(params: Dict[str, Any]) -> Dict[str, Any]:
                     "period": period,
                     "limit": limit,
                     "cash": cash,
+                    "source": source,
+                    "asset_class": asset_class,
+                    "risk": params.get("risk") or {},
                     "_data": data,
                     "_history_meta": history_meta,
                 }
@@ -869,14 +1101,15 @@ def _scan_coins(params: Dict[str, Any]) -> List[str]:
 
 def run_scan(params: Dict[str, Any]) -> Dict[str, Any]:
     period = params.get("period", "1h")
+    source = str(params.get("source") or "auto")
+    asset_class = str(params.get("asset_class") or "")
     specs = normalize_specs(params.get("strategies") or [])
     coins = _scan_coins(params)
     job_id = params.get("_job_id")
     _progress(job_id, 5, "Coin listesi hazırlanıyor")
-    client = _client()
     if not coins:
-        coins = client.coin_list()
-    _progress(job_id, 10, f"{len(coins)} coin taranacak")
+        coins = _client().coin_list()
+    _progress(job_id, 10, f"{len(coins)} sembol taranacak")
     evaluators = [build_evaluator(spec) for spec in specs]
     results = {
         ev.id: {"BUY": [], "SELL": []} for ev in evaluators
@@ -886,7 +1119,7 @@ def run_scan(params: Dict[str, Any]) -> Dict[str, Any]:
     completed = 0
 
     def check(coin):
-        data = client.get_coin_data(coin, period, 1000)
+        data, _ = _history(None, coin, period, 1000, source=source, asset_class=asset_class)
         out = []
         for ev in evaluators:
             r = ev.evaluate(data)
@@ -922,6 +1155,18 @@ def run_scan(params: Dict[str, Any]) -> Dict[str, Any]:
 # ---------------------------------------------------------------------------
 # Analiz
 # ---------------------------------------------------------------------------
+def _analysis_data(params: Dict[str, Any], limit: int = 1000) -> Dict[str, Any]:
+    coin = params.get("coin", "BTCUSDT")
+    period = params.get("period", "1h")
+    source = str(params.get("source") or "auto")
+    asset_class = str(params.get("asset_class") or "")
+    data, _ = _history(
+        None, coin, period, limit, source=source, asset_class=asset_class,
+        start=params.get("start") or None, end=params.get("end") or None,
+    )
+    return data
+
+
 def run_indicator_values(params: Dict[str, Any]) -> Dict[str, Any]:
     """Tüm kayıtlı indikatörlerin değerlerini tek tabloda döndürür.
 
@@ -934,7 +1179,7 @@ def run_indicator_values(params: Dict[str, Any]) -> Dict[str, Any]:
     count = min(int(params.get("count", 20)), 500)
     job_id = params.get("_job_id")
     _progress(job_id, 15, "Veri çekiliyor")
-    data = _client().get_coin_data(coin, period, 1000)
+    data = _analysis_data(params, 1000)
     start = -count
     cache = IndicatorCache(data)
 
@@ -990,7 +1235,7 @@ def run_strategy_values(params: Dict[str, Any]) -> Dict[str, Any]:
     period = params.get("period", "1h")
     count = min(int(params.get("count", 10)), 100)
     specs = normalize_specs(params.get("strategies") or [])
-    data = _client().get_coin_data(coin, period, 1000)
+    data = _analysis_data(params, 1000)
     result = {}
     for spec in specs:
         ev = build_evaluator(spec)
@@ -1012,7 +1257,7 @@ def run_support_resistance(params: Dict[str, Any]) -> Dict[str, Any]:
 
     coin = params.get("coin", "BTCUSDT")
     period = params.get("period", "1h")
-    data = _client().get_coin_data(coin, period, 1000)
+    data = _analysis_data(params, 1000)
     price = params.get("price")
     if price in (None, ""):
         price = data["close"][-1]
@@ -1024,16 +1269,17 @@ def run_support_resistance(params: Dict[str, Any]) -> Dict[str, Any]:
 
 def run_market(params: Dict[str, Any]) -> Dict[str, Any]:
     period = params.get("period", "1h")
+    source = str(params.get("source") or "auto")
+    asset_class = str(params.get("asset_class") or "")
     specs = normalize_specs(params.get("strategies") or [])
     coins = params.get("coins") or []
-    client = _client()
     if not coins:
-        coins = client.coin_list()[: int(params.get("max_coins", 30))]
+        coins = _client().coin_list()[: int(params.get("max_coins", 30))]
     evaluators = [build_evaluator(spec) for spec in specs]
     table = []
 
     def one(coin):
-        data = client.get_coin_data(coin, period, 1000)
+        data, _ = _history(None, coin, period, 1000, source=source, asset_class=asset_class)
         values = []
         for ev in evaluators:
             r = ev.evaluate(data)
@@ -1051,7 +1297,7 @@ def run_market(params: Dict[str, Any]) -> Dict[str, Any]:
 def run_monthly(params: Dict[str, Any]) -> Dict[str, Any]:
     coin = params.get("coin", "BTCUSDT")
     period = params.get("period", "1d")
-    data = _client().get_coin_data(coin, period, 1000)
+    data = _analysis_data(params, 1000)
     monthly: Dict[int, Dict[str, Any]] = {}
     for i, ts in enumerate(data["opendate"]):
         month = __import__("datetime").datetime.utcfromtimestamp(ts / 1000).month
@@ -1170,6 +1416,270 @@ def run_backup_restore(params: Dict[str, Any]) -> Dict[str, Any]:
     return result
 
 
+def _ai_report_summary(report: Dict[str, Any]) -> Dict[str, Any]:
+    """İş sonucuna yazılacak rapor: ağır işlem/equity listeleri çıkarılır."""
+    trimmed = dict(report or {})
+    test = dict(trimmed.get("test") or {})
+    test.pop("equity", None)
+    test.pop("trades", None)
+    trimmed["test"] = test
+    return trimmed
+
+
+def run_ai_retrain(params: Dict[str, Any]) -> Dict[str, Any]:
+    """Aynı modeli tekrar tekrar eğitir; kimlik korunur, sürüm artar.
+
+    Her tur önceki ağırlıklardan devam eder. Aday, mevcut sürümden validation
+    skoruyla daha iyi değilse **model geri alınmaz**: mevcut sürüm korunur.
+    """
+    import shutil
+
+    from app.ai import artifacts
+    from app.ai.trainer import train_model
+
+    if not settings.AI_ENABLED:
+        raise RuntimeError("AI kapalı. Ayarlar > Sistem > Yapay zekâ özelliklerini açın.")
+    model_id = str(params.get("model_id") or "").strip()
+    if not model_id:
+        raise ValueError("model_id gerekli")
+    base = artifacts.load_manifest(model_id)
+    if not base:
+        raise ValueError("Model bulunamadı")
+    repeats = max(1, min(int(params.get("repeats") or 1), 10))
+    min_gain = max(0.0, float(params.get("min_gain") or 0.0))
+    job_id = params.get("_job_id")
+
+    def val_score(metrics: Dict[str, Any]) -> float:
+        # Ana ölçüt: 3 pencereli işlem kalitesi (kâr). Yoksa eski skor.
+        quality = ((metrics or {}).get("quality") or {}).get("robust") or {}
+        if quality.get("score") is not None:
+            return float(quality["score"])
+        ref = (metrics or {}).get("refinement") or {}
+        if ref.get("best_score") is not None:
+            return float(ref["best_score"])
+        val = (metrics or {}).get("validation") or {}
+        return float(val.get("edge_pct") or 0.0)
+
+    def robust_f1(metrics: Dict[str, Any]) -> Optional[float]:
+        """Çoklu-pencere uyum F1'i (test görmez); yoksa validation F1'i."""
+        agr = (metrics or {}).get("agreement") or {}
+        robust = (agr.get("robust") or {}).get("f1")
+        if robust is not None:
+            return float(robust)
+        val = (agr.get("validation") or {}).get("f1")
+        return float(val) if val is not None else None
+
+    def promo_score(f1: Optional[float], trading: Dict[str, Any]) -> Optional[float]:
+        """Terfi skoru: çoklu-pencere F1 baskın + al-tut farkı (test kullanılmaz).
+
+        Eski kayıtlarda saklanan ``best_score`` farklı skor formülleriyle
+        üretilmiş olabilir; bu yüzden karşılaştırma her iki taraf için de
+        burada yeniden hesaplanır.
+        """
+        if f1 is None:
+            return None
+        trading = trading or {}
+        edge = float(trading.get("edge_pct") or 0.0)
+        ret = float(trading.get("total_return_pct") or 0.0)
+        # F1 baskın; validation ticareti yalnızca küçük bir düzeltme yapar.
+        # Tek bir validation dilimindeki edge gürültüsü terfi kararını tek
+        # başına ele geçirmemeli (test zaten hiç kullanılmaz).
+        score = float(f1) * 100.0
+        score += max(-20.0, min(edge, 20.0)) * 0.1
+        score += max(-20.0, min(ret, 20.0)) * 0.05
+        return round(score, 4)
+
+    current_score = val_score(base.get("metrics") or {})
+    base_metrics = base.get("metrics") or {}
+    # Karşılaştırma tabanı: çoklu-pencere F1 + saklanan validation ticareti.
+    # (Eski modellerde robust F1 yok; ilk eğitimde ebeveynden yeniden ölçülür.)
+    base_robust = robust_f1(base_metrics)
+    base_promo = promo_score(base_robust, base_metrics.get("validation") or {})
+    if base_promo is not None:
+        current_score = base_promo
+    current_robust = base_robust
+    base_params = dict(base.get("params") or {})
+    # Orijinal öğrenme ayarları; her tur bunlardan türetilir (zincirleme olmaz).
+    base_lr = float(base_params.get("learning_rate") or 0.003)
+    base_drop = float(base_params.get("dropout") or 0.15)
+    # Önceki neslin eğitim hatasına göre örnek ağırlığı; turdan tura artar ki
+    # ilk turda düzeltilmeyen örnekler sonraki turlarda daha çok görülsün.
+    base_focus = max(0.25, min(float(params.get("focus") or 0.5), 3.0))
+    # Motor sıra tabanlı mı? (LSTM/Transformer)
+    _spec = base_params.get("spec") or {}
+    if not isinstance(_spec, dict):
+        _spec = {}
+    use_seq = str(_spec.get("engine") or base_params.get("engine") or "mlp") in {"lstm", "transformer"}
+    _kind = str(base_params.get("label_kind") or "local_min_max")
+    lmm_labels = _kind in {"local_min_max", "local_extreme"}
+    attempts: List[Dict[str, Any]] = []
+    promoted = 0
+    final_manifest = base
+
+    for step in range(1, repeats + 1):
+        if _cancelled(job_id):
+            raise RuntimeError("İş iptal edildi")
+        _progress(job_id, 5 + int((step - 1) / repeats * 90), f"Tur {step}/{repeats}: eğitiliyor")
+        parent = final_manifest
+        # Aynı veri kalır, ancak her tur farklı bir öğrenme yapılandırması dener.
+        # Tek sayılı turlar ısınmış modelden ince ayar, çift sayılı turlar
+        # sıfırdan (soğuk) eğitim yapar: ısınmış modelin yerel optimumuna
+        # takılmadan daha iyi bir çözüm havzası aranır.
+        cold = step % 2 == 0
+        drift = ((step - 1) % 7) - 2  # -2 .. +4
+        seq_epochs = 24 if use_seq else int(max(200 if cold else 150, min(int(base_params.get("epochs") or 120), 250)))
+        seq_patience = 8 if use_seq else (3 if cold else max(15, int(base_params.get("patience") or 15)))
+        train_params = {
+            **{k: v for k, v in base_params.items() if k not in {"retrain_model_id"}},
+            **{k: v for k, v in params.items() if k not in {"model_id", "repeats", "min_gain", "_job_id"}},
+            "coin": params.get("coin") or base_params.get("coin"),
+            "period": params.get("period") or base_params.get("period"),
+            "parent_model_id": "" if cold else parent["id"],
+            "warm_start": not cold,
+            # Her tur farklı bir eğitim sırası/tohumu kullanır; aksi halde aynı
+            # veri + aynı tohum birebir aynı modeli üretip skor hiç değişmez.
+            "seed_offset": step * 997,
+            # Soğuk turda öğrenme hızı daha yüksek ve dropout standart: sıfırdan
+            # öğrenen model daha cesur adım atabilir. Isınmış turda ince ayar.
+            "learning_rate": 0.004 if cold else round(min(0.02, max(0.0005, base_lr * (1.0 + 0.25 * drift))), 6),
+            "dropout": 0.1 if cold else round(min(0.5, max(0.0, base_drop + 0.02 * drift)), 4),
+            "focus": round(min(3.0, base_focus + 0.25 * (step - 1)), 3),
+            # Eğitim bütçesi motora göre: sıra modelleri tek turda uzun
+            # eğitim yapar (tur sayısı trainer içinde 1-2 ile sınırlanır),
+            # tabular modeller daha çok turla iyileşir.
+            "epochs": seq_epochs,
+            "patience": seq_patience,
+            "iterations": 1 if use_seq else (8 if cold else max(4, min(int(base_params.get("iterations") or 4), 6))),
+            "es_min_delta": float(base_params.get("es_min_delta") or 1e-4),
+            # Sınıf dengeleme mevcut modelin ayarından devralınır; eski
+            # modellerde kapalıdır (karşılaştırma aynı hedefte kalır).
+            "class_balance": float(base_params.get("class_balance", 0.0)),
+            "ensemble": int(max(1, min(int(params.get("ensemble") or (1 if use_seq else base_params.get("ensemble") or 2)), 4))),
+            "name": f"{base.get('name') or model_id} · tur {step}",
+            "skip_test": False,
+        }
+        candidate = train_model(train_params)
+        cand_manifest = candidate["model"]
+        cand_report = candidate["report"]
+        cand_score = val_score(cand_manifest.get("metrics") or {})
+        # Çoklu-pencere uyumu: ebeveyninki bu eğitimde aynı pencerelerde
+        # yeniden ölçüldü (elma-elma). Test hiç kullanılmaz.
+        cand_robust = robust_f1(cand_manifest.get("metrics") or {})
+        cand_promo = promo_score(cand_robust, (cand_manifest.get("metrics") or {}).get("validation") or {})
+        if cand_promo is not None:
+            cand_score = cand_promo
+        parent_robust = (cand_report.get("lineage") or {}).get("parent_robust_f1")
+        if parent_robust is None:
+            parent_robust = current_robust
+        if parent_robust is None:
+            parent_robust = cand_robust
+        base_promo = promo_score(parent_robust, (parent.get("metrics") or {}).get("validation") or {})
+        if base_promo is not None:
+            current_score = base_promo
+        robust_ok = (
+            not lmm_labels
+            or cand_robust is None
+            or parent_robust is None
+            or float(cand_robust) >= float(parent_robust) - 0.002
+        )
+        comparable = ((base.get("metrics") or {}).get("quality") or {}).get("robust", {}).get("score") is not None
+        min_trades_ok = int((((cand_manifest.get("metrics") or {}).get("validation") or {}).get("trade_count")) or 0) >= 3
+        if comparable:
+            improved = bool(cand_score > current_score + min_gain and robust_ok)
+        else:
+            # Eski model farklı ölçütle eğitilmiş: yeni aday, makul işlem
+            # sayısıyla geliyorsa terfi eder (elma-armut kıyaslaması yapılmaz).
+            improved = bool(cand_score > -40.0 and min_trades_ok)
+
+        attempt = {
+            "step": step,
+            "candidate_id": cand_manifest["id"],
+            "parent_version": int(parent.get("version") or 1),
+            "previous_score": round(current_score, 4),
+            "candidate_score": round(cand_score, 4),
+            "improved": bool(improved),
+            "focus": float(train_params.get("focus") or 0.0),
+            "previous_robust_f1": None if parent_robust is None else round(float(parent_robust), 4),
+            "candidate_robust_f1": None if cand_robust is None else round(float(cand_robust), 4),
+            "previous_f1": round(
+                float(
+                    (((parent.get("metrics") or {}).get("agreement") or {}).get("validation") or {}).get("f1")
+                    or 0.0
+                ),
+                4,
+            ),
+            "candidate_f1": round(
+                float(
+                    (((cand_manifest.get("metrics") or {}).get("agreement") or {}).get("validation") or {}).get("f1")
+                    or 0.0
+                ),
+                4,
+            ),
+            "warm_start": bool((cand_report.get("lineage") or {}).get("warm_start_used")),
+            "validation": (cand_manifest.get("metrics") or {}).get("validation"),
+            "test": (cand_manifest.get("metrics") or {}).get("test"),
+        }
+        attempts.append(attempt)
+
+        if improved:
+            # Adayın ağırlıklarını aynı model kimliğine taşı: sürüm artar.
+            bundle = artifacts.load_bundle(cand_manifest["id"])
+            final_manifest = artifacts.save_model(
+                name=base.get("name") or model_id,
+                bundle=bundle,
+                model_id=model_id,
+                params={**base_params, **(cand_manifest.get("params") or {}),
+                        "retrain_model_id": None},
+                metrics=cand_manifest.get("metrics") or {},
+                data_meta=cand_manifest.get("data") or {},
+                feature_names=cand_manifest.get("feature_names") or [],
+                thresholds=cand_manifest.get("thresholds") or {},
+                notes=str(params.get("notes") or base.get("notes") or ""),
+            )
+            artifacts.write_report(model_id, cand_report)
+            current_score = cand_score
+            if cand_robust is not None:
+                current_robust = cand_robust
+            promoted += 1
+            # Aday kopyasını temizle; kimlik tek kalsın.
+            try:
+                artifacts.delete_model(cand_manifest["id"])
+            except Exception:
+                pass
+        else:
+            # Gerileme kabul edilmez: mevcut sürüm korunur, aday diske
+            # bırakılmaz (arşiv listesi şişmesin).
+            try:
+                artifacts.delete_model(cand_manifest["id"])
+            except Exception:
+                pass
+
+    _progress(job_id, 97, "Sonuç derleniyor")
+    return {
+        "ok": True,
+        "model_id": model_id,
+        "version": int(final_manifest.get("version") or 1),
+        "repeats": repeats,
+        "promoted": promoted,
+        "score": round(current_score, 4),
+        "attempts": attempts,
+        "model": final_manifest,
+        "report": _ai_report_summary(artifacts.read_report(model_id) or {}),
+    }
+
+
+def run_ai_auto_train(params: Dict[str, Any]) -> Dict[str, Any]:
+    from app.ai.auto import auto_train
+
+    if not settings.AI_ENABLED:
+        raise RuntimeError("AI kapalı. Ayarlar > Sistem > Yapay zekâ özelliklerini açın.")
+    job_id = params.get("_job_id")
+    _progress(job_id, 3, "Profil okunuyor")
+    result = auto_train({k: v for k, v in params.items() if k != "_job_id"}, job_id=job_id)
+    _progress(job_id, 97, f"Karar: {result.get('decision')}")
+    return {**result, "report": _ai_report_summary(result.get("report") or {})}
+
+
 def run_ai_train(params: Dict[str, Any]) -> Dict[str, Any]:
     from app.ai.trainer import train_model
 
@@ -1186,7 +1696,7 @@ def run_ai_train(params: Dict[str, Any]) -> Dict[str, Any]:
         "ok": True,
         "model_id": (result.get("model") or {}).get("id"),
         "metrics": (result.get("model") or {}).get("metrics"),
-        "report": result.get("report"),
+        "report": _ai_report_summary(result.get("report") or {}),
     }
 
 
@@ -1199,6 +1709,21 @@ def run_ai_auto(params: Dict[str, Any]) -> Dict[str, Any]:
     _progress(job_id, 10, "Otomatik öğrenme başladı: veri çekiliyor")
     result = run_once(trigger=str(params.get("trigger") or "manual"))
     _progress(job_id, 95, f"Karar: {result.get('decision')}")
+    if result.get("report"):
+        result = {**result, "report": _ai_report_summary(result["report"])}
+    return result
+
+
+def run_ai_evolve(params: Dict[str, Any]) -> Dict[str, Any]:
+    from app.ai.evolve import evolve
+
+    if not settings.AI_ENABLED:
+        raise RuntimeError("AI kapalı. Ayarlar > Sistem > Yapay zekâ özelliklerini açın.")
+    job_id = params.get("_job_id")
+    _progress(job_id, 5, "Nesil eğitimi hazırlanıyor")
+    result = evolve(params)
+    _progress(job_id, 95, f"Karar: {result.get('decision')}")
+    result = {**result, "report": _ai_report_summary(result.get("report") or {})}
     return result
 
 
@@ -1217,7 +1742,10 @@ HANDLERS = {
     "strategy_results": run_strategy_results,
     "strategy_analyze_save": run_strategy_analyze_save,
     "ai_train": run_ai_train,
+    "ai_auto_train": run_ai_auto_train,
+    "ai_retrain": run_ai_retrain,
     "ai_auto": run_ai_auto,
+    "ai_evolve": run_ai_evolve,
     "snapshot_record": run_snapshot_record,
     "snapshot_verify": run_snapshot_verify,
     "backup_create": run_backup_create,

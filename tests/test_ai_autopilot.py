@@ -174,3 +174,20 @@ def test_archived_model_allowed_for_backtest(tmp_path, monkeypatch):
     model_id = _saved_archived_model(tmp_path, monkeypatch)
     evaluator = build_evaluator({"type": "ai", "model_id": model_id}, allow_archived=True)
     assert evaluator.id == model_id
+
+
+def test_autopilot_persists_architecture_spec():
+    saved = autopilot.save_settings({
+        "spec": {
+            "engine": "mlp",
+            "output_mode": "ternary",
+            "hidden_layers": [32, 16],
+            "activation": "tanh",
+            "feature_groups": ["returns", "rsi_macd"],
+        }
+    })
+    assert saved["spec"]["hidden_layers"] == [32, 16]
+    assert saved["spec"]["output_mode"] == "ternary"
+    params = autopilot.build_params(autopilot.load_settings(), "test")
+    assert params["spec"]["activation"] == "tanh"
+    assert params["spec"]["feature_groups"] == ["returns", "rsi_macd"]

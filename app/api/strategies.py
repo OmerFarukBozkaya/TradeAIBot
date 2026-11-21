@@ -36,6 +36,8 @@ class PreviewBody(BaseModel):
     definition: Dict[str, Any]
     coin: str = "BTCUSDT"
     period: str = "1h"
+    source: str = "auto"
+    asset_class: str = ""
 
 
 class BacktestBody(BaseModel):
@@ -45,6 +47,10 @@ class BacktestBody(BaseModel):
     limit: int = 20000
     cash: float = 100.0
     risk: Dict[str, Any] = {}
+    source: str = "auto"
+    asset_class: str = ""
+    start: Optional[str] = None
+    end: Optional[str] = None
 
 
 class BacktestAllBody(BaseModel):
@@ -52,8 +58,13 @@ class BacktestAllBody(BaseModel):
     period: str = "1h"
     limit: int = 20000
     cash: float = 100.0
+    risk: Dict[str, Any] = {}
     include_archived: bool = False
     keys: Optional[List[str]] = None
+    source: str = "auto"
+    asset_class: str = ""
+    start: Optional[str] = None
+    end: Optional[str] = None
 
 
 @router.get("/indicators")
@@ -185,10 +196,13 @@ async def preview(body: PreviewBody):
     errors = validate_definition(body.definition)
     if errors:
         raise HTTPException(400, "; ".join(errors))
-    from core import Binance
-
     try:
-        data = Binance().get_coin_data(body.coin, body.period, 1000)
+        from app.market_data import load_history
+
+        data, _meta = load_history(
+            body.coin, body.period, 1000, source=body.source,
+            asset_class=body.asset_class,
+        )
         if body.definition.get("builtin"):
             from app.strategies.builtin import BuiltinStrategy
 
@@ -226,6 +240,10 @@ async def backtest(body: BacktestBody):
             "limit": body.limit,
             "cash": body.cash,
             "risk": body.risk,
+            "source": body.source,
+            "asset_class": body.asset_class,
+            "start": body.start,
+            "end": body.end,
         },
     )
     return job
@@ -241,8 +259,13 @@ async def backtest_all(body: BacktestAllBody):
             "period": body.period,
             "limit": body.limit,
             "cash": body.cash,
+            "risk": body.risk,
             "include_archived": body.include_archived,
             "keys": body.keys,
+            "source": body.source,
+            "asset_class": body.asset_class,
+            "start": body.start,
+            "end": body.end,
         },
     )
     return job

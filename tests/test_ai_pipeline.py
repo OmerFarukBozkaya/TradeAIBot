@@ -91,6 +91,7 @@ def test_training_pipeline_saves_candidate(tmp_path, monkeypatch):
     assert report["split"]["train"]["rows"] > 0
     assert report["split"]["validation"]["rows"] > 0
     assert report["split"]["test"]["rows"] > 0
-    assert report["label"]["embargo_bars"] == 12
+    # Varsayılan hedef Local_Min_Max: embargo en az pivot penceresi kadar olmalı.
+    assert report["label"]["embargo_bars"] == int(report["config"]["extreme_window"]) + 2
     assert report["test"]["trading"]["trade_count"] >= 0
     assert (tmp_path / "ai_models" / manifest["id"] / "model.pkl").exists()

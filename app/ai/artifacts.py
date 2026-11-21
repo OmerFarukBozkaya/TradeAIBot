@@ -72,32 +72,64 @@ def save_model(
     feature_names: List[str],
     thresholds: Dict[str, float],
     notes: str = "",
+    model_id: Optional[str] = None,
 ) -> Dict[str, Any]:
-    """Modeli diske ve SQLite kataloğuna yazar."""
+    """Modeli diske ve SQLite kataloğuna yazar.
+
+    ``model_id`` verilirse **aynı model** güncellenir: dosya yerinde kalır,
+    sürüm numarası artar ve önceki denemeler `history` altında saklanır.
+    Böylece aynı modeli tekrar tekrar eğitmek mümkündür.
+    """
     MODEL_ROOT.mkdir(parents=True, exist_ok=True)
-    stamp = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
-    slug = re.sub(r"[^A-Za-z0-9]+", "_", str(name or "model")).strip("_")[:28] or "model"
-    model_id = f"ai_{stamp}_{slug}_{data_hash(params)[:6]}"
-    folder = model_dir(model_id)
-    suffix = 1
-    while folder.exists():
-        model_id = f"ai_{stamp}_{slug}_{data_hash(params)[:6]}_{suffix}"
+    existing: Optional[Dict[str, Any]] = None
+    if model_id:
+        model_id = _safe_id(model_id)
+        existing = load_manifest(model_id)
+        if not existing:
+            raise ValueError(f"Model bulunamadı: {model_id}")
         folder = model_dir(model_id)
-        suffix += 1
-    folder.mkdir(parents=True, exist_ok=False)
+        folder.mkdir(parents=True, exist_ok=True)
+    else:
+        stamp = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
+        slug = re.sub(r"[^A-Za-z0-9]+", "_", str(name or "model")).strip("_")[:28] or "model"
+        model_id = f"ai_{stamp}_{slug}_{data_hash(params)[:6]}"
+        folder = model_dir(model_id)
+        suffix = 1
+        while folder.exists():
+            model_id = f"ai_{stamp}_{slug}_{data_hash(params)[:6]}_{suffix}"
+            folder = model_dir(model_id)
+            suffix += 1
+        folder.mkdir(parents=True, exist_ok=False)
+
     _dump(bundle, folder / "model.pkl")
+    version = int((existing or {}).get("version") or 0) + 1
+    history = list((existing or {}).get("history") or [])
+    if existing:
+        history.append(
+            {
+                "version": int(existing.get("version") or 1),
+                "created_at": existing.get("created_at"),
+                "metrics": (existing.get("metrics") or {}).get("test"),
+                "validation": (existing.get("metrics") or {}).get("validation"),
+                "thresholds": existing.get("thresholds"),
+            }
+        )
+        history = history[-20:]
     manifest = {
         "id": model_id,
-        "name": name or model_id,
-        "created_at": _now(),
-        "status": "candidate",
-        "version": 1,
+        "name": name or (existing or {}).get("name") or model_id,
+        "created_at": (existing or {}).get("created_at") or _now(),
+        "updated_at": _now(),
+        "status": (existing or {}).get("status") or "candidate",
+        "version": version,
+        "trained_versions": version,
         "params": params,
         "feature_names": feature_names,
         "thresholds": thresholds,
         "metrics": metrics,
         "data": data_meta,
         "notes": notes,
+        "history": history,
     }
     (folder / "manifest.json").write_text(
         json.dumps(manifest, ensure_ascii=False, indent=2, default=str), encoding="utf-8"
@@ -108,11 +140,11 @@ def save_model(
         (
             model_id,
             manifest["name"],
-            "candidate",
+            manifest["status"],
             json.dumps(manifest, ensure_ascii=False, default=str),
             json.dumps(metrics, ensure_ascii=False, default=str),
             manifest["created_at"],
-            manifest["created_at"],
+            manifest["updated_at"],
         ),
     )
     return manifest
@@ -167,6 +199,9 @@ def list_models(include_archived: bool = False) -> List[Dict[str, Any]]:
                 "metrics": manifest.get("metrics") or {},
                 "thresholds": manifest.get("thresholds") or {},
                 "data": manifest.get("data") or {},
+                "version": int(manifest.get("version") or 1),
+                "updated_at": manifest.get("updated_at") or row.get("updated_at"),
+                "history": manifest.get("history") or [],
                 "feature_count": len(manifest.get("feature_names") or []),
                 "notes": manifest.get("notes") or "",
             }
@@ -201,6 +236,35 @@ def delete_model(model_id: str) -> Dict[str, Any]:
         shutil.rmtree(folder)
     db.execute("DELETE FROM ai_models WHERE id=?", (model_id,))
     return {"ok": True, "id": model_id}
+
+
+def bulk_delete(statuses: Optional[List[str]] = None) -> Dict[str, Any]:
+    """Aday ve/veya arşiv modellerini toplu siler.
+
+    ``active`` modeller asla silinmez; yanlış çağrıda ana modeli kaybetmemek
+    için durum listesi ``candidate`` ve ``archived`` ile sınırlanır.
+    """
+    allowed = {"candidate", "archived"}
+    wanted = {str(s) for s in (statuses or sorted(allowed)) if str(s) in allowed}
+    if not wanted:
+        raise ValueError("Silinecek durum seçilmedi (candidate / archived)")
+    deleted: List[str] = []
+    failed: List[Dict[str, str]] = []
+    for item in list_models(include_archived=True):
+        if item.get("status") not in wanted:
+            continue
+        try:
+            delete_model(item["id"])
+            deleted.append(item["id"])
+        except Exception as exc:  # noqa: BLE001 - tek model hatası toplu silmeyi durdurmaz
+            failed.append({"id": item["id"], "error": str(exc)[:200]})
+    return {
+        "ok": True,
+        "deleted": len(deleted),
+        "ids": deleted,
+        "failed": failed,
+        "statuses": sorted(wanted),
+    }
 
 
 def write_report(model_id: str, report: Dict[str, Any]) -> None:

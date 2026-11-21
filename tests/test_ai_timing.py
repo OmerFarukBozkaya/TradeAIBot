@@ -121,3 +121,16 @@ def test_training_report_contains_refinement(tmp_path, monkeypatch):
     # Test kümesi hiçbir seçimde kullanılmadı: en iyi tur test değil validation
     # metrikleriyle seçilmiş olmalı.
     assert ref["history"][ref["best_iteration"] - 1]["score"] == ref["best_score"]
+
+
+def test_threshold_adjustment_raises_on_early_signals():
+    from app.ai.trainer import _threshold_adjustment
+
+    early = _threshold_adjustment({"entry": {"erken": 60, "geç": 10, "zamanında": 10}})
+    assert early["delta"] > 0
+    late = _threshold_adjustment({"entry": {"erken": 10, "geç": 60, "zamanında": 10}})
+    assert late["delta"] < 0
+    balanced = _threshold_adjustment({"entry": {"erken": 20, "geç": 20, "zamanında": 20}})
+    assert balanced["delta"] == 0
+    small = _threshold_adjustment({"entry": {"erken": 3, "geç": 1, "zamanında": 1}})
+    assert small["delta"] == 0

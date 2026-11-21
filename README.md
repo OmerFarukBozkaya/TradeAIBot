@@ -71,6 +71,47 @@ Kripto para analizi, backtest, tarama ve otomatik alım-satım için **web aray�
 > Değişiklikten sonra `docker compose up -d` (yeniden derleme gerekmez). Giriş
 > yapmış oturumlar yeni çerez adıyla bir kez yeniden giriş ister.
 
+### Çoklu varlık: altın, gümüş, hisse ve TEFAS (yalnızca test)
+
+Backtest, tarama, analiz ve AI eğitimi artık Binance kripto dışındaki
+varlıklarla da çalışır. **Canlı/paper bot işlemleri yalnızca Binance kripto
+sembolleriyle sınırlıdır**; bu varlıklar gerçek emir göndermez.
+
+| Varlık | Sembol örneği | Kaynak | Sınır |
+|---|---|---|---|
+| Kripto | `BTCUSDT` | Binance | Tüm Binance geçmişi |
+| Altın | `XAUUSD` | Yahoo `GC=F` | Günlükde on yıllar |
+| Gümüş | `XAGUSD` | Yahoo `SI=F` | Günlükde on yıllar |
+| ABD hissesi | `AAPL`, `MSFT` | Yahoo | Günlükde on yıllar |
+| BIST hissesi | `GARAN.IS`, `THYAO.IS` | Yahoo | Günlükde on yıllar |
+| TEFAS fonu | `TEFAS:AFT` | TEFAS | Günlük, en fazla 5 yıl |
+
+Arayüzde her formda **Varlık** ve **Sembol** ayrı seçilir. Sembol alanının
+yanındaki **Ara** düğmesi arama penceresini açar:
+
+- Sembol kodu veya şirket/fon adı ile arar (`garanti`, `altın`, `AFT`, `bitcoin`).
+- Sonuçlar varlık sınıfına göre filtrelenebilir; her satırda **canlı/test**
+  etiketi ve sağlayıcı bilgisi görünür.
+- Yazarken öneri listesi açılır; Enter ilk öneriyi seçer.
+- Tarama ve piyasa analizinde **Ekle** ile birden çok sembol listeye eklenir.
+
+Periyot alanına `45m`, `2h`, `3d`, `1w`, `1M`, `1y` gibi serbest değer yazılabilir:
+
+- Kaynak periyodu istenenden küçükse veri otomatik yeniden örneklenir
+  (open=ilk, high=max, low=min, close=son, hacim=toplam).
+- Kaynak periyodu istenenden büyükse açık hata verilir.
+- Yahoo intraday geçmişi sınırlıdır (1m ~7 gün, 5-30m ~60 gün, 1h ~730 gün).
+- TEFAS yalnızca günlük NAV verir; `open=high=low=close`, hacim 0 kabul edilir.
+  High/low/hacim kullanan stratejilerde sonuçlar yanıltıcı olabilir.
+
+Veriler `Data/market/<sağlayıcı>/<sembol>/<periyot>.csv` altında önbelleklenir.
+Ağ hatasında son önbellek kullanılır. API:
+
+- `GET /api/market/symbols` — hazır sembol kataloğu ve periyotlar
+- `GET /api/market/history?symbol=XAUUSD&period=1d&limit=3000` — veri önizleme
+  ve kalite raporu
+- `POST /api/market/cache/clear` — önbelleği temizle
+
 ### AI eğitimi (dashboard)
 
 AI modeli eğitimi **panelden** yapılır: `AI Eğitimi` sekmesi. Önerilen yol tek
@@ -78,6 +119,32 @@ anahtardır:
 
 **Otomatik öğrenme** → coin, periyot, öğrenme tarzı (Temkinli / Dengeli / Agresif)
 ve kaç saatte bir çalışacağını seç → anahtarı aç → **Şimdi öğren** ile ilk turu başlat.
+
+**Modeli eğit** düğmesi tek karar noktasıdır: tüm ayarlar tek kartta toplanmıştır.
+Model, **Local_Min_Max'ın dip/zirve noktalarına yaklaşmayı** ve **al-tut'u geçmeyi**
+hedefler. Sistem birkaç mimariyi validation uyumuyla dener, en iyisini tam eğitimle
+doğrular ve aynı modeli yerinde günceller. Adaylar daha iyi değilse mevcut model
+korunur; bu bir hata değildir. Eski ayrıntılı ekranlar “Uzman ayarları” altına taşındı.
+Ayrıntı: `LOCAL_MIN_MAX_HEDEFI.md`.
+
+> Docker'da eğitim hızı için BLAS/OpenMP iş parçacıkları varsayılan **2** ile
+> sınırlanır (`TRADEAI_THREADS`). Aksi halde düşük CPU kotasında kütüphaneler
+> birbirini ezerek eğitimi dakikalarca uzatabiliyor.
+
+**Nesiller boyu eğit** düğmesi, seçilen sayıda nesli art arda eğitir. Her nesil
+önceki modelin ağırlıklarından **sıcak başlangıç** yapar; seçim validation
+skoruyla, test ise yalnızca seçilen nesil için bir kez çalışır. Böylece her
+eğitim sıfırdan başlamaz ve kabul edilen model gerilemez.
+
+**Fiyat verisi** kartından veriyi bir kez çekip sabitleyebilirsin; sonraki
+eğitimler borsaya istek atmadan aynı kopyayı kullanır. İndikatörler bu sabit
+veriden yeniden hesaplanır.
+
+Panelde **AI Eğitimi → Model mimarisi** kartından motoru (sinir ağı / gradient
+boosting), gizli katmanları, aktivasyonu, dropout/L2'yi, çıktı biçimini
+(AL+SAT / nötr-dip-zirve / gelecek getiri) ve kullanılacak **özellik gruplarını**
+kendin seçebilirsin. Seçilmeyen özellik grubu modele hiç girmez; böylece hangi
+bilginin gerçekten işe yaradığını ölçebilirsin.
 
 Her turda model kendi kendini eğitir, **5 tura kadar** eğitim kümesindeki
 işlemleri "erken / geç / zamanında" olarak analiz eder, hatalı zamanlamadaki
@@ -786,12 +853,26 @@ botun/stratejinin risk bloğu uygulanır.
 | `profit_exit_donchian` | **Kâr koruma:** pozisyon kârdayken **n mumluk Donchian dibi** kırılırsa çık |
 | `take_profit_atr` | Girişten **n × ATR** yukarıda kâr al |
 | `take_profit_pct` | Girişten **%n** yukarıda kâr al |
+| `breakeven_pct` | Kâr **%n**'yi geçince stop en az giriş fiyatına çekilir |
+| `partial_tp_pct` | Kâr **%n**'ye ulaşınca pozisyonun bir kısmı satılır; kalan takibe devam eder |
+| `partial_tp_fraction` | Kısmi satışta satılacak oran (0,5 = yarısı); kısmi hedef sonrası stop girişe çekilir |
+| `risk_per_trade_pct` | Pozisyon boyutu stop mesafesine göre: stop vurulursa kaybedilecek nakit **%n** (`0` = nakit × pozisyon yüzdesi) |
+| `static_stop_pct` | `static_stop` açıkken sabit stop yüzdesi (varsayılan %2,5) |
 | `cooldown` | Çıkıştan sonra **n mum boyunca yeni giriş yok** (komisyon erozyonunu önler) |
 | `cooldown_min_loss_pct` | Cooldown yalnızca çıkış K/Z'si **-%n** veya daha kötüyse uygulanır (`0` = her çıkışta) |
 
-- Birincil çıkışlar **stop, takipli stop, kâr koruma ve sinyaldir**. **Zaman limiti tamamen kaldırıldı.**
-- Stop ve kâr hedefi **mum içi high/low** ile kontrol edilir (sadece kapanış değil).
+- Birincil çıkışlar **stop, takipli stop, breakeven, kâr al, kâr koruma ve sinyaldir**. **Zaman limiti tamamen kaldırıldı.**
+- **Kâr al (ATR/yüzde) artık canlı/paper botlarda da uygulanır**; daha önce yalnızca backtest'te çalışıyordu.
+  Panelde "Kâr al" anahtarı kapatılırsa sayısal hedefler devre dışı kalır.
+- Eski **ortalama K/Z tabanlı kâr al** kaldırıldı (kârın büyük kısmını geri veriyordu); yerine
+  takipli stop, Donchian kâr koruma, breakeven ve kısmi kâr hedefleri var.
+- **Destek / dinamik / sabit stop artık backtest'te de aynı kurallarla çalışır.** Destek stop
+  yalnızca son **300 mumu** tarar (`support_lookback`) ve seviyeler her **10 mumda** bir
+  yenilenir (`support_refresh`); arada saklanan seviye her mumda kontrol edilir.
+- Stop ve kâr hedefi **mum içi high/low** ile kontrol edilir (sadece kapanış değil) ve çıkış
+  **seviye fiyatından** yapılır (backtest ve canlı aynı; ikisinde de kayma uygulanır).
 - Aynı mumda hem stop hem kâr hedefi vurulursa **stop önceliklidir** (kötümser varsayım).
+- Kısmi kâr sonrası kalan pozisyonun stopu en az girişe çekilir; böylece kalan kısım zarara dönemez.
 - `cooldown` olmadan stop sonrası aynı sinyal hemen yeniden girer; bu yüzden zorunludur.
 - Backtest sonucunda **pozisyon süreleri** kartı: ortalama/medyan/en uzun tutuş (gün-saat),
   uygulanan risk kuralları ve **çıkış nedenleri** (sinyal, stop, takipli stop, kâr koruma).

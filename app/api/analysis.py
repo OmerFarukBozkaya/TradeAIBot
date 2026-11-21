@@ -15,6 +15,8 @@ class ScanBody(BaseModel):
     strategies: List[Any] = []
     coins: List[str] = []
     list_id: Optional[str] = None
+    source: str = "auto"
+    asset_class: str = ""
 
 
 class BacktestResultsBody(BaseModel):
@@ -33,6 +35,10 @@ class GenericBody(BaseModel):
     max_coins: int = 30
     sort: bool = False
     mode: str = "test"
+    source: str = "auto"
+    asset_class: str = ""
+    start: Optional[str] = None
+    end: Optional[str] = None
 
 
 @router.post("/scan")

@@ -1,14 +1,171 @@
 # AI Eğitimi — Zaman Serisi Protokolü
 
-Bu belge, `Local_Min_Max` stratejisinin "en doğru alım/satım" hedefine yaklaşmak
-için eklenen AI hattını açıklar.
+Bu belge kâr odaklı AI hattını açıklar: veri, özellikler, etiket, model
+mimarisi, işlem politikası, aşırı öğrenme koruması ve ölçülen sonuçlar.
 
-## Neden Local_Min_Max hedefi?
+## Kısa özet
 
-`Local_Min_Max`, her mum için geriye ve ileriye bakarak yerel dip/zirve işaretler.
-İleriye baktığı için **canlıda doğrudan kullanılamaz**. AI'nin hedefi bu etiketi
-kopyalamak değil, yalnızca geçmişten gelen özelliklerle "şu an dibe/zirveye ne
-kadar yakınız?" sorusuna olasılık üretmektir.
+- Model **son 24 mumun gidişatını** görür (LSTM / Transformer).
+- Hedef: **trend yukarıyken dibe yakın almak, tepeye yakın satmak**; al-tut'u geçmek.
+- Giriş/çıkış **işlem disiplini** ile yapılır (rejim kapısı, takipli stop,
+  asgari tutma, bekleme, seçici giriş).
+- Başarı, doğrulamanın 3 ayrı penceresinde **işlem kalitesiyle** ölçülür;
+  test verisi hiçbir seçime katılmaz.
+- Ölçüm (BTCUSDT 1h, son %30): model **+%0,6** (al-tut −%24,6), en iyi
+  indikatör −%14,4.
+
+## Mimari: LSTM ve Transformer (sıra modelleri)
+
+Model artık tek bir mumun özelliklerine değil **son 24 mumun gidişatına** bakar:
+
+| Motor | Ne yapar | Ne zaman |
+|---|---|---|
+| **Transformer** | Dikkat (self-attention) ile pencereyi bütün olarak okur | Varsayılan aday |
+| **LSTM** | Kapılı bellek ile zaman içindeki bağımlılıkları taşır | Varsayılan aday |
+| MLP | Tek mum; hızlı referans | Yedek |
+| GBM | Ağaç tabanlı; sıra belleği yok | Yedek |
+
+Neden sıra modeli? "Dibe yakın al, tepeye yakın sat" kararı fiyatın **son hareketinin
+şekline** bağlıdır (düşüşün yavaşlaması, hacmin kuruması, trendin eğimi). Tek mum bunu
+taşımaz; pencere taşır.
+
+Aşırı öğrenmeye karşı: dropout, L2, gradyan kırpma, göreli erken durma, **tohum
+topluluğu** (2 modelin olasılık ortalaması) ve düşük işlem sayısı.
+
+## Hedef: kâr odaklı (varsayılan)
+
+Eski hedef "Local_Min_Max'a benzemek"ti. Yeni varsayılan **kâr odaklı** hedeftir:
+
+1. **Etiket** (`excess_return`): gelecek `h` mumun getirisi, o anki ATR'ye bölünür
+   (`z = fwd / ATR%`). Eşikler **yalnızca eğitim döneminden** hesaplanır.
+2. **AL**: `z` yüksek **ve** trend yukarı **ve** fiyat kısa vadeli ortalamanın altında
+   → *trend içinde dip alımı*.
+3. **SAT**: `z` düşük **ve** fiyat kısa vadeli ortalamanın üstünde → *tepede satış*.
+4. **Politika**: girişler yalnızca **trend rejimi açıkken** (EMA200 histerezis bandı)
+   yapılır; çıkış **rejim kırılımı + takipli stop** ile olur. Hedef çok uzak tutulur
+   (6×ATR) ki trend kaçırılmasın.
+
+### İşlem disiplini (panelde "Uzman ayarları")
+
+| Ayar | Anlamı | Önerilen |
+|---|---|---|
+| Giriş seçiciliği | Doğrulamada en yüksek olasılıklı mumların %kaçında alım | %2 |
+| Asgari tutma | Pozisyon en az kaç mum tutulur | 24 |
+| Bekleme | Çıkıştan sonra kaç mum alım yok | 24 |
+| Takipli stop | Zirveden geri çekilme | %8 |
+| Rejim bandı | EMA200 histerezis bandı | %2 |
+
+Bu ayarlar olmadan model saatte bir alıp satar ve **işlem maliyeti** kazancı siler.
+Ölçüm: aynı sinyalle 240 işlem −%37, disiplinli hâli 60 işlem −%8.
+
+### Başarı ölçütü
+
+Skor, doğrulamanın **3 ayrı penceresinde** işlem kalitesinden gelir:
+
+```
+pencere_puanı = al-tut farkı + 0.6×getiri + kâr faktörü bonusu
+                − düşüş cezası − aşırı işlem cezası
+```
+
+- 1000 mumda 6'dan fazla işlem cezalandırılır.
+- 3 pencerenin ortalaması + pozitif pencere oranı kullanılır (tek şanslı dönem yetmez).
+- **Test verisi hiçbir seçime katılmaz.**
+
+### Ölçülen sonuç (BTCUSDT 1h, 50.000 mum, son %30 test)
+
+| Strateji | Getiri | Al-tut farkı | İşlem | Maks. düşüş |
+|---|---|---|---|---|
+| Al-tut | −24,56% | — | — | — |
+| Super_Trend (en iyi indikatör) | −14,40% | +10,2 | 30 | −38,9% |
+| MA_Cross | −32,89% | −8,3 | 53 | −45,5% |
+| **LSTM (yeni)** | **+0,64%** | **+22,3** | 21 | **−9,2%** |
+| **Transformer (yeni)** | −4,63% | +17,0 | 7 | −4,7% |
+
+Yani model, test döneminde **hem al-tut'u hem en iyi indikatörü** geçti ve düşüşü
+çok daha küçük tuttu. Yükseliş dönemlerinde (doğrulama) al-tut'un gerisinde kalır;
+bu, sermayeyi korumanın doğal bedelidir.
+
+## Tek düğme: Modeli eğit (önerilen)
+
+**AI Eğitimi → Modeli eğit** kartı tek karar noktasıdır. Tüm ayarlar burada:
+coin, periyot, mum sayısı, fiyat verisi, öğrenme tarzı, ufuk, hedef/stop, arama
+bütçesi, iyileştirme turu, asgari kazanç, motor, çıktı biçimi, katmanlar,
+aktivasyon ve özellik grupları.
+
+Butona bastığında sistem:
+
+1. Profili kaydeder ve fiyat verisini hazırlar (sabit veri varsa ağa çıkmaz).
+2. Mevcut şampiyonu yükler.
+3. `Aranacak mimari sayısı` kadar adayı **validation** ile dener
+   (motor, katmanlar, aktivasyon, özellik grupları otomatik çeşitlenir).
+4. En iyi adayı tam eğitimle (walk-forward + tam iyileştirme) yeniden üretir.
+5. Testi **yalnızca kazanan için bir kez** çalıştırır.
+6. Şampiyondan iyiyse **aynı modeli yerinde günceller** (v2, v3…). Değilse
+   **mevcut modeli korur**.
+
+Kararlar:
+
+| Karar | Anlamı |
+|---|---|
+| `created` | İlk model oluşturuldu ve aktif |
+| `updated` | Aynı model yeni sürümle güncellendi |
+| `kept` | Yeni adaylar daha iyi değildi; mevcut model korundu |
+
+`kept` bir hata değildir: modelin bozulmadığının garantisidir. Hiçbir aday
+eğitilemese bile sistem mevcut modelle devam eder.
+
+Aramada denenen adaylar otomatik silinir; model listesi şişmez. Tüm ayarlar
+`ai_profile` kaydında tutulur, sayfayı yenileyince geri gelir.
+
+## Fiyat verisini sabitle (tekrar çekmesin)
+
+AI Eğitimi → **Fiyat verisi** kartı. Fiyat verisi bir kez çekilir, diske yazılır
+ve sonraki eğitimler bu **sabit kopyadan** okunur; borsaya istek atılmaz.
+
+- **Yeni veri kopyası al**: seçili coin/periyot/mum sayısı için tek seferlik çekim.
+- **Sabitle**: seçilen kopya tüm eğitimlerde (otomatik + elle + nesil) kullanılır.
+- **Sabit veriyi yenile**: aynı coin/periyot için güncel fiyatlarla yeni kopya
+  oluşturur; eski kopya silinmez.
+- **Sabitlemeyi kaldır**: otomatik moda döner. Otomatik modda ilk eğitim veriyi
+  bir kez çeker ve sabitler; sonraki eğitimler aynı kopyayı kullanır.
+- **Sil**: kopyayı diskten kaldırır.
+
+Ham OHLCV saklanır (`open/high/low/close/volume/opendate`); **indikatörler her
+eğitimde bu veriden yeniden hesaplanır**. Yani indikatör tanımını değiştirmek
+veriyi yeniden çekmeyi gerektirmez.
+
+Dosyalar: `Data/AI/datasets/<id>/data.npz` + `manifest.json`.
+Aynı veride tekrar tekrar eğitim yaptığın için modelleri adil karşılaştırabilirsin.
+
+## Nesiller boyu eğitim (her turda daha iyi)
+
+Tek anahtar: **AI Eğitimi → Nesiller boyu eğit**. Her nesil önceki modelin
+ağırlıklarından **sıcak başlangıç** yapar (fine-tune), böylece sıfırdan
+başlamaz; öğrendiği temsili koruyarak üzerine ekler.
+
+Akış:
+
+1. 1. nesil mevcut şampiyondan (yoksa sıfırdan) başlar.
+2. Her nesil yalnızca eğitim kümesinde eğitilir; eşik validation'da seçilir.
+3. Nesil skoru **validation** ile ölçülür — test hiç kullanılmaz.
+4. Skor `min_delta` kadar iyileşmezse sabır sonrası erken durulur.
+5. En iyi nesil seçilir; önceki nesil şampiyonsa yalnızca **+0.5 puan**
+   üstünse terfi eder (gerileme kabul edilmez).
+6. Test, yalnızca seçilen nesil için **bir kez** çalıştırılır (denetim).
+
+Neden gerilemez?
+
+- Sıcak başlangıç + erken durdurma: en iyi epoch ağırlıkları saklanır.
+- Nesil seçimi validation skoruyla; test seçime katılmaz.
+- Şampiyon karşılaştırması ve kalite kapısı aynen uygulanır.
+- Özellik şeması değişirse sıcak başlangıç otomatik atlanır (şekil uyuşmaz).
+
+Aynı davranış otomatik öğrenmede de geçerlidir: her zamanlanmış tur mevcut
+şampiyondan devam eder.
+
+> GBM motorunda sklearn artımlı eğitimi desteklemediği için sıcak başlangıç
+> yoktur; ilerleme veri + deneyim birikiminden gelir. MLP motorunda gerçek
+> fine-tune yapılır.
 
 ## Otomatik öğrenme (önerilen)
 

@@ -15,6 +15,20 @@ from dotenv import load_dotenv
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 
+# BLAS/OpenMP iş parçacığı sınırı.
+# Docker'da CPU kotası düşükken (ör. 2 çekirdek) kütüphaneler `nproc` kadar
+# thread açıp birbirini ezip eğitimi 100 kata kadar yavaşlatabiliyor.
+# Varsayılan 2; `TRADEAI_THREADS` ile değiştirilebilir.
+_THREADS = str(os.getenv("TRADEAI_THREADS", "2") or "2")
+for _thread_var in (
+    "OMP_NUM_THREADS",
+    "OPENBLAS_NUM_THREADS",
+    "MKL_NUM_THREADS",
+    "NUMEXPR_NUM_THREADS",
+    "VECLIB_MAXIMUM_THREADS",
+):
+    os.environ.setdefault(_thread_var, _THREADS)
+
 # Mevcut modüller 'Data' ve 'Log' (büyük harf) bekliyor.
 DATA_DIR = Path(os.getenv("TRADEAI_DATA_DIR", BASE_DIR / "Data"))
 LOG_DIR = Path(os.getenv("TRADEAI_LOG_DIR", BASE_DIR / "Log"))
@@ -192,7 +206,10 @@ class Settings(metaclass=_SettingsMeta):
         "1d": _int("STRATEGY_LIMIT_1D", 3),
     }
 
-    SUPPORTED_PERIODS: List[str] = ["1m", "5m", "15m", "1h", "4h", "1d"]
+    SUPPORTED_PERIODS: List[str] = [
+        "1m", "3m", "5m", "15m", "30m", "45m", "1h", "2h", "4h", "6h", "8h",
+        "12h", "1d", "3d", "1w", "1M",
+    ]
 
     # AI ayrı profil
     AI_ENABLED = _bool("AI_ENABLED", False)

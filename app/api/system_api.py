@@ -91,13 +91,19 @@ async def snapshot_list():
 @router.post("/snapshots")
 async def snapshot_create(body: SnapshotBody):
     """Fiyat + indikatör + strateji çıktılarını kaydeder (iş kuyruğunda çalışır)."""
-    if body.period not in snapshots.SUPPORTED_PERIODS:
+    from app.market_data.periods import parse_period
+
+    try:
+        period = parse_period(body.period).text
+    except ValueError:
         raise HTTPException(400, f"Desteklenmeyen periyot: {body.period}")
+    if period not in snapshots.SUPPORTED_PERIODS:
+        raise HTTPException(400, f"Desteklenmeyen periyot: {period}")
     return create_job(
         "snapshot_record",
         {
             "coin": body.coin,
-            "period": body.period,
+            "period": period,
             "candles": body.candles,
             "note": body.note,
         },

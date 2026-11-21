@@ -153,9 +153,25 @@ function pct(value) {
   return `<span class="${n >= 0 ? "tag green" : "tag red"}">${n >= 0 ? "+" : ""}${fmt(n, 2)}%</span>`;
 }
 // Mum sayısı × periyot → "3 yıl 4 ay 12 gün" (teorik kapsam).
-const TF_MS = { "1m": 6e4, "3m": 18e4, "5m": 3e5, "15m": 9e5, "30m": 18e5, "1h": 36e5, "2h": 72e5, "4h": 144e5, "6h": 216e5, "8h": 288e5, "12h": 432e5, "1d": 864e5 };
+const TF_MS = {
+  "1m": 6e4, "3m": 18e4, "5m": 3e5, "15m": 9e5, "30m": 18e5, "45m": 27e5,
+  "1h": 36e5, "2h": 72e5, "4h": 144e5, "6h": 216e5, "8h": 288e5, "12h": 432e5,
+  "1d": 864e5, "2d": 1728e5, "3d": 2592e5, "1w": 6048e5, "1M": 2592e6, "1y": 31536e6,
+};
+/** Serbest periyot metnini ms'e çevirir (ör. "10m", "90m", "7d", "1G"). */
+const PERIOD_UNIT_MS = { m: 6e4, h: 36e5, d: 864e5, w: 6048e5, M: 2592e6, y: 31536e6 };
+function periodToMs(period) {
+  const text = normalizePeriod(period) || String(period || "").trim();
+  const m = text.match(/^(\d{1,4})([mhdwMy])$/);
+  if (!m) return null;
+  const unit = PERIOD_UNIT_MS[m[2]];
+  return unit ? Number(m[1]) * unit : null;
+}
+function periodMsOf(period) {
+  return periodToMs(period) || TF_MS[period] || 36e5;
+}
 function periodSpanText(candles, period) {
-  const ms = TF_MS[period] || 36e5;
+  const ms = periodMsOf(period);
   const days = (Number(candles || 0) * ms) / 864e5;
   const y = Math.floor(days / 365);
   const rem = days - y * 365;
@@ -171,12 +187,150 @@ function periodSpanText(candles, period) {
 // Borsa geçmişi ~9 yıl olduğundan bunu aşan istekler "tüm geçmiş" olarak etiketlenir.
 const HISTORY_YEARS = 9;
 function limitSpanLabel(candles, period) {
-  const ms = TF_MS[period] || 36e5;
+  const ms = periodMsOf(period);
   const fullCandles = (HISTORY_YEARS * 365 * 864e5) / ms;
   if (Number(candles) > fullCandles) return "tüm geçmiş";
   return `≈ ${periodSpanText(candles, period)}`;
 }
 const LIMIT_CHOICES = [3000, 5000, 10000, 20000, 50000, 100000, 250000];
+/* Varlık sınıfları: test/backtest için kripto dışı da seçilebilir. */
+const ASSET_CLASS_OPTIONS = [
+  { id: "crypto", label: "Kripto", source: "binance" },
+  { id: "metal", label: "Altın / Gümüş", source: "yahoo" },
+  { id: "stock", label: "Hisse", source: "yahoo" },
+  { id: "fund", label: "TEFAS Fonu", source: "tefas" },
+];
+const ASSET_DEFAULT_SYMBOL = { crypto: "BTCUSDT", metal: "XAUUSD", stock: "AAPL", fund: "TEFAS:AFT" };
+const PERIOD_PRESETS = ["1m", "3m", "5m", "15m", "30m", "45m", "1h", "2h", "4h", "6h", "8h", "12h", "1d", "3d", "1w", "1M", "1y"];
+const PERIOD_LABELS = {
+  "1m": "1 dakika", "3m": "3 dakika", "5m": "5 dakika", "15m": "15 dakika",
+  "30m": "30 dakika", "45m": "45 dakika", "1h": "1 saat", "2h": "2 saat",
+  "4h": "4 saat", "6h": "6 saat", "8h": "8 saat", "12h": "12 saat",
+  "1d": "günlük", "3d": "3 gün", "1w": "haftalık", "1M": "aylık", "1y": "yıllık",
+};
+const PERIOD_MS = {
+  "1m": 6e4, "3m": 18e4, "5m": 3e5, "15m": 9e5, "30m": 18e5, "45m": 27e5,
+  "1h": 36e5, "2h": 72e5, "4h": 144e5, "6h": 216e5, "8h": 288e5, "12h": 432e5,
+  "1d": 864e5, "2d": 1728e5, "3d": 2592e5, "1w": 6048e5, "1M": 2592e6, "1y": 31536e6,
+};
+const PERIOD_UNIT_ALIAS = {
+  m: "m", dk: "m", min: "m", mins: "m", dakika: "m",
+  h: "h", hr: "h", saat: "h", st: "h",
+  d: "d", g: "d", gun: "d", "gün": "d", day: "d",
+  w: "w", hf: "w", hafta: "w", week: "w", wk: "w",
+  ay: "M", mo: "M", month: "M",
+  y: "y", yil: "y", "yıl": "y", year: "y", yr: "y",
+};
+/** Serbest periyot metnini kanonik biçime çevirir; geçersizse "" döner. */
+function normalizePeriod(text) {
+  const raw = String(text || "").trim().replace(/\s+/g, "");
+  const m = raw.match(/^(\d{1,4})(\D+)$/);
+  if (!m) return "";
+  const count = Number(m[1]);
+  if (!Number.isFinite(count) || count < 1 || count > 1000) return "";
+  const token = m[2];
+  let unit = "";
+  if (token === "M") {
+    unit = "M"; // büyük M = ay
+  } else if (token.length === 1) {
+    const low = token.toLowerCase();
+    if (low === "g") unit = "d"; // Türkçe "gün"
+    else unit = "mhdwy".includes(low) ? low : "";
+  } else {
+    const key = token.replaceAll("İ", "i").replaceAll("I", "ı").toLowerCase();
+    unit = PERIOD_UNIT_ALIAS[key] || "";
+  }
+  return unit ? `${count}${unit}` : "";
+}
+/** Periyot alanı: hazır seçenekler + "Özel" serbest giriş. */
+function periodFieldHtml(id, value = "1h", extra = "") {
+  const current = normalizePeriod(value) || "1h";
+  const preset = PERIOD_PRESETS.includes(current);
+  const options = PERIOD_PRESETS.map(
+    (p) => `<option value="${p}" ${p === current ? "selected" : ""}>${p} — ${esc(PERIOD_LABELS[p] || p)}</option>`,
+  ).join("");
+  return `<div class="period-picker" data-period-picker="${id}">
+    <select id="${id}-preset" class="period-preset">
+      ${options}
+      <option value="custom" ${preset ? "" : "selected"}>Özel…</option>
+    </select>
+    <input id="${id}" class="period-custom ${preset ? "hidden" : ""}" value="${esc(preset ? "" : current)}"
+      placeholder="ör. 10m, 90m, 2w" autocomplete="off" spellcheck="false" ${extra}>
+  </div>`;
+}
+function periodValueOf(id) {
+  const select = document.getElementById(`${id}-preset`);
+  if (!select) {
+    const input = document.getElementById(id);
+    return input ? normalizePeriod(input.value) || String(input.value || "").trim() : "";
+  }
+  if (select.value !== "custom") return select.value;
+  const input = document.getElementById(id);
+  return input ? normalizePeriod(input.value) : "";
+}
+function markPeriodInvalid(id, invalid) {
+  const wrap = document.querySelector(`[data-period-picker="${id}"]`);
+  if (!wrap) return;
+  wrap.classList.toggle("invalid", !!invalid);
+  const input = document.getElementById(id);
+  if (input) input.setAttribute("aria-invalid", invalid ? "true" : "false");
+}
+function bindPeriodField(id) {
+  const select = document.getElementById(`${id}-preset`);
+  const input = document.getElementById(id);
+  if (!select || !input || select.dataset.periodBound === "1") return;
+  select.dataset.periodBound = "1";
+  const sync = (fire) => {
+    const custom = select.value === "custom";
+    input.classList.toggle("hidden", !custom);
+    markPeriodInvalid(id, false);
+    if (fire) select.dispatchEvent(new Event("period-change", { bubbles: true }));
+  };
+  select.addEventListener("change", () => {
+    sync(true);
+    if (select.value === "custom") input.focus();
+  });
+  input.addEventListener("input", () => {
+    markPeriodInvalid(id, false);
+    select.dispatchEvent(new Event("period-change", { bubbles: true }));
+  });
+  input.addEventListener("blur", () => {
+    const normal = normalizePeriod(input.value);
+    if (normal) input.value = normal;
+    markPeriodInvalid(id, !normal && !!input.value.trim());
+  });
+  // value erişimi için: gizli olsa da input her zaman güncel değeri taşısın.
+  const keepValue = () => {
+    input.value = select.value === "custom" ? input.value : select.value;
+  };
+  select.addEventListener("change", keepValue);
+  sync(false);
+  keepValue();
+}
+/** Form gönderiminde periyodu okur; geçersizse uyarı verir. */
+function readPeriod(id) {
+  const value = periodValueOf(id);
+  if (!value) {
+    markPeriodInvalid(id, true);
+    toast("Geçerli bir periyot gir (ör. 15m, 4h, 1d, 1w, 1M)", true);
+    return null;
+  }
+  markPeriodInvalid(id, false);
+  return value;
+}
+function assetSelectHtml(id, selected = "crypto", includeAuto = false) {
+  const items = includeAuto
+    ? [{ id: "auto", label: "Otomatik" }, ...ASSET_CLASS_OPTIONS]
+    : ASSET_CLASS_OPTIONS;
+  return `<select id="${id}">${items.map((c) => `<option value="${c.id}" ${c.id === selected ? "selected" : ""}>${esc(c.label)}</option>`).join("")}</select>`;
+}
+function assetSourceOf(assetClass) {
+  const found = ASSET_CLASS_OPTIONS.find((c) => c.id === assetClass);
+  return found ? found.source : "auto";
+}
+function assetIntervalMs(period) {
+  return PERIOD_MS[period] || 36e5;
+}
 function limitOptionsHtml(period, selected) {
   return LIMIT_CHOICES.map((l) => `<option value="${l}" ${Number(l) === Number(selected) ? "selected" : ""}>${l.toLocaleString("tr-TR")} mum ${limitSpanLabel(l, period)}</option>`).join("");
 }
@@ -185,6 +339,14 @@ function refreshLimitOptions(select, period) {
   const current = select.value || "20000";
   select.innerHTML = limitOptionsHtml(period, current);
   select.value = current;
+  if (select.selectedIndex < 0 && current) {
+    // Seçili değer listede yoksa (ör. özel limit) koru.
+    const opt = document.createElement("option");
+    opt.value = current;
+    opt.textContent = `${Number(current).toLocaleString("tr-TR")} mum ${limitSpanLabel(current, period)}`;
+    select.appendChild(opt);
+    select.value = current;
+  }
 }
 function statusTag(status) {
   const map = {
@@ -213,6 +375,271 @@ function modal(title, content) {
 }
 function closeModal() { $("#modal").classList.add("hidden"); }
 $("#modal-close").addEventListener("click", closeModal);
+
+/* ------------------------------------------------------------------ */
+/* Sembol seçici: arama, öneri ve katalog                              */
+/* ------------------------------------------------------------------ */
+const ASSET_LABELS = Object.fromEntries(ASSET_CLASS_OPTIONS.map((c) => [c.id, c.label]));
+
+function symbolFieldHtml(id, value = "", opts = {}) {
+  const asset = opts.asset || "";
+  const placeholder = opts.placeholder || "Sembol yaz (ör. BTCUSDT, XAUUSD, AAPL)";
+  return `<div class="symbol-picker">
+    <input id="${id}" value="${esc(value)}" placeholder="${esc(placeholder)}" autocomplete="off" spellcheck="false">
+    <button type="button" class="ghost small symbol-pick-btn" data-symbol-pick="${id}" data-symbol-asset="${asset}" title="Sembol ara ve listele">Ara</button>
+  </div>`;
+}
+
+function symbolMultiFieldHtml(id, value = "", opts = {}) {
+  const asset = opts.asset || "";
+  return `<div class="symbol-picker">
+    <input id="${id}" value="${esc(value)}" placeholder="${esc(opts.placeholder || "BTCUSDT, XAUUSD, AAPL")}" autocomplete="off" spellcheck="false">
+    <button type="button" class="ghost small symbol-pick-btn" data-symbol-add="${id}" data-symbol-asset="${asset}" title="Listeye sembol ekle">Ekle</button>
+  </div>`;
+}
+
+function assetValueOf(selectId) {
+  const el = selectId ? document.getElementById(selectId) : null;
+  if (!el) return "";
+  return el.value === "auto" ? "" : el.value;
+}
+
+function applyAssetClass(selectId, assetClass) {
+  const el = selectId ? document.getElementById(selectId) : null;
+  if (!el || !assetClass) return;
+  if (Array.from(el.options).some((opt) => opt.value === assetClass)) {
+    el.value = assetClass;
+  }
+}
+
+function symbolRowHtml(item, attrs) {
+  const cls = item.asset_class || "";
+  const live = item.live ? `<span class="tag green">canlı</span>` : `<span class="tag blue">test</span>`;
+  return `<button type="button" class="symbol-row" ${attrs} data-sym-value="${esc(item.symbol)}" data-sym-class="${esc(cls)}">
+    <span class="symbol-code">${esc(item.symbol)}</span>
+    <span class="symbol-name">${esc(item.label || "")}</span>
+    <span class="symbol-tags">${cls ? `<span class="tag gray">${esc(ASSET_LABELS[cls] || cls)}</span>` : ""}${live}</span>
+  </button>`;
+}
+
+async function fetchSymbolSearch(query, assetClass, limit = 8) {
+  const params = new URLSearchParams({
+    q: String(query || "").trim(),
+    asset_class: String(assetClass || ""),
+    limit: String(limit),
+  });
+  const data = await api(`/market/search?${params.toString()}`);
+  return (data && data.items) || [];
+}
+
+/** Sembol alanına yazarken öneri listesi bağlar. */
+function bindSymbolField(inputId, assetSelectId = "") {
+  const input = document.getElementById(inputId);
+  if (!input || input.dataset.symbolBound === "1") return;
+  const wrap = input.closest(".symbol-picker");
+  if (!wrap) return;
+  input.dataset.symbolBound = "1";
+  const box = document.createElement("div");
+  box.className = "symbol-suggest hidden";
+  wrap.appendChild(box);
+  // Varlık sınıfı değişince sembol hâlâ varsayılan ise onu da güncelle.
+  const assetSelect = assetSelectId ? document.getElementById(assetSelectId) : null;
+  if (assetSelect && assetSelect.dataset.symbolDefaultBound !== "1") {
+    assetSelect.dataset.symbolDefaultBound = "1";
+    assetSelect.addEventListener("change", () => {
+      const known = Object.values(ASSET_DEFAULT_SYMBOL);
+      const current = String(input.value || "").trim().toUpperCase();
+      if (!current || known.includes(current)) {
+        input.value = ASSET_DEFAULT_SYMBOL[assetSelect.value] || "BTCUSDT";
+      }
+    });
+  }
+  let timer = null;
+  let token = 0;
+  const hide = () => box.classList.add("hidden");
+  const choose = (row) => {
+    input.value = row.dataset.symValue || "";
+    applyAssetClass(assetSelectId, row.dataset.symClass || "");
+    hide();
+    input.dispatchEvent(new Event("change"));
+  };
+  input.addEventListener("input", () => {
+    clearTimeout(timer);
+    const query = input.value.trim();
+    if (!query) {
+      hide();
+      return;
+    }
+    const mine = ++token;
+    timer = setTimeout(async () => {
+      try {
+        const items = await fetchSymbolSearch(query, assetValueOf(assetSelectId), 8);
+        if (mine !== token) return;
+        if (!items.length) {
+          hide();
+          return;
+        }
+        box.innerHTML = items.map((item) => symbolRowHtml(item, "")).join("");
+        box.classList.remove("hidden");
+      } catch (e) {
+        hide();
+      }
+    }, 250);
+  });
+  box.addEventListener("mousedown", (event) => {
+    const row = event.target.closest("[data-sym-value]");
+    if (!row) return;
+    event.preventDefault();
+    choose(row);
+  });
+  input.addEventListener("blur", () => setTimeout(hide, 160));
+  input.addEventListener("keydown", (event) => {
+    if (event.key === "Escape") hide();
+    if (event.key === "Enter" && !box.classList.contains("hidden")) {
+      const first = box.querySelector("[data-sym-value]");
+      if (first) {
+        event.preventDefault();
+        choose(first);
+      }
+    }
+  });
+}
+
+function closeSymbolModal() {
+  $("#symbol-modal").classList.add("hidden");
+  $("#symbol-modal-body").innerHTML = "";
+}
+$("#symbol-modal-close").addEventListener("click", closeSymbolModal);
+
+/** Sembol arama / seçme penceresi. */
+function openSymbolPicker(inputId, assetSelectId = "", append = false) {
+  const input = document.getElementById(inputId);
+  if (!input) return;
+  try { closeNav(); } catch (e) { /* henüz hazır değilse yoksay */ }
+  let assetClass = assetValueOf(assetSelectId);
+  const wrap = document.createElement("div");
+  wrap.className = "symbol-modal";
+  wrap.innerHTML = `
+    <div class="row" style="gap:8px;flex-wrap:wrap">
+      <input id="sym-q" class="grow" placeholder="Sembol veya ad yaz: garanti, altın, AFT, bitcoin..." style="flex:1 1 240px">
+      <button class="primary" id="sym-go" type="button">Ara</button>
+    </div>
+    <div class="chip-cloud mt" id="sym-classes">
+      <button type="button" class="chip ${assetClass ? "" : "active"}" data-sym-cls="">Tümü</button>
+      ${ASSET_CLASS_OPTIONS.map((c) => `<button type="button" class="chip ${assetClass === c.id ? "active" : ""}" data-sym-cls="${c.id}">${esc(c.label)}</button>`).join("")}
+    </div>
+    <div id="sym-results" class="symbol-results mt"><span class="muted">Yükleniyor…</span></div>
+    <p class="muted small mt" id="sym-hint"></p>
+    <div class="row mt" style="justify-content:flex-end">
+      <button class="ghost" id="sym-manual" type="button">Yazdığım sembolü kullan</button>
+    </div>`;
+  $("#symbol-modal-title").textContent = append ? "Sembol ekle" : "Sembol seç";
+  const host = $("#symbol-modal-body");
+  host.innerHTML = "";
+  host.appendChild(wrap);
+  $("#symbol-modal").classList.remove("hidden");
+
+  const q = $("#sym-q");
+  const results = $("#sym-results");
+  const hint = $("#sym-hint");
+  q.value = String(input.value || "").trim();
+  if (append) q.value = "";
+  let token = 0;
+
+  const run = async () => {
+    const mine = ++token;
+    results.innerHTML = '<span class="muted">Aranıyor…</span>';
+    hint.textContent = "";
+    try {
+      const items = await fetchSymbolSearch(q.value, assetClass, 25);
+      if (mine !== token) return;
+      if (!items.length) {
+        results.innerHTML = `<div class="empty-state small">Sonuç yok. Farklı bir kelime dene veya sembolü elle yaz.</div>`;
+        hint.textContent = assetClass === "metal"
+          ? "Altın/gümüş için XAUUSD, XAGUSD, XAUUSDSPOT, XAGUSDSPOT kullanabilirsin."
+          : assetClass === "fund"
+            ? "Fon kodu ile arayabilirsin (ör. AFT, MAC, TTE)."
+            : "";
+        return;
+      }
+      results.innerHTML = items.map((item) => symbolRowHtml(item, "")).join("");
+      hint.textContent = `${items.length} sonuç. Seçmek için satıra tıkla.`;
+    } catch (e) {
+      if (mine !== token) return;
+      results.innerHTML = `<div class="error">${esc(e.message)}</div>`;
+    }
+  };
+
+  const select = (value, cls) => {
+    if (!value) return;
+    if (append) {
+      const parts = String(input.value || "").split(/[\s,;]+/).map((s) => s.trim()).filter(Boolean);
+      const upper = value.toUpperCase();
+      if (!parts.some((p) => p.toUpperCase() === upper)) parts.push(upper);
+      input.value = parts.join(", ");
+      if (cls) applyAssetClass(assetSelectId, cls);
+      closeSymbolModal();
+      return;
+    }
+    input.value = value;
+    if (cls) applyAssetClass(assetSelectId, cls);
+    closeSymbolModal();
+    input.dispatchEvent(new Event("change"));
+  };
+
+  results.addEventListener("click", (event) => {
+    const row = event.target.closest("[data-sym-value]");
+    if (!row) return;
+    select(row.dataset.symValue || "", row.dataset.symClass || "");
+  });
+  $("#sym-classes").addEventListener("click", (event) => {
+    const chip = event.target.closest("[data-sym-cls]");
+    if (!chip) return;
+    assetClass = chip.dataset.symCls || "";
+    $$("#sym-classes .chip").forEach((el) => el.classList.toggle("active", el === chip));
+    run();
+  });
+  $("#sym-go").addEventListener("click", run);
+  q.addEventListener("keydown", (event) => {
+    if (event.key === "Enter") {
+      event.preventDefault();
+      run();
+    }
+  });
+  $("#sym-manual").addEventListener("click", () => {
+    const value = String(q.value || "").trim().toUpperCase();
+    if (!value) {
+      toast("Önce sembol yaz", true);
+      return;
+    }
+    select(value, assetClass);
+  });
+  run();
+  setTimeout(() => q.focus(), 60);
+}
+
+document.addEventListener("click", (event) => {
+  const add = event.target.closest("[data-symbol-add]");
+  if (add) {
+    event.preventDefault();
+    openSymbolPicker(add.dataset.symbolAdd, add.dataset.symbolAsset || "", true);
+    return;
+  }
+  const pick = event.target.closest("[data-symbol-pick]");
+  if (pick) {
+    event.preventDefault();
+    openSymbolPicker(pick.dataset.symbolPick, pick.dataset.symbolAsset || "", false);
+  }
+});
+
+document.addEventListener("keydown", (event) => {
+  if (event.key !== "Escape") return;
+  const box = document.getElementById("symbol-modal");
+  if (box && !box.classList.contains("hidden")) {
+    event.stopPropagation();
+    closeSymbolModal();
+  }
+});
 
 function confirmDialog(title, message, okLabel = "Onayla", danger = false) {
   return new Promise((resolve) => {
@@ -1679,13 +2106,32 @@ function scheduleBotsRefresh() {
 
 const TRADE_REASONS = {
   signal: ["gray", "sinyal"], stop: ["amber", "stop"], "takipli-stop": ["amber", "takipli stop"],
-  trail: ["amber", "takipli stop"], "profit-exit": ["blue", "kâr koruma"],
-  "take-profit": ["green", "kâr al"], tp: ["green", "kâr al"], end: ["gray", "test sonu"],
+  trail: ["amber", "takipli stop"], breakeven: ["amber", "breakeven"],
+  "profit-exit": ["blue", "kâr koruma"], "kâr-koruma": ["blue", "kâr koruma"],
+  "take-profit": ["green", "kâr al"], "take-profit-partial": ["green", "kısmi kâr al"],
+  tp: ["green", "kâr al"], end: ["gray", "test sonu"],
+  "destek-stop": ["amber", "destek stop"], "dinamik-stop": ["amber", "dinamik stop"],
+  "statik-stop": ["amber", "sabit stop"],
   manuel: ["red", "manuel satış"], harici: ["red", "harici işlem"],
 };
 function tradeReason(reason) {
   const [cls, label] = TRADE_REASONS[reason] || ["gray", reason || "sinyal"];
   return `<span class="tag ${cls}">${esc(label)}</span>`;
+}
+
+function exitReasonsHtml(reasons) {
+  const entries = Object.entries(reasons || {})
+    .map(([k, n]) => [k, Number(n) || 0])
+    .filter(([, n]) => n > 0)
+    .sort((a, b) => b[1] - a[1]);
+  if (!entries.length) return "";
+  const chips = entries.map(([key, n]) => {
+    const [cls, label] = TRADE_REASONS[key] || ["gray", key];
+    return `<span class="tag ${cls}">${esc(label)} ${fmt(n, 0)}</span>`;
+  }).join(" ");
+  return `<div class="row mt" style="gap:6px;flex-wrap:wrap" title="Kapanan işlemlerin çıkış nedenleri">
+    <span class="muted small">çıkışlar:</span>${chips}
+  </div>`;
 }
 
 function riskSummary(risk) {
@@ -1696,6 +2142,14 @@ function riskSummary(risk) {
   if (r.profit_exit_donchian) parts.push(`kâr koruma Donchian(${r.profit_exit_donchian})`);
   if (r.take_profit_atr) parts.push(`kâr al ${fmt(r.take_profit_atr, 1)}×ATR`);
   if (r.take_profit_pct) parts.push(`kâr al %${fmt(r.take_profit_pct, 1)}`);
+  if (r.breakeven_pct) parts.push(`breakeven %${fmt(r.breakeven_pct, 1)} kârda`);
+  if (r.partial_tp_pct) {
+    parts.push(`kısmi kâr %${fmt(r.partial_tp_pct, 1)}'de %${fmt((r.partial_tp_fraction || 0.5) * 100, 0)}`);
+  }
+  if (r.risk_per_trade_pct) parts.push(`işlem riski %${fmt(r.risk_per_trade_pct, 1)}`);
+  if (r.support_stop) parts.push("destek stop");
+  if (r.static_stop) parts.push(`sabit stop %${fmt(r.static_stop_pct || 2.5, 1)}`);
+  if (r.dynamic_stop) parts.push("dinamik stop (ADX)");
   if (r.cooldown) parts.push(
     r.cooldown_min_loss_pct
       ? `bekleme ${r.cooldown} mum (yalnızca zarar ≥ %${fmt(r.cooldown_min_loss_pct, 1)})`
@@ -1781,12 +2235,19 @@ function botCard(bot, seriesMap = {}) {
       <span>şimdi satsan <b>${money(pos.net_value)}</b></span>
       ${pos.stop_price ? `<span>stop <b data-live="stop-${esc(bot.id)}">${fmt(pos.stop_price, 8)}</b>
         <span class="muted small" data-live="stopdist-${esc(bot.id)}">${stopDistanceText(pos.stop_distance_pct)}</span></span>` : ""}
+      ${pos.take_profit_price ? `<span>kâr al <b>${fmt(pos.take_profit_price, 8)}</b>
+        ${pos.take_profit_distance_pct !== undefined
+          ? `<span class="muted small">${pos.take_profit_distance_pct >= 0 ? "+" : ""}${fmt(pos.take_profit_distance_pct, 2)}%</span>`
+          : ""}</span>` : ""}
+      ${pos.partial_target_price ? `<span>kısmi kâr <b>${fmt(pos.partial_target_price, 8)}</b></span>` : ""}
+      ${pos.breakeven_armed ? `<span class="tag amber" title="Kısmi kâr sonrası stop girişe çekildi">breakeven</span>` : ""}
       <span>mum <b>${esc(pos.candles || 0)}</b></span>
     </div>` : '<div class="mt muted small">Açık pozisyon yok.</div>'}
     ${bot.state && bot.state.last_error ? `<div class="error mt">${esc(String(bot.state.last_error).split("\n").slice(-3).join("\n"))}</div>` : ""}
     <div class="muted small mt" title="Canlı motor, backtest ile aynı risk kurallarını uygular">
       Risk: ${esc(riskSummary(cfg.risk) || "yok (yalnızca sinyalle kapanır)")}
     </div>
+    ${exitReasonsHtml(st.exit_reasons)}
     <div class="row mt">
       <button data-action="start" data-id="${esc(bot.id)}" ${bot.status === "running" ? "disabled" : ""}>Başlat</button>
       <button data-action="stop" data-id="${esc(bot.id)}" ${bot.status !== "running" && bot.status !== "stopping" ? "disabled" : ""}>Durdur</button>
@@ -1892,13 +2353,13 @@ function field(label, inputHtml) {
   return `<label>${esc(label)}${inputHtml}</label>`;
 }
 
-const BOT_PERIODS = ["1m", "5m", "15m", "1h", "4h", "1d"];
+const BOT_PERIODS = ["1m", "3m", "5m", "15m", "30m", "45m", "1h", "2h", "4h", "6h", "8h", "12h", "1d", "3d", "1w", "1M"];
 const BOT_COIN_PRESETS = ["BTCUSDT", "ETHUSDT", "BNBUSDT", "SOLUSDT", "XRPUSDT", "ADAUSDT", "AVAXUSDT", "DOGEUSDT", "LINKUSDT", "DOTUSDT"];
 const RISK_ITEMS = [
-  ["dynamic_stop", "Dinamik stop", "Fiyat yükseldikçe stop seviyesini yukarı taşır."],
-  ["static_stop", "Sabit stop", "Giriş fiyatının belirli bir yüzdesi altında çıkar."],
-  ["support_stop", "Destek stop", "Destek seviyesi kırılırsa pozisyonu kapatır."],
-  ["take_profit", "Kâr al", "Hedef kâra ulaşınca satar."],
+  ["dynamic_stop", "Dinamik stop", "ADX'e duyarlı takipli stop. ADX < 20 (yatay piyasa) iken devreye girmez."],
+  ["static_stop", "Sabit stop", "Giriş fiyatının belirli bir yüzdesi (aşağıdaki 'Sabit stop yüzdesi') altında çıkar."],
+  ["support_stop", "Destek stop", "Destek seviyesi kırılırsa pozisyonu kapatır (son 300 mum)."],
+  ["take_profit", "Kâr al", "Sayısal kâr al hedeflerini (ATR / yüzde) uygular. Kapatırsan yalnızca stop ve kâr koruma çalışır."],
 ];
 
 /*
@@ -1916,6 +2377,11 @@ const RISK_NUM_FIELDS = [
     key: "max_stop_pct", label: "Stop üst sınırı", unit: "%", step: "0.5",
     help: "ATR stop bu yüzdeden daha uzağa konamaz. Yüksek oynaklıklı coinlerde stopun %90 aşağıya düşmesini engelleyen felaket korumasıdır.",
     rec: { "1m": 35, "5m": 35, "15m": 35, "1h": 30, "4h": 20, "1d": 15 },
+  },
+  {
+    key: "static_stop_pct", label: "Sabit stop yüzdesi", unit: "%", step: "0.5",
+    help: "Panelde 'Sabit stop' işaretliyse giriş fiyatının bu yüzde altında satılır. Varsayılan %2,5.",
+    rec: { "1m": 2.5, "5m": 2.5, "15m": 2.5, "1h": 2.5, "4h": 3, "1d": 4 },
   },
   {
     key: "trail_atr", label: "Takipli stop", unit: "× ATR", step: "0.1",
@@ -1936,6 +2402,26 @@ const RISK_NUM_FIELDS = [
     key: "take_profit_pct", label: "Kâr al (yüzde)", unit: "%", step: "0.5",
     help: "Girişe göre sabit yüzde kâr hedefi. 0 = kapalı. Sabit hedef, güçlü trendlerde erken çıkmanıza yol açar.",
     rec: { "1m": 0, "5m": 0, "15m": 0, "1h": 0, "4h": 0, "1d": 0 },
+  },
+  {
+    key: "breakeven_pct", label: "Breakeven eşiği", unit: "% kâr", step: "0.5",
+    help: "Kâr bu yüzdeyi geçince stop en az giriş fiyatına çekilir. Artık kaybetme ihtimali kalmaz; 0 = kapalı. Örnek: 3 → %3 kârda stop girişe gelir.",
+    rec: { "1m": 2, "5m": 2, "15m": 3, "1h": 4, "4h": 6, "1d": 8 },
+  },
+  {
+    key: "partial_tp_pct", label: "Kısmi kâr hedefi", unit: "%", step: "0.5",
+    help: "Kâr bu yüzdeye ulaşınca pozisyonun bir kısmı satılır (aşağıdaki oran), kalan kısım takipli stopla devam eder. 0 = kapalı.",
+    rec: { "1m": 0, "5m": 0, "15m": 0, "1h": 0, "4h": 0, "1d": 0 },
+  },
+  {
+    key: "partial_tp_fraction", label: "Kısmi satış oranı", unit: "0–1", step: "0.1",
+    help: "Kısmi kâr hedefinde satılacak oran. 0,5 = yarısı satılır, yarısı trend için kalır. Kısmi hedef kapalıysa dikkate alınmaz.",
+    rec: { "1m": 0.5, "5m": 0.5, "15m": 0.5, "1h": 0.5, "4h": 0.5, "1d": 0.5 },
+  },
+  {
+    key: "risk_per_trade_pct", label: "İşlem başına risk", unit: "% nakit", step: "0.5",
+    help: "Pozisyon büyüklüğü stop mesafesine göre hesaplanır: bu yüzde, stop vurulursa kaybedilecek nakit. Örnek: 1 → 1.000 USDT nakitte stop vurulursa ~10 USDT kayıp. 0 = eski davranış (nakit × pozisyon yüzdesi).",
+    rec: { "1m": 1, "5m": 1, "15m": 1, "1h": 1, "4h": 1.5, "1d": 2 },
   },
   {
     key: "profit_exit_donchian", label: "Kâr koruma (Donchian)", unit: "mum", step: "1",
@@ -2432,8 +2918,9 @@ async function openBotForm(existing = null, options = {}) {
         const n = Number(raw);
         return Number.isFinite(n) ? Math.max(0, n) : null;
       };
-      ["stop_atr", "max_stop_pct", "trail_atr", "trail_after_pct", "take_profit_atr",
-       "take_profit_pct", "profit_exit_donchian", "cooldown", "cooldown_min_loss_pct"]
+      ["stop_atr", "max_stop_pct", "static_stop_pct", "trail_atr", "trail_after_pct", "take_profit_atr",
+       "take_profit_pct", "breakeven_pct", "partial_tp_pct", "partial_tp_fraction",
+       "risk_per_trade_pct", "profit_exit_donchian", "cooldown", "cooldown_min_loss_pct"]
         .forEach((key) => { draft.risk[key] = numVal(key); });
       const body = {
         name: $("#b-name").value.trim() || "İsimsiz bot",
@@ -2467,6 +2954,46 @@ function holdText(seconds) {
   if (d > 0) return `${d} gün${h ? ` ${h} sa` : ""}`;
   if (h > 0) return `${h} sa${m ? ` ${m} dk` : ""}`;
   return `${m} dk`;
+}
+
+/** Model katman bilgisini güvenli metne çevirir: [64,32] → "64→32", 2 → "2". */
+function layersText(value, sep = "→") {
+  if (Array.isArray(value)) return value.join(sep);
+  if (value === null || value === undefined || value === "") return "";
+  if (typeof value === "number" || typeof value === "string") return String(value);
+  return "";
+}
+
+/**
+ * Mimari özeti. Motor başına farklı alanlar kullanılır:
+ * MLP gizli katman listesi, LSTM hücre sayısı, Transformer boyut/blok/başlık.
+ * Değerler eksik ya da sayı olduğunda da bozulmadan metin üretir.
+ */
+function archSummaryText(engine, model, params) {
+  const p = params || {};
+  const m = model || {};
+  const kind = String(engine || p.engine || "mlp");
+  if (kind === "gbm") return "gradient boosting";
+  if (kind === "transformer") {
+    const parts = [];
+    if (m.dim) parts.push(`boyut ${m.dim}`);
+    const depth = m.depth !== undefined ? m.depth : (typeof m.layers === "number" ? m.layers : null);
+    if (depth !== null && depth !== undefined && depth !== "") parts.push(`${depth} blok`);
+    if (m.heads) parts.push(`${m.heads} başlık`);
+    if (p.seq_window) parts.push(`pencere ${p.seq_window}`);
+    return parts.join(" · ") || "-";
+  }
+  if (kind === "lstm") {
+    const parts = [];
+    if (m.hidden) parts.push(`${m.hidden} hücre`);
+    if (p.seq_window) parts.push(`pencere ${p.seq_window}`);
+    if (p.dropout !== undefined && p.dropout !== null) parts.push(`dropout ${fmt(p.dropout, 2)}`);
+    return parts.join(" · ") || "-";
+  }
+  const layers = layersText(m.layers !== undefined && m.layers !== null ? m.layers : p.hidden_layers);
+  const act = p.activation ? ` · ${p.activation}` : "";
+  const drop = p.dropout !== undefined && p.dropout !== null ? ` · dropout ${fmt(p.dropout, 2)}` : "";
+  return `${layers || "-"}${act}${drop}`;
 }
 
 async function showBotAnalysis(id) {
@@ -3615,8 +4142,9 @@ function openStrategyEditor(existing) {
       </div>
       <div class="section-body">
         <div class="row">
-          <label class="pf"><span>Coin</span><input id="p-coin" value="BTCUSDT"></label>
-          <label class="pf"><span>Periyot</span><select id="p-period">${["15m","1h","4h","1d"].map((p) => `<option ${p === "1h" ? "selected" : ""}>${p}</option>`).join("")}</select></label>
+          <label class="pf"><span>Varlık</span>${assetSelectHtml("p-asset", "crypto")}</label>
+          <label class="pf"><span>Sembol</span>${symbolFieldHtml("p-coin", "BTCUSDT", { asset: "p-asset" })}</label>
+          <label class="pf"><span>Periyot</span>${periodFieldHtml("p-period", "1h")}</label>
           <button id="s-preview" type="button">Son mumu dene</button>
           <button id="s-validate" type="button" class="ghost">Kuralları doğrula</button>
         </div>
@@ -3632,6 +4160,8 @@ function openStrategyEditor(existing) {
       </div>
     </div>`;
   modal(existing ? "Strateji Düzenle" : "Yeni Strateji", wrap);
+  bindSymbolField("p-coin", "p-asset");
+  bindPeriodField("p-period");
 
   const updateSummaries = () => {
     const buyEl = $("#buy-summary");
@@ -3698,7 +4228,13 @@ function openStrategyEditor(existing) {
     try {
       const res = await api("/strategies/preview", {
         method: "POST",
-        body: { definition: definition(), coin: $("#p-coin").value.trim().toUpperCase(), period: $("#p-period").value },
+        body: {
+          definition: definition(),
+          coin: $("#p-coin").value.trim().toUpperCase(),
+          period: readPeriod("p-period"),
+          source: assetSourceOf($("#p-asset").value),
+          asset_class: $("#p-asset").value,
+        },
       });
       $("#preview-result").innerHTML = previewHtml(res);
     } catch (e) { $("#preview-result").innerHTML = `<div class="error">${esc(e.message)}</div>`; }
@@ -3784,8 +4320,9 @@ function openBacktest(spec, info = {}) {
   const wrap = document.createElement("div");
   wrap.innerHTML = `
     <div class="row">
-      ${field("Coin", `<input id="bt-coin" value="${esc(info.coin || "BTCUSDT")}">`)}
-      ${field("Periyot", `<select id="bt-period">${["15m","1h","4h","1d"].map((p) => `<option ${p === selected ? "selected" : ""}>${p}</option>`).join("")}</select>`)}
+      ${field("Varlık", assetSelectHtml("bt-asset", info.assetClass || "crypto"))}
+      ${field("Sembol", symbolFieldHtml("bt-coin", info.coin || "BTCUSDT", { asset: "bt-asset" }))}
+      ${field("Periyot", periodFieldHtml("bt-period", selected))}
       ${field("Nakit", `<input id="bt-cash" type="number" value="100">`)}
       ${field("Mum sayısı", `<select id="bt-limit">${limitOptionsHtml(selected, 20000)}</select>`)}
       <button class="primary" id="bt-run">Çalıştır</button>
@@ -3799,7 +4336,7 @@ function openBacktest(spec, info = {}) {
       </div>
     </details>
     <p class="muted small" style="margin:8px 0 0">
-      Trend stratejileri uzun geçmişte anlam kazanır. Kısa pencerede al-tut önde görünüyorsa
+      Trend stratejileri uzun geçmişte anlam kazanır. Kısa pencerede al-tut geçildi görünüyorsa
       daha uzun geçmiş seçin; yıllık tablo hangi yıllarda önde olduğunu gösterir.
       Çalıştırdıktan sonra <b>veri raporu</b> gerçekte kaç mum geldiğini, hangi tarih aralığını
       kapsadığını ve verinin temiz olup olmadığını gösterir.
@@ -3807,16 +4344,17 @@ function openBacktest(spec, info = {}) {
     <div id="bt-result" class="mt"></div>`;
   const estimate = () => {
     const lim = Number($("#bt-limit").value || 20000);
-    const per = $("#bt-period").value;
+    const per = periodValueOf("bt-period") || "1h";
     const el = $("#bt-estimate");
     if (el) el.innerHTML = `${lim.toLocaleString("tr-TR")} mum × ${esc(per)} → <b>${limitSpanLabel(lim, per)}</b>. Gerçek süre çalıştırınca veri raporunda görünür.`;
   };
   modal("Backtest", wrap);
+  bindSymbolField("bt-coin", "bt-asset");
   const bindBtRisk = () => {
     $$("[data-brec]").forEach((btn) => btn.addEventListener("click", () => {
       const fieldDef = RISK_NUM_FIELDS.find((f) => f.key === btn.dataset.brec);
       if (!fieldDef) return;
-      const period = $("#bt-period").value;
+      const period = periodValueOf("bt-period") || "1h";
       const value = fieldDef.rec[period];
       const input = $(`#brk-${fieldDef.key}`);
       if (input && value !== undefined) {
@@ -3827,9 +4365,10 @@ function openBacktest(spec, info = {}) {
     }));
   };
   bindBtRisk();
-  $("#bt-period").addEventListener("change", () => {
-    refreshLimitOptions($("#bt-limit"), $("#bt-period").value);
-    const period = $("#bt-period").value;
+  bindPeriodField("bt-period");
+  const onBtPeriod = () => {
+    refreshLimitOptions($("#bt-limit"), periodValueOf("bt-period") || "1h");
+    const period = periodValueOf("bt-period") || "1h";
     $$("#bt-risk-grid .risk-num-field").forEach((card) => {
       const key = card.querySelector("[data-brec]")?.dataset.brec;
       const fieldDef = RISK_NUM_FIELDS.find((f) => f.key === key);
@@ -3841,15 +4380,25 @@ function openBacktest(spec, info = {}) {
       if (input) input.placeholder = rec === undefined ? "" : String(rec);
     });
     estimate();
-  });
+  };
+  $("#bt-period-preset").addEventListener("period-change", onBtPeriod);
+  $("#bt-period").addEventListener("change", onBtPeriod);
   $("#bt-limit").addEventListener("change", estimate);
+  $("#bt-asset").addEventListener("change", () => {
+    const symbol = $("#bt-coin");
+    const known = Object.values(ASSET_DEFAULT_SYMBOL);
+    if (!symbol.value.trim() || known.includes(symbol.value.trim().toUpperCase())) {
+      symbol.value = ASSET_DEFAULT_SYMBOL[$("#bt-asset").value] || "BTCUSDT";
+    }
+  });
   estimate();
   $("#bt-run").addEventListener("click", async () => {
     $("#bt-result").innerHTML = '<span class="muted">İş başlatıldı…</span>';
     try {
       const risk = {};
-      ["stop_atr", "max_stop_pct", "trail_atr", "trail_after_pct", "take_profit_atr",
-       "take_profit_pct", "profit_exit_donchian", "cooldown", "cooldown_min_loss_pct"]
+      ["stop_atr", "max_stop_pct", "static_stop_pct", "trail_atr", "trail_after_pct", "take_profit_atr",
+       "take_profit_pct", "breakeven_pct", "partial_tp_pct", "partial_tp_fraction",
+       "risk_per_trade_pct", "profit_exit_donchian", "cooldown", "cooldown_min_loss_pct"]
         .forEach((key) => {
           const el = $(`#brk-${key}`);
           const raw = el ? String(el.value || "").trim().replace(",", ".") : "";
@@ -3861,8 +4410,10 @@ function openBacktest(spec, info = {}) {
         method: "POST",
         body: {
           strategy: spec, coin: $("#bt-coin").value.trim().toUpperCase(),
-          period: $("#bt-period").value, cash: Number($("#bt-cash").value),
+          period: readPeriod("bt-period"), cash: Number($("#bt-cash").value),
           limit: Number($("#bt-limit").value || 20000),
+          source: assetSourceOf($("#bt-asset").value),
+          asset_class: $("#bt-asset").value,
           risk,
         },
       });
@@ -3908,7 +4459,7 @@ function renderBacktest(job) {
     return `${fmt(d * 24, 1)} saat`;
   };
   const reasons = (r.risk && r.risk.exit_reasons) || {};
-  const reasonLabels = { signal: "sinyal", time: "zaman limiti", stop: "stop", "takipli-stop": "takipli stop", trail: "takipli stop", "profit-exit": "kâr koruma", "take-profit": "kâr al", tp: "kâr al", end: "test sonu", manuel: "manuel satış", harici: "harici işlem" };
+  const reasonLabels = { signal: "sinyal", time: "zaman limiti", stop: "stop", "takipli-stop": "takipli stop", trail: "takipli stop", breakeven: "breakeven", "profit-exit": "kâr koruma", "take-profit": "kâr al", "take-profit-partial": "kısmi kâr al", tp: "kâr al", end: "test sonu", manuel: "manuel satış", harici: "harici işlem", "destek-stop": "destek stop", "dinamik-stop": "dinamik stop", "statik-stop": "sabit stop" };
   const reasonText = Object.entries(reasons)
     .sort((a, b) => b[1] - a[1])
     .map(([k, n]) => `${reasonLabels[k] || k}: ${n}`)
@@ -4034,6 +4585,18 @@ function renderBacktest(job) {
     const completeTag = received >= requested
       ? `<span class="tag green">istek karşılandı</span>`
       : `<span class="tag amber">${missing} mum eksik</span>`;
+    const sourceLabel = { binance: "Binance", yahoo: "Yahoo Finance", tefas: "TEFAS" }[dr.source] || dr.source || "";
+    const sourceBits = [];
+    if (sourceLabel) sourceBits.push(`<span class="tag gray">${esc(sourceLabel)}</span>`);
+    if (dr.resampled) sourceBits.push(`<span class="tag blue">${esc(dr.base_period || "")} → ${esc(dr.period || "")} yeniden örneklendi</span>`);
+    if (dr.cached) sourceBits.push(`<span class="tag amber">yerel önbellek</span>`);
+    const sourceNote = dr.has_ohlc === false
+      ? `<div class="hint mt">Bu varlıkta yalnızca günlük fiyat (NAV) var. <b>open=high=low=close</b>, hacim 0 kabul edildi; high/low/hacim kullanan stratejilerin sonuçları yanıltıcı olabilir.</div>`
+      : dr.intraday_limited
+        ? `<div class="hint mt">Kaynak sağlayıcı intraday geçmişi sınırlıyor (Yahoo). Daha uzun geçmiş için günlük ve üstü periyot seçin.</div>`
+        : dr.intraday_session
+          ? `<div class="hint mt">Hisse/altın intraday serisinde gece, hafta sonu ve tatil araları normaldir; bunlar <b>eksik mum</b> sayılmadı.</div>`
+          : "";
     return `<div class="card mt data-card">
       <div class="row between">
         <div>
@@ -4044,6 +4607,8 @@ function renderBacktest(job) {
           </p>
         </div>
       </div>
+      ${sourceNote}
+      <div class="muted small" style="margin:8px 0 0">${sourceBits.join(" ")}</div>
       <div class="grid c4 mt">
         <div class="card"><h3>İstenen → Gelen</h3><div class="stat small">${requested.toLocaleString("tr-TR")} → ${received.toLocaleString("tr-TR")}</div><div class="muted">${dr.pages || 0} API isteği${Number(dr.duplicates_removed || 0) ? ` · ${dr.duplicates_removed} tekrar ayıklandı` : ""}</div></div>
         <div class="card"><h3>Veri aralığı</h3><div class="stat small">${esc(dr.span_text || "—")}</div><div class="muted">${esc(dr.first || "—")} → ${esc(dr.last || "—")}</div></div>
@@ -4191,8 +4756,9 @@ function openStrategyCompare() {
   const wrap = document.createElement("div");
   wrap.innerHTML = `
     <div class="row">
-      ${field("Coin", `<input id="cmp-coin" value="BTCUSDT">`)}
-      ${field("Periyot", `<select id="cmp-period">${["15m","1h","4h","1d"].map((p) => `<option ${p === "4h" ? "selected" : ""}>${p}</option>`).join("")}</select>`)}
+      ${field("Varlık", assetSelectHtml("cmp-asset", "crypto"))}
+      ${field("Sembol", symbolFieldHtml("cmp-coin", "BTCUSDT", { asset: "cmp-asset" }))}
+      ${field("Periyot", periodFieldHtml("cmp-period", "4h"))}
       ${field("Nakit", `<input id="cmp-cash" type="number" value="100">`)}
       ${field("Mum sayısı", `<select id="cmp-limit">${limitOptionsHtml("4h", 20000)}</select>`)}
       <button class="primary" id="cmp-run">Karşılaştır</button>
@@ -4206,25 +4772,38 @@ function openStrategyCompare() {
     <div id="cmp-result" class="mt"></div>`;
   state.compare = null;
   state.cmpSort = { key: "diff", dir: -1 };
-  modal("Tüm Stratejiler — Karşılaştırma", wrap);
+  modal("Tüm Stratejiler - Karşılaştırma", wrap);
+  bindSymbolField("cmp-coin", "cmp-asset");
   const updateEstimate = () => {
     const lim = Number($("#cmp-limit").value || 20000);
-    const per = $("#cmp-period").value;
+    const per = periodValueOf("cmp-period") || "4h";
     const el = $("#cmp-estimate");
     if (el) el.innerHTML = `${lim.toLocaleString("tr-TR")} mum × ${esc(per)} → <b>${limitSpanLabel(lim, per)}</b>. Gerçek aralık sonuç başlığında tarihlerle görünür.`;
   };
-  $("#cmp-period").addEventListener("change", () => {
-    refreshLimitOptions($("#cmp-limit"), $("#cmp-period").value);
+  bindPeriodField("cmp-period");
+  const onCmpPeriod = () => {
+    refreshLimitOptions($("#cmp-limit"), periodValueOf("cmp-period") || "4h");
     updateEstimate();
-  });
+  };
+  $("#cmp-period-preset").addEventListener("period-change", onCmpPeriod);
+  $("#cmp-period").addEventListener("change", onCmpPeriod);
   $("#cmp-limit").addEventListener("change", updateEstimate);
+  $("#cmp-asset").addEventListener("change", () => {
+    const symbol = $("#cmp-coin");
+    const known = Object.values(ASSET_DEFAULT_SYMBOL);
+    if (!symbol.value.trim() || known.includes(symbol.value.trim().toUpperCase())) {
+      symbol.value = ASSET_DEFAULT_SYMBOL[$("#cmp-asset").value] || "BTCUSDT";
+    }
+  });
   updateEstimate();
   $("#cmp-run").addEventListener("click", async () => {
     const meta = {
       coin: $("#cmp-coin").value.trim().toUpperCase() || "BTCUSDT",
-      period: $("#cmp-period").value,
+      period: readPeriod("cmp-period"),
       cash: Number($("#cmp-cash").value) || 100,
       limit: Number($("#cmp-limit").value) || 20000,
+      source: assetSourceOf($("#cmp-asset").value),
+      asset_class: $("#cmp-asset").value,
     };
     $("#cmp-result").innerHTML = '<span class="muted">Karşılaştırma başlatıldı...</span>';
     try {
@@ -4345,7 +4924,11 @@ async function openCompareDetail(row) {
   try {
     const job = await api("/strategies/backtest", {
       method: "POST",
-      body: { strategy: row.spec, coin: meta.coin, period: meta.period, cash: meta.cash, limit: meta.limit },
+      body: {
+        strategy: row.spec, coin: meta.coin, period: meta.period,
+        cash: meta.cash, limit: meta.limit,
+        source: meta.source || "auto", asset_class: meta.asset_class || "",
+      },
     });
     pollJob(job.id, (j) => {
       const el = $("#cmp-detail");
@@ -4530,12 +5113,13 @@ async function renderScan(root) {
   root.innerHTML = `
     <div class="card">
       <div class="row">
-        ${field("Periyot", `<select id="scan-period">${["15m","1h","4h","1d"].map((p) => `<option ${p === "1h" ? "selected" : ""}>${p}</option>`).join("")}</select>`)}
+        ${field("Varlık sınıfı", assetSelectHtml("scan-asset", "crypto", true))}
+        ${field("Periyot", periodFieldHtml("scan-period", "1h"))}
         ${field("Coin listesi", `<select id="scan-list">
           <option value="">— Tüm liste (coin_list.txt) —</option>
           ${lists.map((l) => `<option value="${esc(l.id)}" ${l.id === presetId ? "selected" : ""}>${esc(l.name)} (${l.count})</option>`).join("")}
         </select>`)}
-        ${field("Coinler (boş = tüm liste)", `<input id="scan-coins" value="${preset ? esc(preset.coins.join(", ")) : ""}" placeholder="BTCUSDT, ETHUSDT">`)}
+        ${field("Semboller (boş = tüm liste)", symbolMultiFieldHtml("scan-coins", preset ? preset.coins.join(", ") : "", { asset: "scan-asset", placeholder: "BTCUSDT, XAUUSD, AAPL, TEFAS:AFT" }))}
         <button class="primary" id="scan-run">Taramayı Başlat</button>
       </div>
       <p class="muted small" id="scan-list-hint" style="margin:8px 0 0"></p>
@@ -4544,6 +5128,7 @@ async function renderScan(root) {
       </div>
     </div>
     <div id="scan-result" class="mt"></div>`;
+  bindPeriodField("scan-period");
   const updateHint = () => {
     const found = lists.find((l) => l.id === $("#scan-list").value);
     $("#scan-list-hint").innerHTML = found
@@ -4565,10 +5150,12 @@ async function renderScan(root) {
       const job = await api("/analysis/scan", {
         method: "POST",
         body: {
-          period: $("#scan-period").value,
+          period: readPeriod("scan-period"),
           strategies: specs,
           coins: $("#scan-coins").value.split(/[\s,;]+/).map((s) => s.trim().toUpperCase()).filter(Boolean),
           list_id: $("#scan-list").value || null,
+          source: assetSourceOf($("#scan-asset").value),
+          asset_class: $("#scan-asset").value === "auto" ? "" : $("#scan-asset").value,
         },
       });
       pollJob(job.id, (j) => {
@@ -4679,8 +5266,9 @@ async function renderAnalysis(root) {
         "İndikatör değerleri",
         "Seçili coin için son mumların indikatör tablosu.",
         `<div class="tool-fields">
-          ${field("Coin", `<input id="an-coin" value="BTCUSDT">`)}
-          ${field("Periyot", `<select id="an-period">${periods.map((p) => `<option ${p === "1h" ? "selected" : ""}>${p}</option>`).join("")}</select>`)}
+          ${field("Varlık", assetSelectHtml("an-asset", "crypto"))}
+          ${field("Sembol", symbolFieldHtml("an-coin", "BTCUSDT", { asset: "an-asset" }))}
+          ${field("Periyot", periodFieldHtml("an-period", "1h"))}
           ${field("Adet", `<input id="an-count" type="number" value="20" min="1" max="500">`)}
         </div>`,
         "Getir", "indicator_values")}
@@ -4689,8 +5277,9 @@ async function renderAnalysis(root) {
         "Destek / Direnç",
         "Fiyatın altındaki destek ve üstündeki direnç seviyeleri.",
         `<div class="tool-fields">
-          ${field("Coin", `<input id="sr-coin" value="BTCUSDT">`)}
-          ${field("Periyot", `<select id="sr-period">${periods.map((p) => `<option ${p === "1h" ? "selected" : ""}>${p}</option>`).join("")}</select>`)}
+          ${field("Varlık", assetSelectHtml("sr-asset", "crypto"))}
+          ${field("Sembol", symbolFieldHtml("sr-coin", "BTCUSDT", { asset: "sr-asset" }))}
+          ${field("Periyot", periodFieldHtml("sr-period", "1h"))}
           ${field("Fiyat (boş = son)", `<input id="sr-price" type="number" step="any">`)}
         </div>`,
         "Hesapla", "support_resistance")}
@@ -4699,8 +5288,9 @@ async function renderAnalysis(root) {
         "Aylık sonuç",
         "Coin'in ay bazında toplam getirisi ve yükseliş/düşüş günleri.",
         `<div class="tool-fields">
-          ${field("Coin", `<input id="mo-coin" value="BTCUSDT">`)}
-          ${field("Periyot", `<select id="mo-period">${["1d", "4h", "1h"].map((p) => `<option>${p}</option>`).join("")}</select>`)}
+          ${field("Varlık", assetSelectHtml("mo-asset", "crypto"))}
+          ${field("Sembol", symbolFieldHtml("mo-coin", "BTCUSDT", { asset: "mo-asset" }))}
+          ${field("Periyot", periodFieldHtml("mo-period", "1d"))}
         </div>`,
         "Getir", "monthly")}
     </div>
@@ -4712,7 +5302,9 @@ async function renderAnalysis(root) {
         "Piyasa durumu",
         "Seçili stratejilerle coinlerin ortalama sinyal durumu.",
         `<div class="tool-fields">
-          ${field("Periyot", `<select id="mk-period">${periods.map((p) => `<option ${p === "1h" ? "selected" : ""}>${p}</option>`).join("")}</select>`)}
+          ${field("Varlık sınıfı", assetSelectHtml("mk-asset", "crypto", true))}
+          ${field("Periyot", periodFieldHtml("mk-period", "1h"))}
+          ${field("Semboller (boş = coin listesi)", symbolMultiFieldHtml("mk-coins", "", { asset: "mk-asset", placeholder: "BTCUSDT, XAUUSD, AAPL, TEFAS:AFT" }))}
           ${field("Maks coin", `<input id="mk-max" type="number" value="30" min="1">`)}
         </div>
         <div class="tool-checks">${opts.slice(0, 12).map((o) => `<label class="check"><input type="checkbox" class="mk-strategy" value="${o.id}"> ${esc(o.name)}</label>`).join("")}</div>`,
@@ -4722,7 +5314,7 @@ async function renderAnalysis(root) {
         "Coin listesi",
         "Borsadaki işlem gören coinleri listeler ve kaydeder.",
         `<div class="tool-fields">
-          ${field("Periyot", `<select id="cl-period">${periods.map((p) => `<option ${p === "1h" ? "selected" : ""}>${p}</option>`).join("")}</select>`)}
+          ${field("Periyot", periodFieldHtml("cl-period", "1h"))}
         </div>
         <label class="check"><input type="checkbox" id="cl-sort"> Hacme göre sırala</label>`,
         "Oluştur", "coinlist")}
@@ -4751,6 +5343,10 @@ async function renderAnalysis(root) {
     </div>
 
     <div id="analysis-result" class="mt"></div>`;
+  bindSymbolField("an-coin", "an-asset");
+  bindSymbolField("sr-coin", "sr-asset");
+  bindSymbolField("mo-coin", "mo-asset");
+  ["an-period", "sr-period", "mo-period", "mk-period", "cl-period"].forEach(bindPeriodField);
   $$("[data-job]").forEach((btn) => btn.addEventListener("click", () => {
     if (btn.dataset.job === "__goto_ai") { location.hash = "#ai"; return; }
     runAnalysisJob(btn.dataset.job, opts, btn);
@@ -4792,22 +5388,28 @@ async function runAnalysisJob(type, opts, btn = null) {
   };
   const body = { coin: "BTCUSDT", period: "1h", count: 20, max_coins: 30 };
   if (type === "indicator_values") {
-    body.coin = $("#an-coin").value.trim().toUpperCase(); body.period = $("#an-period").value;
+    body.coin = $("#an-coin").value.trim().toUpperCase(); body.period = readPeriod("an-period"); if (!body.period) return;
     body.count = Number($("#an-count").value);
+    body.asset_class = $("#an-asset").value; body.source = assetSourceOf($("#an-asset").value);
   } else if (type === "support_resistance") {
-    body.coin = $("#sr-coin").value.trim().toUpperCase(); body.period = $("#sr-period").value;
+    body.coin = $("#sr-coin").value.trim().toUpperCase(); body.period = readPeriod("sr-period"); if (!body.period) return;
+    body.asset_class = $("#sr-asset").value; body.source = assetSourceOf($("#sr-asset").value);
     const price = $("#sr-price").value;
     body.price = price ? Number(price) : null;
   } else if (type === "market") {
-    body.period = $("#mk-period").value; body.max_coins = Number($("#mk-max").value);
+    body.period = readPeriod("mk-period"); if (!body.period) return; body.max_coins = Number($("#mk-max").value);
+    body.asset_class = $("#mk-asset").value === "auto" ? "" : $("#mk-asset").value;
+    body.source = assetSourceOf($("#mk-asset").value);
+    body.coins = String($("#mk-coins").value || "").split(/[\s,;]+/).map((s) => s.trim().toUpperCase()).filter(Boolean);
     body.strategies = $$(".mk-strategy:checked")
       .map((cb) => (opts.find((o) => o.id === cb.value) || {}).spec)
       .filter(Boolean);
     if (!body.strategies.length) return toast("En az bir strateji seçin", true);
   } else if (type === "monthly") {
-    body.coin = $("#mo-coin").value.trim().toUpperCase(); body.period = $("#mo-period").value;
+    body.coin = $("#mo-coin").value.trim().toUpperCase(); body.period = readPeriod("mo-period"); if (!body.period) return;
+    body.asset_class = $("#mo-asset").value; body.source = assetSourceOf($("#mo-asset").value);
   } else if (type === "coinlist") {
-    body.period = $("#cl-period").value; body.sort = $("#cl-sort").checked;
+    body.period = readPeriod("cl-period"); if (!body.period) return; body.sort = $("#cl-sort").checked;
   } else if (type === "ai_train") {
     body.mode = $("#ai-mode").value;
   }
@@ -5145,16 +5747,69 @@ function aiStatusTag(status) {
   return `<span class="tag ${cls}">${esc(text)}</span>`;
 }
 
+function aiTrainingReport(report) {
+  if (!report || !report.test) return '<span class="muted">Rapor yok.</span>';
+  const test = (report.test && report.test.trading) || {};
+  const ref = report.refinement || {};
+  const timing = ref.timing || {};
+  const mdl = report.model || {};
+  const spec = report.spec || {};
+  const heads = mdl.models || [];
+  const first = heads[0] || {};
+  const curve = first.curve || [];
+  const trainCurve = curve.map((c) => Number(c.train_loss));
+  const valCurve = curve.map((c) => Number(c.val_loss));
+  const scores = (ref.history || []).map((h) => Number(h.score));
+  const groups = (spec.feature_groups || []).length;
+  const arch = archSummaryText(spec.engine, first, spec);
+  const mode = spec.output_mode === "ternary" ? "nötr / dip / zirve"
+    : spec.output_mode === "regression" ? "gelecek getiri" : 'AL + SAT';
+  return `
+    <div class="stat-grid">
+      <div class="stat"><span>Test getirisi</span><b class="${pnlClass(test.total_return_pct)}">${fmt(test.total_return_pct, 1)}%</b><small>al-tut ${fmt(test.buy_hold_pct, 1)}%</small></div>
+      <div class="stat"><span>Edge</span><b class="${pnlClass(test.edge_pct)}">${fmt(test.edge_pct, 1)}%</b><small>${fmt(test.trade_count, 0)} işlem</small></div>
+      <div class="stat"><span>Kazanma</span><b>${fmt(test.win_rate, 1)}%</b><small>maks. düşüş ${fmt(test.max_drawdown_pct, 1)}%</small></div>
+      <div class="stat"><span>Model</span><b class="small">${fmt(mdl.params, 0)}</b><small>parametre · ${groups} grup</small></div>
+    </div>
+    <div class="row small muted" style="gap:8px;flex-wrap:wrap;margin-top:8px">
+      <span class="tag blue">${esc(spec.engine || "mlp")} · ${esc(arch)}</span>
+      <span class="tag blue">${esc(mode)}</span>
+      ${first.epochs_run ? `<span class="tag ${first.stopped_early ? "green" : "gray"}">${fmt(first.epochs_run, 0)} epoch · en iyi ${fmt(first.best_epoch, 0)}${first.stopped_early ? " (erken durdu)" : ""}</span>` : ""}
+      ${ref.iterations_run ? `<span class="tag blue">${ref.iterations_run} iyileştirme turu · en iyi tur ${ref.best_iteration}</span>` : ""}
+      ${report.threshold_adjustment && report.threshold_adjustment.reason ? `<span class="tag gray">${esc(report.threshold_adjustment.reason)}</span>` : ""}
+    </div>
+    ${timing.trades ? `<div class="row small" style="gap:8px;flex-wrap:wrap;margin-top:8px">
+      <span class="tag gray">Giriş: erken ${timing.entry ? timing.entry.erken : 0} · geç ${timing.entry ? timing.entry["geç"] : 0} · zamanında ${timing.entry ? timing.entry["zamanında"] : 0}</span>
+      <span class="tag gray">Çıkış: erken ${timing.exit ? timing.exit.erken : 0} · geç ${timing.exit ? timing.exit["geç"] : 0} · zamanında ${timing.exit ? timing.exit["zamanında"] : 0}</span>
+      <span class="tag gray">ort. giriş hatası ${fmt(timing.avg_entry_error_pct, 2)}% · çıkış ${fmt(timing.avg_exit_error_pct, 2)}%</span>
+    </div>` : ""}
+    ${curve.length ? `<div class="split mt">
+      <div><div class="muted small">Eğitim kaybı</div>${sparkline(trainCurve, { width: 260, height: 46 })}</div>
+      <div><div class="muted small">Doğrulama kaybı</div>${sparkline(valCurve, { width: 260, height: 46 })}</div>
+      ${scores.length > 1 ? `<div><div class="muted small">Tur skorları (validation)</div>${sparkline(scores, { width: 260, height: 46 })}</div>` : ""}
+    </div>` : ""}
+    ${(first.top_features || []).length ? `<div class="muted small" style="margin-top:8px">En etkili özellikler: ${(first.top_features || []).slice(0, 8).map((f) => `<span class="mono">${esc(f.feature)}</span> (${fmt(f.weight * 100, 1)}%)`).join(" · ")}</div>` : ""}
+  `;
+}
+
 function aiMetricsHtml(m) {
   const test = (m.metrics && m.metrics.test) || {};
   const buy = (m.metrics && m.metrics.buy) || {};
   const sell = (m.metrics && m.metrics.sell) || {};
   const wf = (m.metrics && m.metrics.walk_forward) || {};
   const ref = (m.metrics && m.metrics.refinement) || {};
+  const mdl = (m.metrics && m.metrics.model) || {};
+  const lineage = (m.metrics && m.metrics.lineage) || {};
+  const agrTest = ((m.metrics || {}).agreement || {}).test || {};
   const timing = ref.timing || {};
   const params = m.params || {};
   const ret = Number(test.total_return_pct || 0);
   const edge = Number(test.edge_pct || 0);
+  const groups = params.feature_groups || [];
+  const archText = archSummaryText(params.engine, mdl, params);
+  const modeText = params.output_mode === "ternary" ? "nötr/dip/zirve"
+    : params.output_mode === "regression" ? "gelecek getiri" : 'AL + SAT';
+  const top = (mdl.top_features || []).slice(0, 6);
   const timingChips = timing && timing.trades
     ? `<span class="tag gray" title="Giriş zamanlaması">Giriş: erken ${timing.entry ? timing.entry.erken : 0} · geç ${timing.entry ? timing.entry["geç"] : 0} · zamanında ${timing.entry ? timing.entry["zamanında"] : 0}</span>
        <span class="tag gray" title="Çıkış zamanlaması">Çıkış: erken ${timing.exit ? timing.exit.erken : 0} · geç ${timing.exit ? timing.exit["geç"] : 0} · zamanında ${timing.exit ? timing.exit["zamanında"] : 0}</span>`
@@ -5163,26 +5818,256 @@ function aiMetricsHtml(m) {
     <div class="stat"><span>Test getirisi</span><b class="${pnlClass(ret)}">${fmt(ret, 1)}%</b><small>al-tut: ${fmt(test.buy_hold_pct, 1)}%</small></div>
     <div class="stat"><span>Fark (edge)</span><b class="${pnlClass(edge)}">${fmt(edge, 1)}%</b><small>al-tut'a karşı</small></div>
     <div class="stat"><span>İşlem / kazanma</span><b>${fmt(test.trade_count, 0)}</b><small>${fmt(test.win_rate, 1)}% kazanan</small></div>
-    <div class="stat"><span>Maks. düşüş</span><b class="neg">${fmt(test.max_drawdown_pct, 1)}%</b><small>${fmt(params.coin || "")} ${esc(params.period || "")}</small></div>
+    <div class="stat"><span>Maks. düşüş</span><b class="neg">${fmt(test.max_drawdown_pct, 1)}%</b><small>${test.avg_candles ? `ort. ${fmt(test.avg_candles, 1)} mum / işlem` : "test dönemi"}</small></div>
   </div>
   <div class="row small muted" style="gap:8px;flex-wrap:wrap;margin-top:6px">
+    ${(() => { const q = ((m.metrics || {}).quality || {}).robust || {}; return q.score === undefined ? "" : `<span class="tag ${Number(q.score) > 0 ? "green" : "amber"}" title="3 pencereli işlem kalitesi">Kalite ${fmt(q.score, 1)} · ${fmt(q.positive_windows, 0)}/${fmt(q.windows, 0)} pencere</span>`; })()}
+    ${agrTest.f1 !== undefined ? `<span class="tag ${Number(agrTest.f1) > 0.25 ? "green" : "amber"}">Local_Min_Max uyumu ${fmt(Number(agrTest.f1) * 100, 1)}%</span>` : ""}
+    ${(agrTest.robust || {}).f1 != null ? `<span class="tag blue" title="Öğrenme bölgesinin 3 ayrı penceresi; test kullanılmaz">Genelleme (3 pencere) ${fmt(Number(agrTest.robust.f1) * 100, 1)}%</span>` : ""}
+    ${agrTest.buy ? `<span class="tag gray">AL isabet ${fmt(agrTest.buy.precision, 2)} · yakalama ${fmt(agrTest.buy.recall, 2)}</span>` : ""}
+    ${agrTest.sell ? `<span class="tag gray">SAT isabet ${fmt(agrTest.sell.precision, 2)} · yakalama ${fmt(agrTest.sell.recall, 2)}</span>` : ""}
+    <span class="tag blue">${esc(params.engine || "mlp")} · ${esc(archText)}</span>
+    <span class="tag blue">${esc(modeText)}</span>
+    <span class="tag gray">${groups.length} özellik grubu · ${fmt(mdl.params, 0)} parametre</span>
+    ${mdl.epochs ? `<span class="tag ${mdl.stopped_early ? "green" : "gray"}">${fmt(mdl.epochs, 0)} epoch · en iyi ${fmt(mdl.best_epoch, 0)}${mdl.stopped_early ? " (erken durdu)" : ""}</span>` : ""}
     <span class="tag gray">AL precision ${fmt(buy.precision, 2)} · recall ${fmt(buy.recall, 2)}</span>
     <span class="tag gray">SAT precision ${fmt(sell.precision, 2)} · recall ${fmt(sell.recall, 2)}</span>
     <span class="tag gray">eşik AL ${fmt(m.thresholds && m.thresholds.buy, 2)} / SAT ${fmt(m.thresholds && m.thresholds.sell, 2)}</span>
     ${ref.iterations_run ? `<span class="tag blue">iyileştirme ${ref.iterations_run} tur · en iyi tur ${ref.best_iteration}</span>` : ""}
+    ${lineage.generation ? `<span class="tag ${lineage.warm_start_used ? "green" : "gray"}">nesil ${fmt(lineage.generation, 0)}${lineage.warm_start_used ? " · öncekinden devam" : " · sıfırdan"}</span>` : ""}
     ${wf.folds ? `<span class="tag ${Number(wf.avg_edge_pct) > 0 ? "green" : "gray"}">WF ${wf.folds} kat · ort. edge ${fmt(wf.avg_edge_pct, 1)}% · ${wf.positive_folds}/${wf.folds} pozitif</span>` : ""}
     ${timingChips}
-  </div>`;
+  </div>
+  ${top.length ? `<div class="muted small" style="margin-top:6px">En etkili özellikler: ${top.map((f) => `<span class="mono">${esc(f.feature)}</span> (${fmt(f.weight * 100, 1)}%)`).join(" · ")}</div>` : ""}`;
 }
 
 async function renderAI(root) {
-  const [status, models, auto] = await Promise.all([
+  const [status, models, auto, arch, ds, profile] = await Promise.all([
     api("/ai/status"),
     api("/ai/models?include_archived=true"),
     api("/ai/autopilot"),
+    api("/ai/architecture"),
+    api("/ai/datasets").catch(() => ({ items: [] })),
+    api("/ai/profile").catch(() => ({ profile: {}, last: {} })),
   ]);
+  const prof = profile.profile || {};
+  const lastAuto = profile.last || {};
+  // Uğraşma düzeyleri yanıtın kökünde gelir; profilde yoksa güvenli varsayılan.
+  const effortLevels = (profile.effortLevels && Object.keys(profile.effortLevels).length)
+    ? profile.effortLevels
+    : {
+        quick: { label: "Hızlı", desc: "Tek mimari, az tur. Birkaç dakikada sonuç." },
+        balanced: { label: "Dengeli", desc: "Önerilen. Birkaç mimari dener, hatalardan ders alır." },
+        thorough: { label: "Titiz", desc: "En çok mimari ve tur. En uzun süre." },
+      };
+  const effort = prof.effort && effortLevels[prof.effort] ? prof.effort : "balanced";
   const cfg = auto.settings || {};
   const presets = auto.presets || [];
+  const spec = auto.spec || arch.defaults;
+  const groups = arch.feature_groups || [];
+  const engines = arch.engines || [];
+  const modes = arch.output_modes || [];
+  const activations = arch.activations || [];
+  const specGroups = spec.feature_groups || [];
+  const datasetList = ds.items || [];
+  const pinnedId = String(cfg.dataset_id || "");
+  const pinned = datasetList.find((d) => d.id === pinnedId) || null;
+  const dsName = (d) => `${d.coin} · ${d.period} · ${fmt(d.rows, 0)} mum`;
+  const dsRow = (d) => {
+    const isPinned = d.id === pinnedId;
+    const size = d.size_bytes ? `${fmt(Number(d.size_bytes) / 1024, 0)} KB` : "";
+    const when = String(d.created_at || "").slice(0, 16).replace("T", " ");
+    return `<div class="ds-row ${isPinned ? "is-pinned" : ""}">
+      <div class="ds-main">
+        <b>${esc(d.coin)} · ${esc(d.period)}</b>
+        <span class="muted small">${fmt(d.rows, 0)} mum · ${esc(when)}${size ? " · " + esc(size) : ""}</span>
+      </div>
+      <div class="row" style="gap:6px">
+        ${isPinned
+          ? '<span class="tag green">sabit</span>'
+          : `<button class="small" data-ds-pin="${esc(d.id)}" type="button">Sabitle</button>`}
+        <button class="ghost small" data-ds-del="${esc(d.id)}" type="button">Sil</button>
+      </div>
+    </div>`;
+  };
+
+  /* Yardımcı: açıklamalı + "önerilen" düğmeli alan */
+  const pfField = (label, inputHtml, help, recValue, recText) => `
+    <div class="pf-field">
+      <label class="pf-label">${esc(label)}${inputHtml}</label>
+      <p class="pf-help">${help}</p>
+      ${recValue === undefined || recValue === null ? "" : `<button type="button" class="pf-rec" data-pfrec="${esc(String(recValue))}" data-pftarget="${esc(label)}">Önerilen: ${esc(recText ?? recValue)}</button>`}
+    </div>`;
+
+  const recFor = (period) => {
+    const map = {
+      "15m": { horizon: 24, target: 1.0, stop: 1.0 },
+      "1h": { horizon: 12, target: 1.0, stop: 1.0 },
+      "4h": { horizon: 6, target: 1.5, stop: 1.5 },
+      "1d": { horizon: 3, target: 2.5, stop: 2.0 },
+    };
+    return map[period] || map["1h"];
+  };
+  const rec = recFor(prof.period || "1h");
+
+  const masterCard = `<div class="card mt ai-master-card">
+    <div class="row between" style="align-items:flex-start">
+      <div>
+        <div class="row" style="gap:10px;align-items:center">
+          <h3 style="margin:0">Modeli eğit</h3>
+          <span class="tag green">LSTM · Transformer · kâr odaklı</span>
+        </div>
+        <p class="muted small" style="margin:6px 0 0;max-width:760px">
+          Model son <b>24 mumun gidişatını</b> okur (LSTM / Transformer). Hedef: <b>genel trend
+          yukarıyken dibe yakın almak, tepeye yakın satmak</b> ve al-tut'u geçmek. İşlemler az
+          ve seçicidir: trend kırılınca veya takipli stop devreye girince çıkar. Bu yüzden
+          yükselişte al-tut'un bir miktar gerisinde kalabilir; asıl farkı <b>düşüşlerde sermayeyi
+          koruyarak</b> yaratır. Sıra modelleri birkaç dakika eğitilir; ilerleme altta görünür.
+        </p>
+      </div>
+      <button class="primary" id="master-train" type="button" style="min-width:170px"
+        ${status.enabled ? "" : "disabled"}>Modeli eğit</button>
+    </div>
+
+    <div class="pf-simple">
+      <div class="pf-field">
+        <label class="pf-label">Coin <input id="pf-coin" value="${esc(prof.coin || "BTCUSDT")}"></label>
+        <p class="pf-help">Modelin öğreneceği parite.</p>
+      </div>
+      <div class="pf-field">
+        <label class="pf-label">Periyot ${periodFieldHtml("pf-period", prof.period || "1h")}</label>
+        <p class="pf-help">1h iyi bir başlangıç. 15m daha sık işlem, 4h/1d daha az gürültü.</p>
+      </div>
+      <div class="pf-field">
+        <label class="pf-label">Geçmiş mum <select id="pf-limit">${[5000,10000,20000,30000,50000].map((n) => `<option value="${n}" ${Number(prof.limit) === n ? "selected" : ""}>${n.toLocaleString("tr-TR")}</option>`).join("")}</select></label>
+        <p class="pf-help">Ne kadar geçmişi öğreneceği. 20.000 mum (1h'de ~2 yıl) iyi bir denge.</p>
+      </div>
+      <div class="pf-field">
+        <label class="pf-label">Fiyat verisi <select id="pf-dataset">
+          <option value="" ${prof.dataset_id ? "" : "selected"}>Sabit / otomatik</option>
+          ${datasetList.map((d) => `<option value="${esc(d.id)}" ${d.id === String(prof.dataset_id || "") ? "selected" : ""}>${esc(d.coin)} ${esc(d.period)} · ${fmt(d.rows, 0)} mum</option>`).join("")}
+        </select></label>
+        <p class="pf-help">Bir kez çekilip sabitlenen veri. Boş bırakırsan ilk eğitimde otomatik sabitlenir.</p>
+      </div>
+      <div class="pf-field">
+        <label class="pf-label">Hedef <select id="pf-objective">
+          <option value="profit" ${(prof.objective || "profit") === "profit" ? "selected" : ""}>Kâr odaklı (önerilen)</option>
+          <option value="local_min_max" ${prof.objective === "local_min_max" ? "selected" : ""}>Local_Min_Max taklidi</option>
+        </select></label>
+        <p class="pf-help">Kâr odaklı: trend + dip/tepe. LMM taklidi: dip/zirve uyumu (F1) öncelikli.</p>
+      </div>
+      <div class="pf-field">
+        <label class="pf-label">Uğraşma düzeyi <select id="pf-effort">${Object.entries(effortLevels).map(([id, level]) => `<option value="${esc(id)}" ${id === effort ? "selected" : ""}>${esc(level.label)} — ${esc(level.desc || "")}</option>`).join("")}</select></label>
+        <p class="pf-help">Hızlı: birkaç dakika, tek mimari. Dengeli: önerilen. Titiz: en çok deneme, en uzun süre.</p>
+      </div>
+    </div>
+
+    <div class="pf-objective mt">
+      <b>Başarı ölçütü:</b> doğrulamanın <b>3 ayrı penceresinde</b> işlem kalitesi — al-tut farkı,
+      getiri, kâr faktörü ve düşüş. Aşırı işlem yapan modeller cezalandırılır. Test verisi
+      seçime hiç katılmaz. Model kabul edilmezse mevcut model korunur; bu bir hata değildir.
+    </div>
+
+    <details class="pf-advanced">
+      <summary><b>Uzman ayarları</b> <span class="muted small">— genelde dokunma gerekmez</span></summary>
+
+      <div class="pf-section-title">Local_Min_Max hedefi</div>
+      <div class="pf-grid">
+        ${pfField("Pivot penceresi (mum)", `<input id="pf-window" type="number" min="0" max="100" value="${esc(prof.extreme_window || 0)}">`,
+          "Local_Min_Max'ın dip/zirve saymak için iki yanına baktığı mum sayısı. 0 = periyoda göre otomatik (15m:10, 1h:13, 4h:10, 1d:7).", 0, "otomatik")}
+        ${pfField("Dip/zirve bandı (%)", `<input id="pf-band" type="number" min="0" max="5" step="0.05" value="${esc((Number(prof.proximity_band || 0.001) * 100).toFixed(2))}">`,
+          "Fiyatın yerel dibe ne kadar yakınken 'dip bölgesi' sayılacağı. Küçük = sadece tam dip (az ama isabetli sinyal), büyük = geniş bölge (çok ama gürültülü). 0,1 önerilir.", 0.1, "%0,10")}
+        ${pfField("Kayma toleransı (mum)", `<input id="pf-agree-tol" type="number" min="0" max="20" value="${esc(prof.agree_tolerance ?? 2)}">`,
+          "Model sinyali gerçek pivottan kaç mum kayarsa yine 'tuttu' sayılsın. 2 makul.", 2, "2")}
+        ${pfField("Asgari isabet", `<input id="pf-minprec" type="number" min="0.05" max="0.95" step="0.05" value="${esc(prof.min_precision ?? 0.35)}">`,
+          "Sinyallerin en az kaçta kaçı gerçek pivot olmalı. 0,35 = üçte biri. Yükseltirsen daha az ama daha isabetli işlem.", 0.35, "0,35")}
+      </div>
+
+      <div class="pf-section-title">İşlem disiplini</div>
+      <div class="pf-grid">
+        ${pfField("Giriş seçiciliği (%)", `<input id="pf-entryrate" type="number" min="0.2" max="20" step="0.5" value="${esc((Number(prof.entry_rate || 0.02) * 100).toFixed(1))}">`,
+          "Doğrulamada en yüksek olasılıklı mumların yüzde kaçında alım yapılabilsin. Küçük = az ama seçici işlem. 2 iyi bir denge.", 2, "%2")}
+        ${pfField("Asgari tutma (mum)", `<input id="pf-minhold" type="number" min="0" max="500" value="${esc(prof.min_hold ?? 24)}">`,
+          "Pozisyon en az kaç mum tutulur; sinyalle hemen kapanmaz. 24 = 1 gün (1h).", 24, "24")}
+        ${pfField("Bekleme (mum)", `<input id="pf-cooldown" type="number" min="0" max="500" value="${esc(prof.cooldown ?? 24)}">`,
+          "Çıkıştan sonra kaç mum yeni alım yapılmaz. Testere işlemleri ve maliyeti azaltır.", 24, "24")}
+        ${pfField("Takipli stop (%)", `<input id="pf-trail" type="number" min="0" max="50" step="0.5" value="${esc((Number(prof.trailing_stop || 0.08) * 100).toFixed(1))}">`,
+          "En yüksek fiyattan bu kadar geri çekilmede kâr korunur. Trendi yakalamak için 8 önerilir; 0 = kapalı.", 8, "%8")}
+        ${pfField("Rejim bandı (%)", `<input id="pf-regime" type="number" min="0" max="20" step="0.5" value="${esc((Number(prof.regime_band || 0.02) * 100).toFixed(1))}">`,
+          "EMA200 üstünde kalma bandı. Fiyat bandın üstüne çıkınca trend açık sayılır, altına inince kapanır. Testere sinyallerini engeller.", 2, "%2")}
+      </div>
+
+      <div class="pf-section-title">Model yapısı</div>
+      <div class="pf-grid">
+        ${pfField("Motor", `<select id="pf-engine"><option value="auto" ${prof.engine === "auto" ? "selected" : ""}>Sistem seçsin</option>${engines.map((e) => `<option value="${esc(e.id)}" ${e.id === prof.engine ? "selected" : ""}>${esc(e.label)}</option>`).join("")}</select>`,
+          "Hangi algoritma. 'Sistem seçsin' en güvenlisi.", "auto", "sistem")}
+        ${pfField("Çıktı biçimi", `<select id="pf-mode">${modes.map((m) => `<option value="${esc(m.id)}" ${m.id === prof.output_mode ? "selected" : ""}>${esc(m.label)}</option>`).join("")}</select>`,
+          "Model neyi tahmin etsin. 'AL + SAT' en anlaşılır.", "dual_binary", 'AL + SAT')}
+        ${pfField("Katmanlar", `<input id="pf-layers" value="${esc(layersText(prof.hidden_layers, ", "))}" placeholder="otomatik">`,
+          "Sadece sinir ağı için. Boş = sistem dener.", "", "boş bırak")}
+        ${pfField("Sıra penceresi (mum)", `<input id="pf-seqwindow" type="number" min="4" max="96" value="${esc(prof.seq_window || 24)}">`,
+          "LSTM/Transformer kaç mumluk geçmişe baksın. 24 = 1 gün (1h). Uzun pencere daha geniş bağlam, daha yavaş eğitim.", 24, "24")}
+        ${pfField("Aktivasyon", `<select id="pf-act"><option value="auto" ${prof.activation === "auto" ? "selected" : ""}>Sistem seçsin</option>${activations.map((a) => `<option value="${esc(a.id)}" ${a.id === prof.activation ? "selected" : ""}>${esc(a.label)}</option>`).join("")}</select>`,
+          "'Sistem seçsin' yeterli.", "auto", "sistem")}
+      </div>
+
+      <div class="pf-section-title">Hangi bilgileri görsün?</div>
+      <p class="muted small" style="margin:0 0 8px">Hiçbiri seçilmezse sistem en iyi kombinasyonu arar.</p>
+      <div class="arch-group-grid" id="pf-groups">
+        ${groups.map((g) => `<label class="check arch-group">
+          <input type="checkbox" class="pf-group-cb" value="${esc(g.id)}" ${(prof.feature_groups || []).includes(g.id) ? "checked" : ""}>
+          <span><b>${esc(g.label)}</b> <span class="tag gray">${g.column_count}</span><br><small class="muted">${esc(g.desc)}</small></span>
+        </label>`).join("")}
+      </div>
+
+      <div class="pf-section-title">Doğrulama</div>
+      <div class="row" style="flex-wrap:wrap;gap:14px">
+        <label class="check"><input type="checkbox" id="pf-wf" ${prof.walk_forward ? "checked" : ""}> Walk-forward doğrulaması</label>
+        <label class="check"><input type="checkbox" id="pf-feedback" ${prof.use_feedback ? "checked" : ""}> Kapanan işlemlerden öğren</label>
+      </div>
+    </details>
+
+    <div class="row mt" style="align-items:center;flex-wrap:wrap;gap:10px">
+      <span class="muted small">${lastAuto.at ? `Son eğitim: ${esc(String(lastAuto.at).slice(0, 16).replace("T", " "))} · ${esc(lastAuto.reason || lastAuto.decision || "")}` : "Bu model için henüz eğitim yapılmadı"}</span>
+    </div>
+    <div id="master-result" class="mt"></div>
+  </div>`;
+
+
+  const datasetCard = `<div class="card mt ds-card">
+    <div class="row between" style="align-items:flex-start">
+      <div>
+        <div class="row" style="gap:10px;align-items:center">
+          <h3 style="margin:0">Fiyat verisi</h3>
+          <span class="tag ${pinned ? "green" : "amber"}">${pinned ? "sabitlenmiş" : "canlı / otomatik"}</span>
+        </div>
+        <p class="muted small" style="margin:6px 0 0;max-width:680px">
+          ${pinned
+            ? `Eğitimler <b>${esc(dsName(pinned))}</b> sabit kopyasından okunur; ağa çıkılmaz. İndikatörler bu veriden yeniden hesaplanır.`
+            : "İlk eğitimde veri bir kez çekilip diske sabitlenir; sonraki eğitimler aynı kopyayı kullanır. Yeni veri istediğinde yeni bir kopya oluştur."}
+        </p>
+      </div>
+      <button class="primary small" id="ds-create" type="button">Yeni veri kopyası al</button>
+    </div>
+    <div class="row mt" style="flex-wrap:wrap;align-items:flex-end">
+      ${field("Varlık", assetSelectHtml("ds-asset", "crypto"))}
+      ${field("Sembol", symbolFieldHtml("ds-coin", cfg.coin || "BTCUSDT", { asset: "ds-asset" }))}
+      ${field("Periyot", periodFieldHtml("ds-period", cfg.period || "1h"))}
+      ${field("Mum sayısı", `<select id="ds-limit">${[5000,10000,20000,30000,50000].map((n) => `<option value="${n}" ${n === 20000 ? "selected" : ""}>${n.toLocaleString("tr-TR")}</option>`).join("")}</select>`)}
+      <button class="ghost" id="ds-refresh" type="button" ${pinned ? "" : "disabled"} title="Sabit veriyi güncel fiyatlarla yenile">Sabit veriyi yenile</button>
+      ${pinned ? `<button class="ghost" id="ds-unpin" type="button">Sabitlemeyi kaldır</button>` : ""}
+    </div>
+    <div class="ds-list mt">
+      ${datasetList.length
+        ? datasetList.slice(0, 12).map(dsRow).join("")
+        : '<div class="empty-state small">Henüz sabit veri yok. İlk eğitimde otomatik oluşur veya yukarıdan elle al.</div>'}
+    </div>
+    <div class="tool-note mt">
+      <b>Neden?</b> Her eğitimde borsaya istek atmak hem yavaş hem de sonuçları değişken yapar.
+      Sabit kopya sayesinde aynı veride tekrar tekrar eğitim yapabilir, modelleri adil karşılaştırabilirsin.
+      Yeni bir kopya aldığında eski kopya silinmez; geçmiş karşılaştırmalar bozulmaz.
+    </div>
+  </div>`;
   const active = models.filter((m) => m.status === "active");
   const candidates = models.filter((m) => m.status === "candidate");
   const archived = models.filter((m) => m.status === "archived");
@@ -5203,14 +6088,16 @@ async function renderAI(root) {
         <div>
           <div class="row" style="gap:8px;align-items:center">
             <h3 style="margin:0">${esc(m.name)}</h3>
+            <span class="tag blue">v${fmt(m.version || 1, 0)}</span>
             ${aiStatusTag(m.status)}
           </div>
           <div class="muted small" style="margin-top:4px">
-            ${esc(p.coin || "-")} · ${esc(p.period || "-")} · ${fmt(d.rows, 0)} mum · ${esc((m.created_at || "").slice(0, 16).replace("T", " "))}
+            ${esc(p.coin || "-")} · ${esc(p.period || "-")} · ${fmt(d.rows, 0)} mum · v${fmt(m.version || 1, 0)} · ${esc((m.updated_at || m.created_at || "").slice(0, 16).replace("T", " "))}
           </div>
         </div>
         <div class="row" style="gap:6px;flex-wrap:wrap">
           ${m.status !== "active" ? `<button class="small" data-ai-promote="${esc(m.id)}" type="button">Aktifleştir</button>` : ""}
+          <button class="small" data-ai-retrain="${esc(m.id)}" type="button" title="Aynı modeli tekrar eğit; sürüm artar">Tekrar eğit</button>
           <button class="small" data-ai-backtest="${esc(m.id)}" type="button">Backtest</button>
           <button class="ghost small" data-ai-detail="${esc(m.id)}" type="button">Detay</button>
           ${m.status !== "archived" ? `<button class="ghost small" data-ai-archive="${esc(m.id)}" type="button">Arşivle</button>` : ""}
@@ -5237,6 +6124,15 @@ async function renderAI(root) {
       </div>
     </div>
 
+    ${masterCard}
+
+    <details class="mt">
+      <summary class="ghost" style="cursor:pointer;padding:10px 14px;border-radius:10px;background:rgba(148,163,184,.08)">
+        <b>Gelişmiş ayarlar</b> <span class="muted small">— fiyat verisi, otomatik öğrenme, mimari, veri setleri</span>
+      </summary>
+
+    ${datasetCard}
+
     <div class="card mt ai-auto-card">
       <div class="row between" style="align-items:flex-start">
         <div>
@@ -5257,14 +6153,20 @@ async function renderAI(root) {
 
       <div class="row mt" style="flex-wrap:wrap;align-items:flex-end">
         ${field("Coin", `<input id="auto-coin" value="${esc(cfg.coin || "BTCUSDT")}">`)}
-        ${field("Periyot", `<select id="auto-period">${["15m","1h","4h","1d"].map((p) => `<option ${p === cfg.period ? "selected" : ""}>${p}</option>`).join("")}</select>`)}
+        ${field("Periyot", periodFieldHtml("auto-period", cfg.period || "1h"))}
         ${field("Öğrenme tarzı", `<select id="auto-preset">${presets.map((p) => `<option value="${esc(p.id)}" ${p.id === cfg.preset ? "selected" : ""}>${esc(p.label)} — ${esc(p.desc)}</option>`).join("")}</select>`)}
         ${field("Kaç saatte bir", `<select id="auto-interval">${[6,12,24,48,72,168].map((h) => `<option value="${h}" ${Number(cfg.interval_hours) === h ? "selected" : ""}>${h < 24 ? h + " saat" : h / 24 + " gün"}</option>`).join("")}</select>`)}
         ${field("Geçmiş (mum)", `<select id="auto-limit">${[10000,20000,30000,50000].map((n) => `<option value="${n}" ${Number(cfg.limit) === n ? "selected" : ""}>${n.toLocaleString("tr-TR")}</option>`).join("")}</select>`)}
+        ${field("Veri seti", `<select id="auto-dataset">
+          <option value="" ${pinnedId ? "" : "selected"}>Canlı (otomatik sabitlenir)</option>
+          ${datasetList.map((d) => `<option value="${esc(d.id)}" ${d.id === pinnedId ? "selected" : ""}>${esc(d.coin)} ${esc(d.period)} · ${fmt(d.rows, 0)} mum</option>`).join("")}
+        </select>`)}
       </div>
       <div class="row mt" style="flex-wrap:wrap;gap:10px;align-items:center">
         <button class="primary" id="auto-save" type="button">Ayarları kaydet</button>
         <button class="ghost" id="auto-run" type="button" ${status.enabled ? "" : "disabled"}>Şimdi öğren</button>
+        ${field("Nesil sayısı", `<select id="auto-generations">${[2,3,4,5,6].map((n) => `<option value="${n}" ${n === 3 ? "selected" : ""}>${n} nesil</option>`).join("")}</select>`)}
+        <button class="ghost" id="auto-evolve" type="button" ${status.enabled ? "" : "disabled"}>Nesiller boyu eğit</button>
         <span class="muted small">${cfg.enabled && auto.next_run_at ? `Sıradaki tur: ${esc(fmtIso(auto.next_run_at))}` : "Otomatik öğrenme kapalı"}</span>
       </div>
       <div id="auto-result" class="mt"></div>
@@ -5289,34 +6191,87 @@ async function renderAI(root) {
       ${last && last.reason ? `<div class="tool-note mt">Son karar: ${esc(last.reason)}</div>` : ""}
     </div>
 
+    <div class="card mt ai-arch-card">
+      <div class="row between" style="align-items:flex-start">
+        <div>
+          <div class="row" style="gap:10px;align-items:center">
+            <h3 style="margin:0">Model mimarisi</h3>
+            <span class="tag blue">sen seç</span>
+          </div>
+          <p class="muted small" style="margin:6px 0 0;max-width:700px">
+            Hangi bilgiyi göreceğini, ağın kaç katman olacağını ve neyi tahmin edeceğini burada belirliyorsun.
+            Aynı mimari hem otomatik öğrenmede hem elle eğitimde kullanılır.
+          </p>
+        </div>
+        <button class="primary small" id="arch-save" type="button">Mimariyi kaydet</button>
+      </div>
+
+      <div class="row mt" style="flex-wrap:wrap;align-items:flex-end">
+        ${field("Motor", `<select id="arch-engine">${engines.map((e) => `<option value="${esc(e.id)}" ${e.id === spec.engine ? "selected" : ""}>${esc(e.label)}</option>`).join("")}</select>`)}
+        ${field("Çıktı biçimi", `<select id="arch-mode">${modes.map((m) => `<option value="${esc(m.id)}" ${m.id === spec.output_mode ? "selected" : ""}>${esc(m.label)}</option>`).join("")}</select>`)}
+        ${field("Gizli katmanlar (virgülle)", `<input id="arch-layers" value="${esc(layersText(spec.hidden_layers, ", "))}" placeholder="64, 32">`)}
+        ${field("Aktivasyon", `<select id="arch-act">${activations.map((a) => `<option value="${esc(a.id)}" ${a.id === spec.activation ? "selected" : ""}>${esc(a.label)}</option>`).join("")}</select>`)}
+      </div>
+      <div class="row" style="flex-wrap:wrap;align-items:flex-end">
+        ${field("Dropout", `<input id="arch-dropout" type="number" min="0" max="0.8" step="0.05" value="${esc(spec.dropout)}">`)}
+        ${field("Öğrenme oranı", `<input id="arch-lr" type="number" min="0.00001" max="0.5" step="0.0005" value="${esc(spec.learning_rate)}">`)}
+        ${field("Epoch", `<input id="arch-epochs" type="number" min="5" max="2000" step="5" value="${esc(spec.epochs)}">`)}
+        ${field("Batch", `<input id="arch-batch" type="number" min="16" max="8192" step="16" value="${esc(spec.batch_size)}">`)}
+        ${field("L2 ceza", `<input id="arch-l2" type="number" min="0" max="0.1" step="0.0001" value="${esc(spec.l2)}">`)}
+        ${field("Sabır (epoch)", `<input id="arch-patience" type="number" min="1" max="200" step="1" value="${esc(spec.patience)}">`)}
+      </div>
+      <div class="arch-groups">
+        <div class="row between" style="align-items:baseline">
+          <b class="small">Özellik grupları</b>
+          <span class="muted small">Seçilmeyen grup modele hiç girmez</span>
+        </div>
+        <div class="arch-group-grid">
+          ${groups.map((g) => `<label class="check arch-group">
+            <input type="checkbox" class="arch-group-cb" value="${esc(g.id)}" ${specGroups.includes(g.id) ? "checked" : ""}>
+            <span><b>${esc(g.label)}</b> <span class="tag gray">${g.column_count}</span><br><small class="muted">${esc(g.desc)}</small></span>
+          </label>`).join("")}
+        </div>
+      </div>
+      <div class="tool-note mt" id="arch-summary"></div>
+    </div>
+    </details>
+
     <div class="card mt">
       <div class="row between">
         <h3 style="margin:0">Aktif modeller <span class="tag green">${active.length}</span></h3>
         <button class="ghost small" id="ai-refresh" type="button">Yenile</button>
       </div>
       <p class="muted small">Aktif model bot oluşturma ekranında AI stratejisi olarak seçilir ve panelden değiştirilene kadar sabit kalır.</p>
-      ${active.length ? active.map(modelCard).join("") : '<div class="empty-state">Henüz aktif model yok. "Şimdi öğren" ile ilk modeli üret.</div>'}
+      ${active.length ? active.map(modelCard).join("") : '<div class="empty-state">Henüz aktif model yok. Yukarıdan “Modeli eğit” ile ilk modeli üret.</div>'}
     </div>
 
     <div class="card mt">
-      <h3>Aday modeller <span class="tag blue">${candidates.length}</span></h3>
+      <div class="row between">
+        <h3 style="margin:0">Aday modeller <span class="tag blue">${candidates.length}</span></h3>
+        ${candidates.length ? `<button class="ghost small" data-ai-purge="candidate" type="button">Tümünü sil</button>` : ""}
+      </div>
       <p class="muted small">Kalite kapısını geçmiş ama mevcut modelden belirgin üstün olmadığı için terfi ettirilmemiş modeller.</p>
       ${candidates.length ? candidates.map(modelCard).join("") : '<div class="empty-state">Aday model yok.</div>'}
     </div>
 
-    ${archived.length ? `<div class="card mt"><h3>Arşiv <span class="tag gray">${archived.length}</span></h3>${archived.map(modelCard).join("")}</div>` : ""}
+    ${archived.length ? `<div class="card mt"><div class="row between"><h3 style="margin:0">Arşiv <span class="tag gray">${archived.length}</span></h3><button class="ghost small" data-ai-purge="archived" type="button">Tümünü sil</button></div>${archived.map(modelCard).join("")}</div>` : ""}
+
+    ${(candidates.length + archived.length) ? `<div class="row mt" style="justify-content:flex-end">
+      <button class="ghost small" data-ai-purge="candidate,archived" type="button">Aday ve arşivi birlikte sil (${candidates.length + archived.length})</button>
+    </div>` : ""}
 
     <details class="card mt">
       <summary style="cursor:pointer"><b>Gelişmiş: elle eğitim</b> <span class="muted small">— genelde gerekmez</span></summary>
       <p class="muted small" style="margin:10px 0 0">Otomatik öğrenme yeterli değilse ince ayar burada. Aynı zaman serisi protokolü uygulanır: kronolojik bölme, embargo, yalnızca validation'da eşik, testin tek kullanımı.</p>
       <div class="row mt" style="flex-wrap:wrap">
         ${field("Model adı", `<input id="ai-name" placeholder="BTC 1h dip-zirve">`)}
-        ${field("Coin", `<input id="ai-coin" value="BTCUSDT">`)}
-        ${field("Periyot", `<select id="ai-period">${["15m","1h","4h","1d"].map((p) => `<option ${p === "1h" ? "selected" : ""}>${p}</option>`).join("")}</select>`)}
+        ${field("Varlık", assetSelectHtml("ai-asset", "crypto"))}
+        ${field("Sembol", symbolFieldHtml("ai-coin", "BTCUSDT", { asset: "ai-asset" }))}
+        ${field("Periyot", periodFieldHtml("ai-period", "1h"))}
         ${field("Mum sayısı", `<input id="ai-limit" type="number" value="20000" min="1000" max="250000" step="1000">`)}
       </div>
       <div class="row" style="flex-wrap:wrap">
-        ${field("Veri kaynağı", `<select id="ai-source"><option value="binance">Binance</option><option value="csv">Yerel CSV (Data/)</option></select>`)}
+        ${field("Veri kaynağı", `<select id="ai-source"><option value="auto">Otomatik</option><option value="binance">Binance</option><option value="yahoo">Yahoo Finance</option><option value="tefas">TEFAS</option><option value="csv">Yerel CSV (Data/)</option></select>`)}
         ${field("CSV yolu", `<input id="ai-csv" placeholder="btcusd_1-min_data.csv">`)}
         ${field("Etiket türü", `<select id="ai-label-kind"><option value="forward">İleri getiri (önerilen)</option><option value="local_extreme">Yerel dip/zirve (deney)</option></select>`)}
         ${field("Ufuk (mum)", `<input id="ai-horizon" type="number" value="12" min="2" max="500">`)}
@@ -5343,17 +6298,253 @@ async function renderAI(root) {
     </details>
   `;
 
+  const collectArch = () => {
+    const layers = String($("#arch-layers").value || "")
+      .split(/[\s,;x]+/).map((v) => v.trim()).filter(Boolean).map(Number).filter((n) => n > 0);
+    const selected = $$(".arch-group-cb").filter((cb) => cb.checked).map((cb) => cb.value);
+    return {
+      engine: $("#arch-engine").value,
+      output_mode: $("#arch-mode").value,
+      hidden_layers: layers,
+      activation: $("#arch-act").value,
+      dropout: Number($("#arch-dropout").value || 0),
+      learning_rate: Number($("#arch-lr").value || 0.003),
+      epochs: Number($("#arch-epochs").value || 120),
+      batch_size: Number($("#arch-batch").value || 256),
+      l2: Number($("#arch-l2").value || 0),
+      patience: Number($("#arch-patience").value || 15),
+      feature_groups: selected,
+    };
+  };
+  const archSummary = () => {
+    const s = collectArch();
+    const groupCols = groups
+      .filter((g) => s.feature_groups.includes(g.id))
+      .reduce((sum, g) => sum + Number(g.column_count || 0), 0);
+    const modeLabel = (modes.find((m) => m.id === s.output_mode) || {}).label || s.output_mode;
+    const engineLabel = (engines.find((e) => e.id === s.engine) || {}).label || s.engine;
+    const archText = archSummaryText(s.engine, s, s);
+    $("#arch-summary").innerHTML = `<b>Özet:</b> ${esc(engineLabel)} · ${esc(archText)} · ${esc(modeLabel)} · ` +
+      `${s.feature_groups.length} grup / ${groupCols} özellik`;
+  };
+
   const saveCfg = async (extra = {}) => {
     const body = {
       coin: $("#auto-coin").value.trim().toUpperCase(),
-      period: $("#auto-period").value,
+      period: readPeriod("auto-period"),
       preset: $("#auto-preset").value,
       interval_hours: Number($("#auto-interval").value || 24),
       limit: Number($("#auto-limit").value || 25000),
+      dataset_id: $("#auto-dataset").value || "",
+      spec: collectArch(),
       ...extra,
     };
     return api("/ai/autopilot", { method: "PUT", body });
   };
+
+  /* Tek düğme: Modeli eğit */
+  const collectProfile = () => {
+    const layers = String($("#pf-layers").value || "")
+      .split(/[\s,;x]+/).map((v) => v.trim()).filter(Boolean).map(Number).filter((n) => n > 0);
+    const selected = $$(".pf-group-cb").filter((cb) => cb.checked).map((cb) => cb.value);
+    return {
+      coin: $("#pf-coin").value.trim().toUpperCase(),
+      period: readPeriod("pf-period"),
+      limit: Number($("#pf-limit").value || 20000),
+      dataset_id: $("#pf-dataset").value || "",
+      effort: ($("#pf-effort") || {}).value || effort,
+      objective: ($("#pf-objective") || {}).value || "profit",
+      extreme_window: Number(($("#pf-window") || {}).value || 0),
+      proximity_band: Number((($("#pf-band") || {}).value || 0.1)) / 100,
+      agree_tolerance: Number(($("#pf-agree-tol") || {}).value || 2),
+      min_precision: Number(($("#pf-minprec") || {}).value || 0.35),
+      entry_rate: Number(($("#pf-entryrate") || {}).value || 2) / 100,
+      min_hold: Number(($("#pf-minhold") || {}).value || 24),
+      cooldown: Number(($("#pf-cooldown") || {}).value || 24),
+      trailing_stop: Number(($("#pf-trail") || {}).value || 8) / 100,
+      regime_band: Number(($("#pf-regime") || {}).value || 2) / 100,
+      seq_window: Number(($("#pf-seqwindow") || {}).value || 24),
+      engine: $("#pf-engine").value,
+      output_mode: $("#pf-mode").value,
+      hidden_layers: layers,
+      activation: $("#pf-act").value,
+      feature_groups: selected,
+      walk_forward: $("#pf-wf").checked,
+      use_feedback: $("#pf-feedback").checked,
+    };
+  };
+
+  /* "Önerilen" düğmeleri: alanı etiket adıyla eşleştirip değeri yazar. */
+  $$("[data-pfrec]").forEach((b) => b.addEventListener("click", () => {
+    const label = b.dataset.pftarget || "";
+    const map = {
+      "Pivot penceresi (mum)": "#pf-window",
+      "Giriş seçiciliği (%)": "#pf-entryrate",
+      "Asgari tutma (mum)": "#pf-minhold",
+      "Bekleme (mum)": "#pf-cooldown",
+      "Takipli stop (%)": "#pf-trail",
+      "Rejim bandı (%)": "#pf-regime",
+      "Sıra penceresi (mum)": "#pf-seqwindow",
+      "Dip/zirve bandı (%)": "#pf-band",
+      "Kayma toleransı (mum)": "#pf-agree-tol",
+      "Asgari isabet": "#pf-minprec",
+      "Motor": "#pf-engine",
+      "Çıktı biçimi": "#pf-mode",
+      "Aktivasyon": "#pf-act",
+    };
+    const target = map[label];
+    if (!target) return;
+    const el = $(target);
+    if (!el) return;
+    el.value = b.dataset.pfrec;
+    el.classList.add("just-set");
+    setTimeout(() => el.classList.remove("just-set"), 700);
+  }));
+
+  $("#master-train").addEventListener("click", async () => {
+    const btn = $("#master-train");
+    const label = btn.textContent;
+    btn.disabled = true;
+    btn.textContent = "Eğitiliyor…";
+    const box = $("#master-result");
+    box.innerHTML = '<span class="muted">Model eğitimi başlatılıyor…</span>';
+    try {
+      const job = await api("/ai/auto", { method: "POST", body: collectProfile() });
+      pollJob(job.id, (j) => {
+        if (j.status === "error") {
+          box.innerHTML = `<div class="error">${esc(j.error || "Eğitim hatası")}</div>`;
+          btn.disabled = false;
+          btn.textContent = label;
+          return;
+        }
+        if (j.status !== "done") {
+          box.innerHTML = `<div class="muted">${esc(j.message || j.status)} · %${fmt(j.progress, 0)}</div>`;
+          return;
+        }
+        const r = j.result || {};
+        const labels = {
+          created: ["green", "ilk model oluşturuldu"],
+          updated: ["green", "model güncellendi"],
+          kept: ["amber", "mevcut model korundu"],
+        };
+        const [cls, text] = labels[r.decision] || ["gray", r.decision || "-"];
+        const rows = (r.attempts || []).map((a, i) => {
+          const v = a.validation || {};
+          const spec = a.spec || {};
+          const arch = spec.engine === "gbm" ? "GBM" : layersText(spec.hidden_layers);
+          const av = a.agreement || {};
+          return `<tr>
+            <td>${i + 1}</td>
+            <td class="mono small">${esc(arch)} · ${esc(spec.activation || "")}</td>
+            <td>${(spec.feature_groups || []).length} grup</td>
+            <td>${av.f1 === undefined ? "-" : fmt(av.f1 * 100, 1) + "%"}</td>
+            <td class="${pnlClass(v.edge_pct)}">${fmt(v.edge_pct, 2)}%</td>
+            <td>${fmt(a.score, 2)}${a.error ? ` <span class="tag red">hata</span>` : ""}</td>
+          </tr>`;
+        }).join("");
+        const rep = r.report || {};
+        const trd = rep.test ? (rep.test.trading || {}) : (rep.validation ? (rep.validation.trading || {}) : {});
+        const qual = ((rep.quality || {}).robust) || {};
+        box.innerHTML = `<div class="card" style="padding:12px">
+          <div class="row between"><b>Eğitim tamamlandı</b><span class="tag ${cls}">${esc(text)}</span></div>
+          <div class="muted small" style="margin:6px 0">${esc(r.reason || "")}</div>
+          <div class="stat-grid">
+            <div class="stat"><span>İşlem kalitesi</span><b class="${Number(qual.score || 0) > 0 ? "pos" : "neg"}">${qual.score === undefined ? "-" : fmt(qual.score, 1)}</b><small>${fmt(qual.positive_windows, 0)}/${fmt(qual.windows, 0)} pencerede al-tut geçildi</small></div>
+            <div class="stat"><span>Al-tut farkı</span><b class="${pnlClass(trd.edge_pct)}">${fmt(trd.edge_pct, 1)}%</b><small>getiri ${fmt(trd.total_return_pct, 1)}% · al-tut ${fmt(trd.buy_hold_pct, 1)}%</small></div>
+            <div class="stat"><span>İşlem / kazanma</span><b>${fmt(trd.trade_count, 0)}</b><small>${fmt(trd.win_rate, 1)}% kazanan · pf ${fmt(trd.profit_factor, 2)}</small></div>
+            <div class="stat"><span>Karar</span><b class="small">${esc(text)}</b><small>${(r.attempts || []).length} mimari denendi</small></div>
+          </div>
+          <div class="result-scroll mt"><table class="result-table"><thead><tr>
+            <th>#</th><th>Mimari</th><th>Özellik</th><th>Uyum (F1)</th><th>Al-tut farkı</th><th>Skor</th>
+          </tr></thead><tbody>${rows}</tbody></table></div>
+          ${r.report ? aiTrainingReport(r.report) : ""}
+          <div class="row mt"><button class="small" id="master-after" type="button">Listeyi yenile</button></div>
+        </div>`;
+        btn.disabled = false;
+        btn.textContent = label;
+        const after = $("#master-after");
+        if (after) after.addEventListener("click", () => route());
+      });
+    } catch (e) {
+      box.innerHTML = `<div class="error">${esc(e.message)}</div>`;
+      btn.disabled = false;
+      btn.textContent = label;
+    }
+  });
+
+  /* Fiyat verisi (sabit kopya) */
+  const datasetAction = async (fn, okText) => {
+    try {
+      await fn();
+      toast(okText);
+      route();
+    } catch (e) { toast(e.message, true); }
+  };
+  const createSnapshot = (coin, period, limit, okText, assetClass = "crypto", source = "") =>
+    datasetAction(async () => {
+      await api("/ai/datasets", {
+        method: "POST",
+        body: {
+          coin: coin.trim().toUpperCase(), period: period.trim(), limit: Number(limit),
+          asset_class: assetClass, source: source || assetSourceOf(assetClass),
+        },
+      });
+    }, okText);
+
+  $("#ds-create").addEventListener("click", () => {
+    createSnapshot($("#ds-coin").value, readPeriod("ds-period"), $("#ds-limit").value,
+      "Veri kopyası alındı ve sabitlendi", $("#ds-asset").value);
+  });
+  bindSymbolField("ds-coin", "ds-asset");
+  bindPeriodField("ds-period");
+  const refreshBtn = $("#ds-refresh");
+  if (refreshBtn) refreshBtn.addEventListener("click", () => {
+    if (!pinned) return;
+    createSnapshot(
+      pinned.coin, pinned.period, pinned.rows, "Sabit veri yenilendi",
+      pinned.asset_class || "crypto", pinned.source || "",
+    );
+  });
+  const unpinBtn = $("#ds-unpin");
+  if (unpinBtn) unpinBtn.addEventListener("click", async () => {
+    await datasetAction(() => api("/ai/autopilot", { method: "PUT", body: { dataset_id: "" } }),
+      "Sabitleme kaldırıldı");
+  });
+  $$("[data-ds-pin]").forEach((b) => b.addEventListener("click", async () => {
+    await datasetAction(() => api("/ai/autopilot", { method: "PUT", body: { dataset_id: b.dataset.dsPin } }),
+      "Veri seti sabitlendi");
+  }));
+  $$("[data-ds-del]").forEach((b) => b.addEventListener("click", async () => {
+    const ok = await confirmDialog("Veri setini sil", "Sabit fiyat kopyası silinecek. Devam edilsin mi?", "Sil", true);
+    if (!ok) return;
+    await datasetAction(() => api(`/ai/datasets/${encodeURIComponent(b.dataset.dsDel)}`, { method: "DELETE" }),
+      "Veri seti silindi");
+  }));
+
+  ["#arch-engine", "#arch-mode", "#arch-layers", "#arch-act", "#arch-dropout",
+   "#arch-lr", "#arch-epochs", "#arch-batch", "#arch-l2", "#arch-patience"]
+    .forEach((sel) => {
+      const el = $(sel);
+      if (el) el.addEventListener("input", archSummary);
+      if (el) el.addEventListener("change", archSummary);
+    });
+  $$(".arch-group-cb").forEach((cb) => cb.addEventListener("change", archSummary));
+  archSummary();
+  $("#arch-save").addEventListener("click", async () => {
+    const btn = $("#arch-save");
+    const label = btn.textContent;
+    btn.disabled = true;
+    btn.textContent = "Kaydediliyor…";
+    try {
+      const res = await api("/ai/autopilot", { method: "PUT", body: { spec: collectArch() } });
+      toast(`Model mimarisi kaydedildi (${layersText(res.spec.hidden_layers) || "ağaç"}, ${res.spec.feature_groups.length} grup)`);
+      route();
+    } catch (e) {
+      toast(`Kaydedilemedi: ${e.message}`, true);
+      btn.disabled = false;
+      btn.textContent = label;
+    }
+  });
 
   $("#auto-toggle").addEventListener("click", async () => {
     if (!cfg.enabled && !status.enabled) { toast("Önce AI özelliklerini açın: Ayarlar > Sistem", true); return; }
@@ -5399,6 +6590,7 @@ async function renderAI(root) {
           </div>
           ${(gate.reasons || []).length ? `<div class="error small mt">${gate.reasons.map((x) => esc(x)).join("<br>")}</div>` : ""}
           ${(gate.warnings || []).length ? `<div class="muted small mt">${gate.warnings.map((x) => esc(x)).join("<br>")}</div>` : ""}
+          ${r.report ? aiTrainingReport(r.report) : ""}
           <div class="row mt"><button class="small" id="auto-after" type="button">Listeyi yenile</button></div>
         </div>`;
         btn.disabled = false;
@@ -5410,12 +6602,98 @@ async function renderAI(root) {
       btn.disabled = false;
     }
   });
+
+  $("#auto-evolve").addEventListener("click", async () => {
+    const btn = $("#auto-evolve");
+    const label = btn.textContent;
+    btn.disabled = true;
+    btn.textContent = "Nesiller eğitiliyor…";
+    const box = $("#auto-result");
+    const generations = Number($("#auto-generations").value || 3);
+    box.innerHTML = `<div class="muted">${generations} nesil eğitim kuyruğa alınıyor… (her nesil öncekinden devam eder)</div>`;
+    try {
+      await saveCfg();
+      const job = await api("/ai/evolve", {
+        method: "POST",
+        body: {
+          coin: $("#auto-coin").value.trim().toUpperCase(),
+          period: readPeriod("auto-period"),
+          limit: Number($("#auto-limit").value || 25000),
+          generations,
+          dataset_id: pinnedId,
+          auto_snapshot: !pinnedId,
+          spec: collectArch(),
+        },
+      });
+      pollJob(job.id, (j) => {
+        if (j.status === "error") {
+          box.innerHTML = `<div class="error">${esc(j.error || "Nesil eğitimi hatası")}</div>`;
+          btn.disabled = false;
+          btn.textContent = label;
+          return;
+        }
+        if (j.status !== "done") {
+          box.innerHTML = `<div class="muted">${esc(j.message || j.status)} · %${fmt(j.progress, 0)}</div>`;
+          return;
+        }
+        const r = j.result || {};
+        const [cls, text] = decisionText[r.decision] || ["gray", r.decision || "-"];
+        const rows = (r.history || []).map((h) => {
+          const val = h.validation || {};
+          const test = h.test || {};
+          return `<tr class="${h.final_audit ? "muted" : ""}">
+            <td>${fmt(h.generation, 0)}${h.final_audit ? ' <span class="tag gray">denetim</span>' : ""}</td>
+            <td>${h.warm_start_used ? '<span class="tag green">devam</span>' : '<span class="tag gray">sıfırdan</span>'}</td>
+            <td class="${pnlClass(val.edge_pct)}">${fmt(val.edge_pct, 2)}%</td>
+            <td>${fmt(val.total_return_pct, 2)}% / ${fmt(val.trade_count, 0)} işlem</td>
+            <td class="${pnlClass(test.total_return_pct)}">${h.test ? fmt(test.total_return_pct, 2) + "%" : "-"}</td>
+            <td>${h.improved ? '<span class="tag green">iyileşti</span>' : '<span class="tag amber">geriledi</span>'}</td>
+          </tr>`;
+        }).join("");
+        box.innerHTML = `<div class="card" style="padding:12px">
+          <div class="row between"><b>${fmt(r.best_generation, 0)}. nesil seçildi</b><span class="tag ${cls}">${esc(text)}</span></div>
+          <div class="muted small" style="margin:6px 0">${esc(r.reason || "")}</div>
+          <div class="stat-grid">
+            <div class="stat"><span>Seçim skoru (validation)</span><b>${fmt(r.best_score, 2)}</b><small>nesil seçimi teste bakmaz</small></div>
+            <div class="stat"><span>Nihai skor</span><b>${fmt(r.final_score, 2)}</b><small>audit modeli</small></div>
+            <div class="stat"><span>Nesil</span><b>${fmt(r.history.length, 0)}</b><small>${fmt(r.best_generation, 0)}. seçildi</small></div>
+          </div>
+          <div class="result-scroll mt"><table class="result-table"><thead><tr>
+            <th>Nesil</th><th>Başlangıç</th><th>Validation edge</th><th>Validation getiri / işlem</th><th>Test getiri</th><th>Sonuç</th>
+          </tr></thead><tbody>${rows}</tbody></table></div>
+          ${r.report ? aiTrainingReport(r.report) : ""}
+          <div class="row mt"><button class="small" id="evo-after" type="button">Listeyi yenile</button></div>
+        </div>`;
+        btn.disabled = false;
+        btn.textContent = label;
+        const after = $("#evo-after");
+        if (after) after.addEventListener("click", () => route());
+      });
+    } catch (e) {
+      box.innerHTML = `<div class="error">${esc(e.message)}</div>`;
+      btn.disabled = false;
+      btn.textContent = label;
+    }
+  });
+
   $("#ai-refresh").addEventListener("click", () => route());
 
   $("#ai-source").addEventListener("change", () => {
     $("#ai-csv").closest("label").style.display = $("#ai-source").value === "csv" ? "" : "none";
   });
   $("#ai-source").dispatchEvent(new Event("change"));
+  bindSymbolField("ai-coin", "ai-asset");
+  bindPeriodField("ai-period");
+  ["pf-period", "auto-period"].forEach(bindPeriodField);
+  $("#ai-asset").addEventListener("change", () => {
+    const source = $("#ai-source");
+    if (source.value !== "csv") source.value = assetSourceOf($("#ai-asset").value);
+    const symbol = $("#ai-coin");
+    const known = Object.values(ASSET_DEFAULT_SYMBOL);
+    if (!symbol.value.trim() || known.includes(symbol.value.trim().toUpperCase())) {
+      symbol.value = ASSET_DEFAULT_SYMBOL[$("#ai-asset").value] || "BTCUSDT";
+    }
+  });
 
   $("#ai-train").addEventListener("click", async () => {
     const btn = $("#ai-train");
@@ -5426,9 +6704,10 @@ async function renderAI(root) {
       const body = {
         name: $("#ai-name").value.trim(),
         coin: $("#ai-coin").value.trim().toUpperCase(),
-        period: $("#ai-period").value,
+        period: readPeriod("ai-period"),
         limit: Number($("#ai-limit").value || 20000),
         source: $("#ai-source").value,
+        asset_class: $("#ai-asset").value,
         csv_path: $("#ai-csv").value.trim(),
         label_kind: $("#ai-label-kind").value,
         horizon: Number($("#ai-horizon").value || 12),
@@ -5443,6 +6722,9 @@ async function renderAI(root) {
         folds: Number($("#ai-folds").value || 0),
         use_feedback: $("#ai-feedback").checked,
         feedback_weight: Number($("#ai-feedback-weight").value || 0.5),
+        dataset_id: pinnedId,
+        auto_snapshot: !pinnedId && $("#ai-source").value !== "csv",
+        spec: collectArch(),
       };
       const job = await api("/ai/train", { method: "POST", body });
       box.innerHTML = `<div class="muted">İş <span class="mono">${esc(job.id)}</span> kuyruğa alındı.</div>`;
@@ -5458,15 +6740,10 @@ async function renderAI(root) {
         }
         const r = j.result || {};
         const report = r.report || {};
-        const test = (report.test && report.test.trading) || {};
         box.innerHTML = `<div class="card" style="padding:12px">
           <div class="row between"><b>Eğitim tamamlandı</b><button class="small" id="ai-goto-models" type="button">Modeli gör</button></div>
           <div class="muted small" style="margin:6px 0">Model: <span class="mono">${esc(r.model_id || "-")}</span></div>
-          <div class="stat-grid">
-            <div class="stat"><span>Test getirisi</span><b class="${pnlClass(test.total_return_pct)}">${fmt(test.total_return_pct, 1)}%</b><small>al-tut ${fmt(test.buy_hold_pct, 1)}%</small></div>
-            <div class="stat"><span>Edge</span><b class="${pnlClass(test.edge_pct)}">${fmt(test.edge_pct, 1)}%</b><small>${fmt(test.trade_count, 0)} işlem</small></div>
-            <div class="stat"><span>Kazanma</span><b>${fmt(test.win_rate, 1)}%</b><small>maks. düşüş ${fmt(test.max_drawdown_pct, 1)}%</small></div>
-          </div>
+          ${aiTrainingReport(report)}
         </div>`;
         btn.disabled = false;
         const after = $("#ai-goto-models");
@@ -5499,6 +6776,116 @@ async function renderAI(root) {
     if (!ok) return;
     try { await api(`/ai/models/${encodeURIComponent(b.dataset.aiDelete)}`, { method: "DELETE" }); toast("Model silindi"); route(); }
     catch (e) { toast(e.message, true); }
+  }));
+  $$("[data-ai-purge]").forEach((b) => b.addEventListener("click", async () => {
+    const statuses = String(b.dataset.aiPurge || "").split(",").filter(Boolean);
+    const n = statuses.reduce((acc, s) => acc + (s === "candidate" ? candidates.length : s === "archived" ? archived.length : 0), 0);
+    if (!n) { toast("Silinecek model yok"); return; }
+    const label = statuses.length > 1 ? `${n} aday/arşiv model` : (statuses[0] === "candidate" ? `${n} aday model` : `${n} arşiv model`);
+    const ok = await confirmDialog(
+      "Toplu sil",
+      `${label} kalıcı olarak silinecek. Aktif modeller korunur. Devam edilsin mi?`,
+      "Hepsini sil",
+      true,
+    );
+    if (!ok) return;
+    b.disabled = true;
+    try {
+      const r = await api("/ai/models/bulk-delete", { method: "POST", body: { statuses } });
+      toast(`${fmt(r.deleted, 0)} model silindi`);
+      if ((r.failed || []).length) toast(`${r.failed.length} model silinemedi`, true);
+      route();
+    } catch (e) {
+      toast(e.message, true);
+      b.disabled = false;
+    }
+  }));
+  $$("[data-ai-retrain]").forEach((b) => b.addEventListener("click", async () => {
+    const model = models.find((x) => x.id === b.dataset.aiRetrain) || {};
+    const version = Number(model.version || 1);
+    const wrap = document.createElement("div");
+    wrap.innerHTML = `
+      <p class="muted small">Aynı model kimliği korunur; sürüm numarası artar.
+      Bir tur mevcut sürümden daha iyi değilse <b>mevcut sürüm korunur</b>, gerileme kabul edilmez.</p>
+      <div class="tool-note">Model: <b>${esc(model.name || b.dataset.aiRetrain)}</b> · mevcut sürüm v${fmt(version, 0)}</div>
+      <p class="muted small" style="margin:8px 0 0">
+        <b>Veri sabit kalır.</b> Turlar dönüşümlü ilerler: bir tur önceki ağırlıklardan ince ayar,
+        sonraki tur <b>sıfırdan</b> eğitim (yerel optimuma takılmamak için). Eğitim uzun bütçeli
+        (200 epoch'a kadar, sabırlı erken durma) ve son model birkaç tohumun ortalamasıdır.
+        Terfi kararı test görmeden, <b>3 ayrı validation penceresinin</b> uyumuna göre verilir.
+      </p>
+      <div class="row mt" style="flex-wrap:wrap;align-items:flex-end">
+        ${field("Kaç tur", `<select id="rt-repeats">${[1,2,3,5,8,10].map((n) => `<option value="${n}" ${n === 3 ? "selected" : ""}>${n} tur</option>`).join("")}</select>`)}
+        ${field("Asgari kazanç (puan)", `<input id="rt-gain" type="number" value="0" min="0" max="5" step="0.05">`)}
+        ${field("Veri", `<select id="rt-dataset">
+          <option value="">Sabit / otomatik veri</option>
+          ${datasetList.map((d) => `<option value="${esc(d.id)}" ${d.id === String((model.params || {}).dataset_id || "") ? "selected" : ""}>${esc(d.coin)} ${esc(d.period)} · ${fmt(d.rows, 0)} mum</option>`).join("")}
+        </select>`)}
+      </div>
+      <div class="row end mt">
+        <button class="ghost" id="rt-cancel" type="button">Vazgeç</button>
+        <button class="primary" id="rt-start" type="button">Tekrar eğit</button>
+      </div>
+      <div id="rt-result" class="mt"></div>`;
+    modal("Aynı modeli tekrar eğit", wrap);
+    $("#rt-cancel").addEventListener("click", closeModal);
+    $("#rt-start").addEventListener("click", async () => {
+      const btn = $("#rt-start");
+      btn.disabled = true;
+      const box = $("#rt-result");
+      box.innerHTML = '<span class="muted">Turlar kuyruğa alınıyor…</span>';
+      try {
+        const dsId = $("#rt-dataset").value;
+        const job = await api(`/ai/models/${encodeURIComponent(b.dataset.aiRetrain)}/retrain`, {
+          method: "POST",
+          body: {
+            repeats: Number($("#rt-repeats").value || 1),
+            min_gain: Number($("#rt-gain").value || 0),
+            dataset_id: dsId || null,
+            auto_snapshot: !dsId,
+          },
+        });
+        pollJob(job.id, (j) => {
+          if (j.status === "error") {
+            box.innerHTML = `<div class="error">${esc(j.error || "Tekrar eğitim hatası")}</div>`;
+            btn.disabled = false;
+            return;
+          }
+          if (j.status !== "done") {
+            box.innerHTML = `<div class="muted">${esc(j.message || j.status)} · %${fmt(j.progress, 0)}</div>`;
+            return;
+          }
+          const r = j.result || {};
+          const rows = (r.attempts || []).map((a) => `
+            <tr>
+              <td>${fmt(a.step, 0)}</td>
+              <td>v${fmt(a.parent_version, 0)}</td>
+              <td>${fmt(a.previous_score, 2)}</td>
+              <td>${fmt(a.candidate_score, 2)}</td>
+              <td>${a.previous_robust_f1 == null ? "-" : fmt(a.previous_robust_f1 * 100, 1) + "% → " + fmt(a.candidate_robust_f1 * 100, 1) + "%"}</td>
+              <td>${fmt(a.focus, 2)}</td>
+              <td>${a.improved ? '<span class="tag green">kabul</span>' : '<span class="tag amber">korundu</span>'}</td>
+              <td class="${pnlClass((a.test || {}).total_return_pct)}">${fmt((a.test || {}).total_return_pct, 2)}%</td>
+            </tr>`).join("");
+          box.innerHTML = `<div class="card" style="padding:12px">
+            <div class="row between"><b>Sonuç: v${fmt(r.version, 0)}</b>
+              <span class="tag ${r.promoted ? "green" : "gray"}">${fmt(r.promoted, 0)}/${fmt(r.repeats, 0)} tur kabul</span></div>
+            <div class="muted small" style="margin:6px 0">Kimlik: <span class="mono">${esc(r.model_id || "")}</span> · skor ${fmt(r.score, 2)}</div>
+            <p class="muted small" style="margin:0 0 8px">Uyum = Local_Min_Max eşleşmesi (validation F1). Odak = önceki neslin hatalarına verilen ek ağırlık.</p>
+            <div class="result-scroll mt"><table class="result-table"><thead><tr>
+              <th>Tur</th><th>Önceki sürüm</th><th>Önceki skor</th><th>Aday skor</th><th>Uyum (3 pencere)</th><th>Odak</th><th>Karar</th><th>Test getiri</th>
+            </tr></thead><tbody>${rows}</tbody></table></div>
+            <div class="row mt"><button class="small" id="rt-after" type="button">Kapat ve yenile</button></div>
+          </div>`;
+          btn.disabled = false;
+          const after = $("#rt-after");
+          if (after) after.addEventListener("click", () => { closeModal(); route(); });
+        });
+      } catch (e) {
+        box.innerHTML = `<div class="error">${esc(e.message)}</div>`;
+        btn.disabled = false;
+      }
+    });
   }));
   $$("[data-ai-backtest]").forEach((b) => b.addEventListener("click", () => {
     const m = models.find((x) => x.id === b.dataset.aiBacktest);
@@ -5919,7 +7306,7 @@ function renderSystemView(root, info, usage, snaps, backups = []) {
       </div>
       <div class="row mt">
         ${field("Coin", `<input id="snap-coin" value="BTCUSDT">`)}
-        ${field("Periyot", `<select id="snap-period">${["15m", "1h", "4h", "1d"].map((p) => `<option ${p === "15m" ? "selected" : ""}>${p}</option>`).join("")}</select>`)}
+        ${field("Periyot", periodFieldHtml("snap-period", "15m"))}
         ${field("Mum sayısı", `<input id="snap-candles" type="number" min="200" max="50000" value="20000">`)}
         ${field("Not (isteğe bağlı)", `<input id="snap-note" placeholder="örn. v4 referans">`)}
         <button class="primary" id="snap-create" type="button">Referans kaydet</button>
@@ -5931,6 +7318,8 @@ function renderSystemView(root, info, usage, snaps, backups = []) {
       </table></div>
       <div id="snap-result" class="mt"></div>
     </div>`;
+
+  bindPeriodField("snap-period");
 
   const reload = async () => {
     const fresh = await api("/system/snapshots").catch(() => []);
@@ -6053,7 +7442,7 @@ function renderSystemView(root, info, usage, snaps, backups = []) {
         method: "POST",
         body: {
           coin: $("#snap-coin").value.trim().toUpperCase() || "BTCUSDT",
-          period: $("#snap-period").value,
+          period: readPeriod("snap-period"),
           candles: Number($("#snap-candles").value) || 20000,
           note: $("#snap-note").value,
         },

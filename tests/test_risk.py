@@ -39,7 +39,7 @@ def test_trailing_stop_follows_high():
     assert hit is None  # 108 > 106
     data2 = make_data([(110, 112, 100, 101)])
     hit2 = _risk_exit(pos(highest=112), data2, 0, [2.0], {"trail_atr": 3})
-    assert hit2 and hit2[1] == "stop"
+    assert hit2 and hit2[1] == "takipli-stop"
 
 
 def test_take_profit_pct():
@@ -89,7 +89,7 @@ def test_trailing_waits_for_profit_threshold():
     data2 = make_data([(120, 125, 118, 119)])
     hit = _risk_exit(pos(highest=125), data2, 0, [2.0],
                      {"trail_atr": 3, "trail_after_pct": 20})
-    assert hit and hit[1] == "stop"
+    assert hit and hit[1] == "takipli-stop"
     assert abs(hit[0] - 119.0) < 1e-9
 
 

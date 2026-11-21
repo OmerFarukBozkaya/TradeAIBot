@@ -35,7 +35,10 @@ from app.strategies.service import get_custom, list_custom, normalize_specs
 
 SNAPSHOT_DIR = paths.base / "Data" / "snapshots"
 DEFAULT_TOL = 1e-12
-SUPPORTED_PERIODS = ("15m", "1h", "4h", "1d")
+SUPPORTED_PERIODS = (
+    "1m", "3m", "5m", "15m", "30m", "45m", "1h", "2h", "4h", "6h", "8h",
+    "12h", "1d", "3d", "1w", "1M", "1y",
+)
 MAX_CANDLES = 50000
 
 
@@ -164,6 +167,12 @@ def record(
     """Snapshot oluşturur ve meta bilgisini döndürür."""
     coin = (coin or "BTCUSDT").strip().upper()
     period = (period or "15m").strip()
+    from app.market_data.periods import parse_period
+
+    try:
+        period = parse_period(period).text
+    except ValueError as exc:
+        raise ValueError(f"Desteklenmeyen periyot: {period}") from exc
     if period not in SUPPORTED_PERIODS:
         raise ValueError(f"Desteklenmeyen periyot: {period}")
     candles = max(200, min(int(candles), MAX_CANDLES))
@@ -173,8 +182,11 @@ def record(
             progress(pct, message)
 
     report(5, f"{coin} {period} · {candles} mum veri çekiliyor")
-    client = jr._client()
-    data, history_meta = jr._history(client, coin, period, candles)
+    try:
+        data, history_meta = jr._history(None, coin, period, candles, source="auto")
+    except TypeError:
+        # Testlerde/geriye dönük çağrılarda 4 argümanlı sürüm kullanılabilir.
+        data, history_meta = jr._history(None, coin, period, candles)
     n = len(data["close"])
     if n < 200:
         raise ValueError(f"Yeterli mum alınamadı ({n})")

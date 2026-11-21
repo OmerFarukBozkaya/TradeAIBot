@@ -9,6 +9,25 @@ import requests
 
 from app.config import settings
 
+# Telegram mesajlarının başına konan renkli işaretler.
+_KIND_ICONS = {
+    "buy": "🟢",   # alış
+    "sell": "🔴",  # satış
+    "start": "🔵",  # bot başlangıcı
+}
+
+
+def _infer_kind(subject: str) -> str:
+    """Konu satırından bildirim türünü tahmin eder."""
+    text = str(subject or "").strip().lower()
+    if text.startswith("bot başlad") or text.startswith("bot baslad"):
+        return "start"
+    if text.startswith("al ") or text.startswith("al|") or text == "al":
+        return "buy"
+    if "satış" in text or "satis" in text or text.startswith("sat"):
+        return "sell"
+    return ""
+
 
 class Notifier:
     """Mail / Telegram bildirimleri. Hatalar botu durdurmaz.
@@ -25,11 +44,19 @@ class Notifier:
     def telegram_enabled(self) -> bool:
         return bool(settings.TELEGRAM_ENABLED)
 
-    def send(self, subject: str, message: str) -> None:
+    def send(self, subject: str, message: str, kind: str = "") -> None:
+        """Bildirim gönderir.
+
+        Telegram mesajları türüne göre renkli bir yuvarlakla başlar:
+        alış 🟢, satış 🔴, bot başlangıcı 🔵. `kind` boşsa konu satırından
+        tahmin edilir.
+        """
         if self.mail_enabled:
             self._mail(subject, message)
         if self.telegram_enabled:
-            self._telegram(f"{subject}\n{message}")
+            icon = _KIND_ICONS.get(kind) or _KIND_ICONS.get(_infer_kind(subject))
+            text = f"{icon} {subject}\n{message}" if icon else f"{subject}\n{message}"
+            self._telegram(text)
 
     # ------------------------------------------------------------------
     # E-posta

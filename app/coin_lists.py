@@ -17,7 +17,7 @@ from typing import Any, Dict, Iterable, List, Optional
 
 from app import db
 
-COIN_RE = re.compile(r"^[A-Z0-9]{3,20}$")
+COIN_RE = re.compile(r"^[A-Z0-9:._=]{2,40}$")
 MAX_COINS = 500
 MAX_NAME = 60
 

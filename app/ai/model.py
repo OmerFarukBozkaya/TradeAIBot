@@ -14,12 +14,18 @@ from typing import Any, Dict, Optional, Tuple
 import numpy as np
 
 try:  # AI profili
-    from sklearn.ensemble import HistGradientBoostingClassifier  # type: ignore
+    from sklearn.ensemble import (  # type: ignore
+        HistGradientBoostingClassifier,
+        HistGradientBoostingRegressor,
+    )
 
     SKLEARN_AVAILABLE = True
 except Exception:  # pragma: no cover - yedek yol
     HistGradientBoostingClassifier = None  # type: ignore
+    HistGradientBoostingRegressor = None  # type: ignore
     SKLEARN_AVAILABLE = False
+
+from app.ai.nn import MLP, NumpyLogistic
 
 
 class ConstantModel:
@@ -33,6 +39,31 @@ class ConstantModel:
         p = np.full((len(X), 2), 1.0 - self.probability, dtype=float)
         p[:, 1] = self.probability
         return p
+
+
+class AveragedModel:
+    """Aynı mimariyle farklı tohumlardan eğitilmiş modellerin ortalaması.
+
+    Tek bir modelin şanslı/şanssız ağırlık seçimine bağlı kalmamak için
+    olasılıklar ortalanır. Bu, ek veri gerektirmeyen ve aşırı öğrenmeyi
+    artırmayan (tersine azaltan) bir topluluk yöntemidir.
+    """
+
+    def __init__(self, models: Optional[list] = None):
+        self.models = list(models or [])
+        self.classes_ = np.array([0, 1])
+
+    def predict_proba(self, X: np.ndarray) -> np.ndarray:
+        if not self.models:
+            raise RuntimeError("Topluluk boş")
+        probs = [np.asarray(m.predict_proba(X), dtype=float) for m in self.models]
+        return np.mean(np.stack(probs, axis=0), axis=0)
+
+    def predict(self, X: np.ndarray) -> np.ndarray:
+        return np.argmax(self.predict_proba(X), axis=1)
+
+    def __len__(self) -> int:
+        return len(self.models)
 
 
 class NumpyLogistic:
@@ -111,6 +142,192 @@ def fit_classifier(
     return NumpyLogistic().fit(X, y, sample_weight=sample_weight)
 
 
+def _gbm(spec: Dict[str, Any], output: str, n_classes: int, random_state: int) -> Any:
+    if not SKLEARN_AVAILABLE:
+        return None
+    # Docker/CPU kotası altında hızlı kalsın diye iterasyon ve bin sayısı sınırlı.
+    iters = int(spec.get("epochs") or 220)
+    iters = max(30, min(iters, 200))
+    if output == "regression":
+        return HistGradientBoostingRegressor(
+            max_iter=iters,
+            learning_rate=0.06,
+            max_leaf_nodes=31,
+            min_samples_leaf=max(20, int(spec.get("batch_size") or 256) // 8),
+            l2_regularization=max(0.1, float(spec.get("l2") or 0.0) * 100),
+            max_bins=128,
+            early_stopping=True,
+            validation_fraction=0.1,
+            n_iter_no_change=max(5, min(int(spec.get("patience") or 15), 20)),
+            random_state=random_state,
+        )
+    return HistGradientBoostingClassifier(
+        max_iter=iters,
+        learning_rate=0.06,
+        max_leaf_nodes=31,
+        min_samples_leaf=40,
+        l2_regularization=1.0,
+        class_weight="balanced",
+        max_bins=128,
+        early_stopping=True,
+        validation_fraction=0.1,
+        n_iter_no_change=max(5, min(int(spec.get("patience") or 15), 20)),
+        random_state=random_state,
+    )
+
+
+def fit_model(
+    spec: Dict[str, Any],
+    output: str,
+    X: np.ndarray,
+    y: np.ndarray,
+    sample_weight: Optional[np.ndarray] = None,
+    X_val: Optional[np.ndarray] = None,
+    y_val: Optional[np.ndarray] = None,
+    sample_weight_val: Optional[np.ndarray] = None,
+    n_classes: int = 2,
+    random_state: int = 42,
+    init_model: Any = None,
+) -> Any:
+    """Mimari tanımına göre tek bir model eğitir.
+
+    ``output``: ``binary`` | ``multiclass`` | ``regression``.
+    """
+    y = np.asarray(y, dtype=int) if output != "regression" else np.asarray(y, dtype=float)
+    engine = str(spec.get("engine") or "mlp")
+    if output == "binary" and len(np.unique(y)) < 2:
+        return ConstantModel(float(np.mean(y)) if len(y) else 0.5)
+
+    if engine == "gbm" and SKLEARN_AVAILABLE:
+        model = _gbm(spec, output, n_classes, random_state)
+        if model is None:
+            engine = "mlp"
+        else:
+            if output == "regression":
+                model.fit(X, y, sample_weight=sample_weight)
+            else:
+                model.fit(X, y, sample_weight=sample_weight)
+            return model
+
+    # GBM sıcak başlangıcı desteklemez; bu durumda model sıfırdan eğitilir.
+    if engine == "gbm":
+        init_model = None
+
+    model = MLP(
+        hidden_layers=spec.get("hidden_layers") or (64, 32),
+        activation=str(spec.get("activation") or "relu"),
+        dropout=float(spec.get("dropout") or 0.0),
+        learning_rate=float(spec.get("learning_rate") or 0.003),
+        epochs=int(spec.get("epochs") or 120),
+        batch_size=int(spec.get("batch_size") or 256),
+        l2=float(spec.get("l2") or 0.0),
+        patience=int(spec.get("patience") or 15),
+        min_delta=float(spec.get("es_min_delta") or 1e-4),
+        grad_clip=float(spec.get("grad_clip") or 5.0),
+        lr_decay=bool(spec.get("lr_decay", True)),
+        output=output,
+        n_classes=n_classes,
+        random_state=random_state,
+    )
+    model.fit(
+        X,
+        y,
+        sample_weight=sample_weight,
+        X_val=X_val,
+        y_val=y_val,
+        sample_weight_val=sample_weight_val,
+        init_model=init_model,
+    )
+    return model
+
+
+class SequenceEnsemble:
+    """Aynı mimariyle farklı tohumlardan eğitilmiş sıra modellerinin ortalaması."""
+
+    def __init__(self, models: Optional[list] = None):
+        self.models = list(models or [])
+        self.classes_ = np.array([0, 1])
+
+    def predict_proba(self, X: np.ndarray) -> np.ndarray:
+        if not self.models:
+            raise RuntimeError("Topluluk boş")
+        probs = [np.asarray(m.predict_proba(X), dtype=np.float64) for m in self.models]
+        return np.mean(np.stack(probs, axis=0), axis=0)
+
+    def predict(self, X: np.ndarray) -> np.ndarray:
+        return (self.predict_proba(X) >= 0.5).astype(int)
+
+    def __len__(self) -> int:
+        return len(self.models)
+
+
+def build_sequence_model(
+    spec: Dict[str, Any],
+    input_size: int,
+    *,
+    seed: int = 42,
+    init_model: Any = None,
+) -> Any:
+    """Mimari tanımına göre LSTM veya Transformer kurar (eğitmez)."""
+    engine = str(spec.get("engine") or "lstm")
+    # LSTM küçük batch'te hızlı, Transformer büyük batch'te (BLAS) hızlı.
+    seq_batch = int(spec.get("seq_batch") or 0)
+    if seq_batch <= 0:
+        seq_batch = 256 if engine == "transformer" else 64
+    common = dict(
+        dropout=float(spec.get("dropout") or 0.1),
+        learning_rate=float(spec.get("learning_rate") or 0.003),
+        epochs=int(spec.get("epochs") or 40),
+        batch_size=seq_batch,
+        l2=float(spec.get("l2") or 1e-4),
+        patience=int(spec.get("patience") or 10),
+        min_delta=float(spec.get("es_min_delta") or 1e-4),
+        grad_clip=float(spec.get("grad_clip") or 1.0),
+        lr_decay=bool(spec.get("lr_decay", True)),
+        random_state=int(seed),
+    )
+    if engine == "transformer":
+        from app.ai.transformer import TransformerClassifier
+
+        model = TransformerClassifier(
+            input_size,
+            window=int(spec.get("seq_window") or 24),
+            dim=int(spec.get("trans_dim") or 28),
+            heads=int(spec.get("trans_heads") or 2),
+            layers=int(spec.get("trans_layers") or 1),
+            ffn_activation=str(spec.get("ffn_activation") or "relu"),
+            **common,
+        )
+    else:
+        from app.ai.lstm import LSTMClassifier
+
+        model = LSTMClassifier(input_size, hidden=int(spec.get("lstm_hidden") or 28), **common)
+    _ = init_model  # sıcak başlangıç fit içinde modele verilir
+    return model
+
+
+def predict_sequence(
+    bundle: Dict[str, Any],
+    seq_data: Any,
+    positions: Optional[np.ndarray] = None,
+    *,
+    chunk: int = 2048,
+) -> tuple:
+    """Sıra modeli için AL/SAT olasılıklarını (tam seri üzerinden) üretir."""
+    model = bundle.get("sequence_model")
+    if model is None:
+        raise ValueError("Pakette sıra modeli yok")
+    pos = np.arange(seq_data.n) if positions is None else np.asarray(positions, dtype=int)
+    buy = np.zeros(len(pos), dtype=float)
+    sell = np.zeros(len(pos), dtype=float)
+    for start, x_chunk in seq_data.windows_batched(pos, batch_size=chunk):
+        proba = np.asarray(model.predict_proba(x_chunk), dtype=float)
+        take = len(x_chunk)
+        buy[start : start + take] = proba[:, 0]
+        sell[start : start + take] = proba[:, 1]
+    return buy, sell
+
+
 def predict_positive(model: Any, X: np.ndarray) -> np.ndarray:
     """Pozitif sınıf olasılığını güvenli biçimde döndürür."""
     if X is None or len(X) == 0:
@@ -121,6 +338,31 @@ def predict_positive(model: Any, X: np.ndarray) -> np.ndarray:
     if proba.shape[1] == 1:
         return np.asarray(proba[:, 0], dtype=float)
     return np.asarray(proba[:, 1], dtype=float)
+
+
+def predict_signals(bundle: Dict[str, Any], X: np.ndarray) -> tuple:
+    """Paketten AL ve SAT olasılıklarını üretir (motor bağımsız)."""
+    mode = str(bundle.get("output_mode") or "dual_binary")
+    if X is None or len(X) == 0:
+        empty = np.array([], dtype=float)
+        return empty, empty
+    if mode == "ternary":
+        proba = np.asarray(bundle["action_model"].predict_proba(X), dtype=float)
+        if proba.shape[1] < 3:
+            zeros = np.zeros(len(X))
+            return zeros, zeros
+        return proba[:, 1], proba[:, 2]
+    if mode == "regression":
+        pred = np.asarray(bundle["return_model"].predict(X), dtype=float).reshape(-1)
+        scale = float(bundle.get("prob_scale") or 0.01)
+        scale = scale if scale > 1e-9 else 0.01
+        buy = 1.0 / (1.0 + np.exp(-np.clip(pred / scale, -30, 30)))
+        sell = 1.0 / (1.0 + np.exp(np.clip(pred / scale, -30, 30)))
+        return buy, sell
+    return (
+        predict_positive(bundle["buy_model"], X),
+        predict_positive(bundle["sell_model"], X),
+    )
 
 
 def classification_metrics(y: np.ndarray, p: np.ndarray, threshold: float) -> Dict[str, Any]:
@@ -136,8 +378,7 @@ def classification_metrics(y: np.ndarray, p: np.ndarray, threshold: float) -> Di
     f1 = 2 * precision * recall / (precision + recall) if (precision + recall) else 0.0
     return {
         "threshold": round(float(threshold), 4),
-        "precision": round(precision, 4),
-        "recall": round(recall, 4),
+        "precision": round(precision, 4),        "recall": round(recall, 4),
         "f1": round(f1, 4),
         "tp": tp,
         "fp": fp,
@@ -180,7 +421,7 @@ def choose_threshold(
 
     Düşük kesinlikli eşikler cezalandırılır; böylece model "her muma al" demez.
     """
-    grid = np.arange(0.35, 0.951, 0.05) if grid is None else np.asarray(grid)
+    grid = np.arange(0.45, 0.951, 0.05) if grid is None else np.asarray(grid)
     best_thr = 0.6
     best_metrics = classification_metrics(y, p, best_thr)
     best_score = -1.0
@@ -218,12 +459,21 @@ def simulate_trades(
     stop_move: float = 0.01,
     target_move: float = 0.02,
     trade_limit: int = 200,
+    trend_ok: Optional[np.ndarray] = None,
+    trailing_stop: float = 0.0,
+    min_hold: int = 0,
+    cooldown: int = 0,
+    exit_on_regime: bool = False,
 ) -> Dict[str, Any]:
     """Sadece verilen zaman aralığında, sırayla sanal işlem yapar.
 
     Giriş/çıkış kararı yalnızca o anki kapanmış mum ve model olasılıklarıyla
     verilir. Stop/hedef için sonraki mumun high/low'u kullanılır; aynı mumda
     ikisi de vurulursa kötümser varsayımla stop önce sayılır.
+
+    ``trend_ok`` verilirse yalnızca trendin uygun olduğu mumlarda alım yapılır
+    (genel trende göre işlem). ``trailing_stop`` > 0 ise en yüksek fiyattan bu
+    kadar geri çekilmede çıkılır (trend kârını korur).
     """
     indices = np.asarray(indices, dtype=int)
     if len(indices) == 0:
@@ -232,6 +482,7 @@ def simulate_trades(
     end_i = int(indices[-1])
     cash = 1.0
     position: Optional[Dict[str, Any]] = None
+    last_exit = -10**9
     equity_points = []
     trades = []
     equity_curve = []
@@ -239,7 +490,9 @@ def simulate_trades(
     for i in range(start_i, min(end_i + 1, len(close))):
         price = float(close[i])
         if position is None:
-            if buy_prob[i] >= buy_threshold and sell_prob[i] < sell_threshold:
+            gate = True if trend_ok is None else bool(trend_ok[i])
+            ready = (i - last_exit) >= int(cooldown)
+            if buy_prob[i] >= buy_threshold and sell_prob[i] < sell_threshold and gate and ready:
                 entry = price * (1 + slippage)
                 position = {
                     "entry": entry,
@@ -247,6 +500,7 @@ def simulate_trades(
                     "entry_time": i,
                     "qty": cash / (entry * (1 + fee)),
                     "highest": price,
+                    "equity_before": cash,
                 }
                 cash = 0.0
         else:
@@ -257,10 +511,16 @@ def simulate_trades(
                 if float(low[i]) <= float(position["entry"]) * (1 - stop_move):
                     exit_price = float(position["entry"]) * (1 - stop_move)
                     reason = "stop"
+                elif trailing_stop > 0 and float(low[i]) <= float(position["highest"]) * (1 - trailing_stop):
+                    exit_price = float(position["highest"]) * (1 - trailing_stop)
+                    reason = "trailing"
                 elif float(high[i]) >= float(position["entry"]) * (1 + target_move):
                     exit_price = float(position["entry"]) * (1 + target_move)
                     reason = "take-profit"
-                elif sell_prob[i] >= sell_threshold:
+                elif exit_on_regime and trend_ok is not None and not bool(trend_ok[i]):
+                    exit_price = price * (1 - slippage)
+                    reason = "regime"
+                elif sell_prob[i] >= sell_threshold and (i - int(position["entry_idx"])) >= int(min_hold):
                     exit_price = price * (1 - slippage)
                     reason = "signal"
                 elif i - int(position["entry_idx"]) >= horizon:
@@ -269,7 +529,8 @@ def simulate_trades(
             if exit_price is not None:
                 gross = float(position["qty"]) * exit_price
                 cash = gross * (1 - fee)
-                ret = (cash / 1.0 - 1.0) * 100.0
+                base = float(position.get("equity_before") or 1.0)
+                ret = (cash / base - 1.0) * 100.0
                 trades.append(
                     {
                         "entry_idx": int(position["entry_idx"]),
@@ -282,6 +543,7 @@ def simulate_trades(
                     }
                 )
                 position = None
+                last_exit = i
         equity_curve.append(cash + (float(position["qty"]) * price if position else 0.0))
         equity_points.append({"i": i, "value": round(cash + (float(position["qty"]) * price if position else 0.0), 6)})
 
@@ -289,7 +551,8 @@ def simulate_trades(
         i = min(end_i, len(close) - 1)
         exit_price = float(close[i]) * (1 - slippage)
         cash = float(position["qty"]) * exit_price * (1 - fee)
-        ret = (cash / 1.0 - 1.0) * 100.0
+        base = float(position.get("equity_before") or 1.0)
+        ret = (cash / base - 1.0) * 100.0
         trades.append(
             {
                 "entry_idx": int(position["entry_idx"]),

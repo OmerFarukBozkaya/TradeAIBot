@@ -128,8 +128,11 @@ def test_list_and_delete(fake_record):
 
 
 def test_invalid_period_and_id(fake_record):
+    # 2h artık geçerli (serbest periyot); geçersiz bir birim hata vermeli.
     with pytest.raises(ValueError):
-        snapshots.record("BTCUSDT", "2h", 300)
+        snapshots.record("BTCUSDT", "5x", 300)
+    with pytest.raises(ValueError):
+        snapshots.record("BTCUSDT", "0d", 300)
     with pytest.raises(ValueError):
         snapshots._path("../etc/passwd")
 
