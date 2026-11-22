@@ -123,13 +123,28 @@ def test_manual_partial_sell_updates_quantity(temp_db, monkeypatch):
     assert trades[0]["price"] == pytest.approx(120.0)  # 36 USDT / 0.3
 
 
-def test_external_buy_updates_quantity(temp_db, monkeypatch):
+def test_external_buy_is_ignored_by_default(temp_db, monkeypatch):
+    """Varsayılan: bot kullanıcının cüzdanından gelen coini kendi pozisyonuna katmaz."""
     engine = make_engine(
         monkeypatch,
         [_bal("BTC", 0.7, 0), _bal("USDT", 0)],
         {"coin": "BTCUSDT", "quantity": 0.5, "entry_price": 100.0, "highest_price": 120.0},
         cash=0.0,
     )
+    changes = engine._sync_live_position()
+    assert changes == []
+    assert engine.state["position"]["quantity"] == pytest.approx(0.5)
+    assert not [t for t in db.rows("SELECT * FROM trades WHERE bot_id='bot_manual'")]
+
+
+def test_external_buy_updates_quantity_when_enabled(temp_db, monkeypatch):
+    engine = make_engine(
+        monkeypatch,
+        [_bal("BTC", 0.7, 0), _bal("USDT", 0)],
+        {"coin": "BTCUSDT", "quantity": 0.5, "entry_price": 100.0, "highest_price": 120.0},
+        cash=0.0,
+    )
+    engine.adopt_external_buy = True
     engine._sync_live_position()
     assert engine.state["position"]["quantity"] == pytest.approx(0.7)
     assert not [t for t in db.rows("SELECT * FROM trades WHERE bot_id='bot_manual'")]

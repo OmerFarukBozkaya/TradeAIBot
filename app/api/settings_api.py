@@ -325,13 +325,14 @@ def _sell_all(only_coin: Optional[str] = None) -> List[Dict[str, Any]]:
             continue
         try:
             if coin.endswith("USDT"):
-                base = coin[:-4]
+                from app import exchange
+
                 free = client.mevcut_adedim(coin) or amount
                 if free <= 0:
                     continue
-                min_qty = client.get_coin_minQTY(coin) or 0
-                qty = client.miktar_duzelt(free, min_qty) if min_qty else free
-                if qty <= 0:
+                filters = client.get_coin_filters(coin)
+                qty = exchange.round_step(free, filters.get("step_size") or 0.0)
+                if qty <= 0 or qty < float(filters.get("min_qty") or 0.0):
                     continue
                 order = client.market_sell(coin, qty)
                 executed = float(order.get("executedQty") or qty)

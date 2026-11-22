@@ -361,6 +361,7 @@ def _serialize(bot: Dict[str, Any]) -> Dict[str, Any]:
         "pnl_source": "trades" if money is not None else "state",
         "trade_count": state.get("trade_count"),
         "exit_reasons": state.get("exit_reasons") or {},
+        "pending_exit": state.get("pending_exit"),
         "started_at": started_at,
         "uptime_seconds": uptime,
         "last_update": state.get("last_update"),

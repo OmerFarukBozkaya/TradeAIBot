@@ -308,9 +308,33 @@ def _migrate(conn: sqlite3.Connection) -> None:
                 conn.execute(f"ALTER TABLE {table} ADD COLUMN {name} {ddl}")
 
 
+def _schema_missing(exc: BaseException) -> bool:
+    return isinstance(exc, sqlite3.OperationalError) and "no such table" in str(exc).lower()
+
+
+def _ensure_schema_once() -> None:
+    """Şema eksikse (eski/kopyalanmış DB) bir kez oluşturur.
+
+    Normalde `init_db()` açılışta çağrılır; ancak DB dosyası başka bir
+    sürümden kopyalandığında veya şema yarıda kaldığında sorgular
+    "no such table" ile düşebiliyor. Burada bir kez onarılır.
+    """
+    try:
+        init_db()
+    except Exception:  # noqa: BLE001 - onarım başarısızsa asıl hata yükselir
+        pass
+
+
 def rows(sql: str, params: Iterable[Any] = ()) -> List[Dict[str, Any]]:
-    with db() as conn:
-        return [dict(r) for r in conn.execute(sql, tuple(params)).fetchall()]
+    try:
+        with db() as conn:
+            return [dict(r) for r in conn.execute(sql, tuple(params)).fetchall()]
+    except sqlite3.OperationalError as exc:
+        if not _schema_missing(exc):
+            raise
+        _ensure_schema_once()
+        with db() as conn:
+            return [dict(r) for r in conn.execute(sql, tuple(params)).fetchall()]
 
 
 def row(sql: str, params: Iterable[Any] = ()) -> Optional[Dict[str, Any]]:
@@ -319,9 +343,17 @@ def row(sql: str, params: Iterable[Any] = ()) -> Optional[Dict[str, Any]]:
 
 
 def execute(sql: str, params: Iterable[Any] = ()) -> int:
-    with db() as conn:
-        cur = conn.execute(sql, tuple(params))
-        return cur.lastrowid
+    try:
+        with db() as conn:
+            cur = conn.execute(sql, tuple(params))
+            return cur.lastrowid
+    except sqlite3.OperationalError as exc:
+        if not _schema_missing(exc):
+            raise
+        _ensure_schema_once()
+        with db() as conn:
+            cur = conn.execute(sql, tuple(params))
+            return cur.lastrowid
 
 
 def get_setting(key: str, default: Any = None) -> Any:

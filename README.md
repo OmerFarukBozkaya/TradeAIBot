@@ -463,7 +463,7 @@ bakiyeyi kontrol eder:
 |---|---|
 | Coin **tamamen** elle satılmış (bakiye 0 veya toz) | Pozisyon **kapatılır**, işlem geçmişine `manuel` nedenli SAT yazılır, nakit borsadaki gerçek USDT ile eşitlenir, bekleme süresi başlar |
 | Coin **kısmen** elle satılmış | Kalan miktar yerel kayda işlenir, satılan kısım `manuel` olarak geçmişe eklenir |
-| **Harici alım** yapılmış (yereldekinden fazla bakiye) | Yerel miktar borsadaki miktara güncellenir |
+| **Harici alım** yapılmış (yereldekinden fazla bakiye) | Varsayılan olarak **yalnızca uyarı** verilir; pozisyon değişmez (Ayarlar > İşlem > *Harici alımları benimse* açılırsa miktar güncellenir) |
 | Bakiye okunamazsa | Pozisyona dokunulmaz (geçici ağ hatasında yanlış kapanış olmaz) |
 | Test (paper) modu | Etkilenmez — sanal bakiye kullanılır |
 
@@ -485,6 +485,28 @@ bildirim ve olay kaydı (`MANUEL SATIŞ algılandı…`) üretilir; İşlem Geç
 bloğu (ATR stop, takipli stop, kâr koruma, bekleme) otomatik devralınır; bot kartında
 "Risk: stop 35×ATR (en çok %15) · bekleme 10 mum" satırı etkin kuralları gösterir. Eski kayıtlarda yalnızca
 4 boolean saklanmış olsa bile motor stratejiden devralır, böylece canlı işlem backtest'i birebir izler.
+
+### Emir dayanıklılığı: alınamadı / satılamadı
+
+Emir kararları **emirden önce** kalıcı olarak yazılır (`state.pending_exit`). Böylece:
+
+| Durum | Botun yaptığı |
+|---|---|
+| Satış emri reddedildi (bakiye, filtre, 429, 5xx) | Pozisyon ve nakit **değişmez**; karar kaydedilir, `EXIT_RETRY_SECONDS` (varsayılan 5 sn) sonra **mum beklemeden** tekrar denenir. 3 denemeden sonra Telegram uyarısı gider. |
+| Panelden "Sat" istendi, emir reddedildi | İstek dosyası **silinmez**; bot düzelene kadar tekrar dener. Kartta `satış bekliyor` rozeti görünür. |
+| Emir yanıtı gelmedi (timeout) | Aynı `clientOrderId` ile en fazla 3 deneme yapılır; önce emir durumu sorgulanır. Gerçekleşmişse **çift emir gönderilmez**. |
+| Alım reddedildi | Pozisyon açılmaz, nakit değişmez; sonraki mumda sinyal sürerse yeniden denenir. Hata Telegram'a gider. |
+| DB yazımı başarısız (paper) | Satış kaydı yazılamazsa nakit/pozisyon **güncellenmez** → aynı mumda ikinci kez satılmaz. |
+| Adet hesabı | Borsa `LOT_SIZE.stepSize` değerine göre **aşağı** yuvarlanır; `minNotional`, `maxQty` ve `minQty` kontrol edilir. Canlı alım `quoteOrderQty` (USDT) ile yapılır, fiyat sıçrasa bile bakiye aşılmaz. |
+| Bakiye okunamazsa | Emir gönderilmez; hata loglanır ve bildirilir. |
+| Birden fazla canlı bot | Emirler dosya kilidiyle (`state/live_account.lock`) sıraya konur; her bot **yalnızca kendi kaydındaki nakdi** harcar. Hesap paylaşılıyorsa Ayarlar > İşlem > *Binance hesabı birden fazla botla paylaşılıyor* işaretlenir (nakit mutabakatı hesap toplamıyla kıyaslanmaz). |
+| Çalışırken nakit kayması | `RECONCILE_SECONDS` (varsayılan 300 sn) aralığında borsa bakiyesiyle karşılaştırılır; `RECONCILE_TOLERANCE_PCT` aşılırsa uyarı verilir. *Mutabakat farkında botu durdur* açıksa bot `reconciliation_required` ile durur. |
+| Bot süreci çöker | Supervisor 5 kez yeniden başlatır. **Borsada koruyucu emir** (Ayarlar > İşlem) açıksa pozisyon borsa tarafında da korunur: kâr al hedefi varsa **OCO** (stop + kâr al), yoksa `STOP_LOSS_LIMIT`. Bot bu emirleri stop taşındıkça (en fazla 30 sn'de bir) günceller; kapanışta iptal eder. Emir borsada dolmuşsa işlem `stop` / `kâr al` nedeniyle kaydedilir. |
+| Geçersiz API anahtarı (401 / -2015) | Sonsuz denenmez; bot hata durumuna geçer ve Telegram'a bildirilir. |
+
+Satış emri başarısız olduğunda borsadaki koruyucu stop iptal edilmişse **geri kurulur**; pozisyon
+korumasız bırakılmaz.
+
 Çökmüş botlar (yeniden başlatma açıksa) uygulama/container yeniden başladığında **otomatik geri
 getirilir** ve önceki hata mesajı temizlenir.
 
@@ -1362,7 +1384,13 @@ ve altyapı içindir; normal kullanımda panelden değiştirilir:
 | `BOT_AUTO_RESTART` | Çökmede otomatik başlatma |
 | `MAX_JOBS` | Eşzamanlı ağır iş limiti |
 | `AI_ENABLED` | AI profili |
-
+| `EXIT_RETRY_SECONDS` | Başarısız satışın tekrar deneme aralığı (varsayılan 5 sn) |
+| `RECONCILE_SECONDS` / `RECONCILE_TOLERANCE_PCT` | Çalışırken borsa mutabakatı sıklığı ve toleransı |
+| `RECONCILE_STOP_ON_MISMATCH` | Mutabakat farkında botu durdur |
+| `ADOPT_EXTERNAL_BUY` | Harici alımları botun pozisyonuna kat |
+| `SHARED_ACCOUNT` | Aynı Binance hesabı birden fazla botla kullanılıyor |
+| `EXCHANGE_PROTECTIVE_STOP` | Pozisyonu borsada OCO/stop emriyle koru |
+| `LIVE_LOCK_STALE_SECONDS` | Hesap kilidinin bayatlama süresi |
 ---
 
 ## Eski dosyalar

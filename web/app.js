@@ -2119,6 +2119,18 @@ function tradeReason(reason) {
   return `<span class="tag ${cls}">${esc(label)}</span>`;
 }
 
+function pendingExitHtml(pending) {
+  if (!pending || !pending.reason) return "";
+  const attempts = Number(pending.attempts || 0);
+  const [cls, label] = TRADE_REASONS[pending.reason] || ["gray", pending.reason];
+  return `<div class="row mt" style="gap:6px;align-items:center" title="Satış emri tamamlanamadı; bot birkaç saniyede bir tekrar deniyor">
+    <span class="tag red">satış bekliyor</span>
+    <span class="tag ${cls}">${esc(label)}</span>
+    ${attempts ? `<span class="muted small">${fmt(attempts, 0)} deneme</span>` : ""}
+    ${pending.created_at ? `<span class="muted small">· ${esc(fmtIso(pending.created_at))}</span>` : ""}
+  </div>`;
+}
+
 function exitReasonsHtml(reasons) {
   const entries = Object.entries(reasons || {})
     .map(([k, n]) => [k, Number(n) || 0])
@@ -2248,6 +2260,7 @@ function botCard(bot, seriesMap = {}) {
       Risk: ${esc(riskSummary(cfg.risk) || "yok (yalnızca sinyalle kapanır)")}
     </div>
     ${exitReasonsHtml(st.exit_reasons)}
+    ${pendingExitHtml(st.pending_exit)}
     <div class="row mt">
       <button data-action="start" data-id="${esc(bot.id)}" ${bot.status === "running" ? "disabled" : ""}>Başlat</button>
       <button data-action="stop" data-id="${esc(bot.id)}" ${bot.status !== "running" && bot.status !== "stopping" ? "disabled" : ""}>Durdur</button>

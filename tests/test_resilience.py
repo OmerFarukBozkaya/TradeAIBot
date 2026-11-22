@@ -143,3 +143,18 @@ def test_connect_retries_when_mount_missing(monkeypatch, tmp_path):
     conn = db.connect()
     assert attempts["n"] == 3
     conn.close()
+
+
+def test_missing_schema_is_repaired_automatically(tmp_path, monkeypatch):
+    """Şemasız bir DB dosyası (eski/kopya) ilk sorguda kendini onarır."""
+    target = tmp_path / "empty.db"
+    sqlite3.connect(str(target)).close()  # boş dosya, tablo yok
+    monkeypatch.setattr(paths, "db", target)
+
+    # conftest'in kurduğu şema bu dosyada yok; sorgu düşmemeli.
+    assert db.rows("SELECT COUNT(*) AS c FROM ai_models")[0]["c"] == 0
+    db.execute(
+        "INSERT INTO settings(key,value,updated_at) VALUES(?,?,?)",
+        ("probe", "1", db.utcnow()),
+    )
+    assert db.row("SELECT value FROM settings WHERE key='probe'")["value"] == "1"

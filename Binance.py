@@ -50,6 +50,7 @@ class Binance:
         self._exchange_info = None
         self._exchange_info_time = 0
         self._minqty_cache = {}
+        self._filters_cache = {}
 
     def _load_exchange_info(self, force=False):
         now = time.time()
@@ -59,13 +60,93 @@ class Binance:
             self._exchange_info = response.json()
             self._exchange_info_time = now
             self._minqty_cache = {}
+            self._filters_cache = {}
         return self._exchange_info
 
-    def market_buy(self, coin, adet):
-        return self.client.order_market_buy(symbol=coin, quantity=adet)
+    # ------------------------------------------------------------------
+    # Emirler
+    # ------------------------------------------------------------------
+    def market_buy(self, coin, adet, client_order_id=None):
+        """Miktar (coin) bazlı piyasa alımı."""
+        params = {"symbol": coin, "side": "BUY", "type": "MARKET", "quantity": adet}
+        if client_order_id:
+            params["newClientOrderId"] = client_order_id
+        return self.client.create_order(**params)
 
-    def market_sell(self, coin, adet):
-        return self.client.order_market_sell(symbol=coin, quantity=adet)
+    def market_buy_quote(self, coin, quote_qty, client_order_id=None):
+        """Tutar (quote/USDT) bazlı piyasa alımı.
+
+        Adet yerine harcanacak USDT verildiği için fiyat emir anında sıçrasa
+        bile bakiye aşılmaz; borsa adedi kendisi hesaplar.
+        """
+        params = {"symbol": coin, "side": "BUY", "type": "MARKET", "quoteOrderQty": quote_qty}
+        if client_order_id:
+            params["newClientOrderId"] = client_order_id
+        return self.client.create_order(**params)
+
+    def market_sell(self, coin, adet, client_order_id=None):
+        params = {"symbol": coin, "side": "SELL", "type": "MARKET", "quantity": adet}
+        if client_order_id:
+            params["newClientOrderId"] = client_order_id
+        return self.client.create_order(**params)
+
+    def order_status(self, coin, client_order_id):
+        """İstemci emir kimliğiyle emir durumu (zaman aşımı sonrası doğrulama)."""
+        return self.client.get_order(symbol=coin, origClientOrderId=client_order_id)
+
+    def open_orders(self, coin):
+        return self.client.get_open_orders(symbol=coin) or []
+
+    def cancel_open_orders(self, coin):
+        try:
+            return self.client.cancel_open_orders(symbol=coin)
+        except Exception:
+            # Açık emir yoksa Binance hata döndürür; bu normaldir.
+            return []
+
+    def place_protective_stop(self, coin, quantity, stop_price, tick_size=0.0):
+        """Borsada koruyucu stop-loss limiti bırakır.
+
+        Bot süreci çökse bile pozisyon korunur. Limit fiyatı stopun biraz
+        altına konur ki gap'te de dolabilsin.
+        """
+        from app.exchange import round_price
+
+        stop = round_price(float(stop_price), tick_size)
+        limit = round_price(stop * 0.997, tick_size)
+        return self.client.create_order(
+            symbol=coin,
+            side="SELL",
+            type="STOP_LOSS_LIMIT",
+            timeInForce="GTC",
+            quantity=quantity,
+            price=limit,
+            stopPrice=stop,
+        )
+
+    def place_protective_oco(self, coin, quantity, stop_price, target_price, tick_size=0.0):
+        """Stop-loss + kâr al emrini tek OCO listesi olarak bırakır.
+
+        İki bacaktan biri dolunca diğeri borsa tarafından iptal edilir; böylece
+        bot süreci çökse bile pozisyon hem aşağı hem yukarı korunur.
+        """
+        from app.exchange import round_price
+
+        stop = round_price(float(stop_price), tick_size)
+        stop_limit = round_price(stop * 0.997, tick_size)
+        target = round_price(float(target_price), tick_size, "up")
+        return self.client.create_oco_order(
+            symbol=coin,
+            side="SELL",
+            quantity=quantity,
+            price=target,
+            stopPrice=stop,
+            stopLimitPrice=stop_limit,
+            stopLimitTimeInForce="GTC",
+        )
+
+    def cancel_order_list(self, coin, order_list_id):
+        return self.client.cancel_order_list(symbol=coin, orderListId=int(order_list_id))
 
     def sahip_olduklarim(self):
         sahip_olduklarim = {}
@@ -94,9 +175,22 @@ class Binance:
     def sat(self, coin, adet):
         order = self.client.order_market_sell(symbol=coin, quantity=adet)
     def mevcut_adedim(self, coin):
-        for i in self.client.get_account()["balances"]:
-            if (i["asset"] + "USDT" == coin or i["asset"] + "BUSD" == coin):
-                return float(i["free"])
+        """Borsadaki serbest (free) miktar. Varlık yoksa 0.0.
+
+        Eski sürüm yalnızca USDT/BUSD eşleşmesi yapıyordu; FDUSD/USDC/TRY
+        paritelerinde ``None`` dönüp satışın yanlış miktarla denenmesine yol
+        açıyordu. Artık quote varlığı ayıklanarak aranır.
+        """
+        from app.exchange import asset_of
+
+        asset = asset_of(coin)
+        for item in self.client.get_account()["balances"]:
+            if str(item.get("asset") or "").upper() == asset:
+                try:
+                    return float(item.get("free") or 0.0)
+                except (TypeError, ValueError):
+                    return 0.0
+        return 0.0
     def toplam_cuzdan_degeri(self):
         cuzdan = self.sahip_olduklarim()
         toplam_deger = 0
@@ -208,18 +302,23 @@ class Binance:
             result['ignore'].append(float(i[11]))
         return result
 
+    def get_coin_filters(self, coin):
+        """Sembolün emir filtreleri (stepSize, minQty, minNotional...)."""
+        from app.exchange import symbol_filters
+
+        coin = str(coin or "").upper()
+        if coin in self._filters_cache:
+            return self._filters_cache[coin]
+        filters = symbol_filters(self._load_exchange_info(), coin)
+        self._filters_cache[coin] = filters
+        self._minqty_cache[coin] = float(filters.get("min_qty") or 0.0)
+        return filters
+
     def get_coin_minQTY(self,coin):
+        """Geriye dönük uyumluluk: minimum adet (``LOT_SIZE.minQty``)."""
         if coin in self._minqty_cache:
             return self._minqty_cache[coin]
-        data = self._load_exchange_info()
-        for i in data['symbols']:
-            if i['symbol'] == coin and i['status']=="TRADING" and "USD" not in i['baseAsset'] and i['quoteAsset'] == "USDT" and "SPOT" in i['permissionSets'][0]:
-                value = float(i['filters'][1]['minQty'])
-                self._minqty_cache[coin] = value
-                return value
-        # Bulunamazsa tamamıyla başarısız olmak yerine küçük bir varsayılan döndür
-        self._minqty_cache[coin] = 0.0
-        return 0.0
+        return float(self.get_coin_filters(coin).get("min_qty") or 0.0)
     def coins_sorted_by_volume(self, coinlist, periyot):
         binance = Binance()
         data = {}

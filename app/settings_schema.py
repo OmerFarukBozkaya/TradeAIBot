@@ -58,6 +58,21 @@ SETTINGS: Tuple[SettingDef, ...] = (
         "PAPER_SLIPPAGE", "Test kayma oranı", "trading", "float",
         "0.0005 = %0.05. Test fiyatına eklenen kayma.", min=0, max=0.1,
     ),
+    SettingDef(
+        "EXCHANGE_PROTECTIVE_STOP", "Borsada koruyucu stop bırak", "trading", "bool",
+        "Canlı pozisyon açılınca stop seviyesine borsada STOP_LOSS_LIMIT emri bırakılır. "
+        "Bot süreci çökse bile pozisyon korunur. Gap riski için limit fiyatı stopun biraz altındadır.",
+    ),
+    SettingDef(
+        "SHARED_ACCOUNT", "Binance hesabı birden fazla botla paylaşılıyor", "trading", "bool",
+        "Açıksa nakit mutabakatı hesap toplamı yerine botun kendi kaydıyla yapılır. "
+        "Kapalıyken hesapta başka bot varsa uyarı verilir.",
+    ),
+    SettingDef(
+        "ADOPT_EXTERNAL_BUY", "Harici alımları benimse", "trading", "bool",
+        "Borsada elle alınan miktar botun pozisyonuna eklenir. Kapalıyken yalnızca uyarı verilir "
+        "(bot kullanıcının cüzdanından gelen coini istemeden satmaz).",
+    ),
 
     # ---------------- Risk ----------------
     SettingDef(
@@ -113,6 +128,28 @@ SETTINGS: Tuple[SettingDef, ...] = (
     SettingDef("HEARTBEAT_SECONDS", "Heartbeat aralığı (sn)", "system", "int", "Supervisor kontrol sıklığı.", min=2, max=300),
     SettingDef("MAX_JOBS", "Eşzamanlı iş limiti", "system", "int", "Backtest/tarama gibi ağır işlerin paralel sayısı.", min=1, max=16),
     SettingDef("AI_ENABLED", "Yapay zekâ özellikleri", "system", "bool", "AI Eğitimi sekmesini ve model eğitimini açar."),
+    SettingDef(
+        "EXIT_RETRY_SECONDS", "Başarısız satış tekrar aralığı (sn)", "system", "int",
+        "Satış emri reddedilirse kaç saniye sonra tekrar deneneceği. Karar kalıcıdır; mum beklenmez.",
+        min=2, max=300,
+    ),
+    SettingDef(
+        "RECONCILE_SECONDS", "Periyodik mutabakat aralığı (sn)", "system", "int",
+        "Canlı bot çalışırken borsa bakiyesiyle karşılaştırma sıklığı. 0 = kapalı.",
+        min=0, max=3600,
+    ),
+    SettingDef(
+        "RECONCILE_TOLERANCE_PCT", "Mutabakat toleransı (%)", "system", "float",
+        "Nakit/miktar farkı bu yüzdeyi aşarsa uyarı verilir.", min=0.1, max=50,
+    ),
+    SettingDef(
+        "RECONCILE_STOP_ON_MISMATCH", "Mutabakat farkında botu durdur", "system", "bool",
+        "Tolerans aşılırsa bot işlem yapmayı bırakır (reconciliation_required).",
+    ),
+    SettingDef(
+        "LIVE_LOCK_STALE_SECONDS", "Hesap kilidi bayatlama süresi (sn)", "system", "int",
+        "Canlı emir kilidi bu süreden eskiyse (süreç çöktüyse) kırılır.", min=30, max=3600,
+    ),
 )
 
 BY_KEY: Dict[str, SettingDef] = {item.key: item for item in SETTINGS}
