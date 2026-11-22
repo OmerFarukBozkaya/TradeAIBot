@@ -22,21 +22,25 @@ async def trades(
     limit: int = Query(default=200, le=2000),
     offset: int = 0,
 ):
-    sql = "SELECT * FROM trades WHERE 1=1"
-    params = []
+    # Bot adı da döner: panelde kimlik yerine okunur ad gösterilir.
+    sql = (
+        "SELECT trades.*, COALESCE(bots.name, trades.bot_id) AS bot_name "
+        "FROM trades LEFT JOIN bots ON bots.id=trades.bot_id WHERE 1=1"
+    )
+    params: List[Any] = []
     if bot_id:
-        sql += " AND bot_id=?"
+        sql += " AND trades.bot_id=?"
         params.append(bot_id)
     if coin:
-        sql += " AND coin=?"
+        sql += " AND trades.coin=?"
         params.append(coin)
     if side:
-        sql += " AND side=?"
+        sql += " AND trades.side=?"
         params.append(side.upper())
     if mode:
-        sql += " AND mode=?"
+        sql += " AND trades.mode=?"
         params.append(mode)
-    sql += " ORDER BY created_at DESC LIMIT ? OFFSET ?"
+    sql += " ORDER BY trades.created_at DESC, trades.id DESC LIMIT ? OFFSET ?"
     params.extend([limit, offset])
     return db.rows(sql, params)
 
@@ -262,6 +266,178 @@ def pair_round_trips(rows: List[dict]) -> Dict[str, Any]:
     }
 
 
+def pair_history(rows: List[dict]) -> Dict[str, Any]:
+    """İşlem geçmişi için alım/satım turlarını eşleştirir.
+
+    Eşleştirme **(bot, coin)** bazında FIFO yapılır: aynı hesapta çalışan iki
+    bot aynı coini alıp sattığında işlemler birbirine karışmaz. Dönen her tur
+    giriş ve çıkış fiyatını ayrı ayrı taşır; panelde ikisi de gösterilir.
+    """
+    groups: Dict[tuple, List[dict]] = {}
+    for row in rows:
+        key = (str(row.get("bot_id") or ""), str(row.get("coin") or "").upper())
+        groups.setdefault(key, []).append(row)
+
+    closed: List[Dict[str, Any]] = []
+    open_legs: List[Dict[str, Any]] = []
+    for (bot_id, coin), items in groups.items():
+        items.sort(key=lambda r: (str(r.get("created_at") or ""), int(r.get("id") or 0)))
+        lots: List[Dict[str, Any]] = []
+        for row in items:
+            side = str(row.get("side") or "").upper()
+            qty = float(row.get("quantity") or 0.0)
+            price = float(row.get("price") or 0.0)
+            if qty <= 0 or price <= 0:
+                continue
+            fee = float(row.get("fee") or 0.0)
+            unit_fee = fee / qty
+            if side == "BUY":
+                lots.append(
+                    {
+                        "quantity": qty,
+                        "price": price,
+                        "unit_fee": unit_fee,
+                        "time": row.get("created_at"),
+                        "id": row.get("id"),
+                        "reason": row.get("reason"),
+                        "bot_name": row.get("bot_name") or bot_id,
+                    }
+                )
+                continue
+            if side != "SELL":
+                continue
+
+            remaining = qty
+            consumed: List[Dict[str, Any]] = []
+            while remaining > 1e-12 and lots:
+                lot = lots[0]
+                take = min(remaining, float(lot["quantity"]))
+                consumed.append(
+                    {
+                        "quantity": take,
+                        "price": float(lot["price"]),
+                        "unit_fee": float(lot["unit_fee"]),
+                        "time": lot["time"],
+                        "id": lot.get("id"),
+                    }
+                )
+                lot["quantity"] = float(lot["quantity"]) - take
+                remaining -= take
+                if lot["quantity"] <= 1e-12:
+                    lots.pop(0)
+            if not consumed:
+                # Alış bu pencerede yok (çok eski) veya harici satış: satır
+                # yine görünsün, yalnızca K/Z hesaplanmaz.
+                closed.append(
+                    {
+                        "bot_id": bot_id,
+                        "bot_name": row.get("bot_name") or bot_id,
+                        "coin": coin,
+                        "quantity": round(qty, 10),
+                        "entry_price": None,
+                        "exit_price": round(price, 10),
+                        "entry_time": None,
+                        "exit_time": row.get("created_at"),
+                        "hold_seconds": None,
+                        "invested": None,
+                        "pnl_money": None,
+                        "pnl_pct": None,
+                        "fee": round(fee, 6),
+                        "exit_reason": row.get("reason"),
+                        "entry_reason": None,
+                        "mode": row.get("mode"),
+                        "partial": False,
+                        "unmatched": True,
+                        "exit_id": row.get("id"),
+                        "entry_ids": [],
+                    }
+                )
+                continue
+
+            matched = sum(c["quantity"] for c in consumed)
+            if matched <= 0:
+                continue
+            cost = sum(c["quantity"] * (c["price"] + c["unit_fee"]) for c in consumed)
+            proceeds = matched * (price - unit_fee)
+            pnl_money = proceeds - cost
+            closed.append(
+                {
+                    "bot_id": bot_id,
+                    "bot_name": row.get("bot_name") or bot_id,
+                    "coin": coin,
+                    "quantity": round(matched, 10),
+                    "entry_price": round(
+                        sum(c["quantity"] * c["price"] for c in consumed) / matched, 10
+                    ),
+                    "exit_price": round(price, 10),
+                    "entry_time": consumed[0]["time"],
+                    "exit_time": row.get("created_at"),
+                    "hold_seconds": _seconds_between(consumed[0]["time"], row.get("created_at")),
+                    "invested": round(cost, 6),
+                    "pnl_money": round(pnl_money, 6),
+                    "pnl_pct": round(pnl_money / cost * 100, 3) if cost > 0 else 0.0,
+                    "fee": round(sum(c["quantity"] * c["unit_fee"] for c in consumed)
+                                 + matched * unit_fee, 6),
+                    "exit_reason": row.get("reason"),
+                    "entry_reason": consumed[0].get("reason"),
+                    "mode": row.get("mode"),
+                    "partial": bool(remaining > 1e-12),
+                    "exit_id": row.get("id"),
+                    "entry_ids": [c.get("id") for c in consumed],
+                }
+            )
+
+        for lot in lots:
+            if float(lot["quantity"]) <= 1e-12:
+                continue
+            open_legs.append(
+                {
+                    "bot_id": bot_id,
+                    "bot_name": lot.get("bot_name") or bot_id,
+                    "coin": coin,
+                    "quantity": round(float(lot["quantity"]), 10),
+                    "entry_price": round(float(lot["price"]), 10),
+                    "entry_time": lot["time"],
+                    "invested": round(float(lot["quantity"]) * float(lot["price"]), 6),
+                }
+            )
+
+    closed.sort(
+        key=lambda t: (str(t.get("exit_time") or ""), int(t.get("exit_id") or 0)),
+        reverse=True,
+    )
+    open_legs.sort(key=lambda t: str(t.get("entry_time") or ""), reverse=True)
+
+    return {"trades": closed, "open": open_legs}
+
+
+@router.get("/trades/history")
+def trade_history(
+    bot_id: Optional[str] = None,
+    coin: Optional[str] = None,
+    limit: int = Query(default=2000, le=10000),
+):
+    """İşlem geçmişi: her tur için alış ve satış fiyatı ayrı ayrı."""
+    sql = (
+        "SELECT trades.*, COALESCE(bots.name, trades.bot_id) AS bot_name "
+        "FROM trades LEFT JOIN bots ON bots.id=trades.bot_id WHERE 1=1"
+    )
+    params: List[Any] = []
+    if bot_id:
+        sql += " AND trades.bot_id=?"
+        params.append(bot_id)
+    if coin:
+        sql += " AND trades.coin=?"
+        params.append(coin.upper())
+    sql += " ORDER BY trades.created_at DESC, trades.id DESC LIMIT ?"
+    params.append(int(limit))
+    rows = db.rows(sql, params)
+    result = pair_history(rows)
+    result["orders"] = len(rows)
+    result["limited"] = len(rows) >= int(limit)
+    return result
+
+
 @router.get("/trades/bot/{bot_id}/analysis")
 async def bot_trade_analysis(bot_id: str, limit: int = Query(default=2000, le=10000)):
     """Botun işlem analizi: tur bazında K/Z, tutma süresi ve toplamlar."""
@@ -370,15 +546,26 @@ def trade_chart(trade_id: int):
         (exit_price / entry_price - 1) * 100 if entry_price > 0 and exit_price > 0 else None
     )
     # Satıştan sonraki mumlar: "erken mi sattım?" sorusunu cevaplar.
+    # Fiyat mum verisiyle uyuşmuyorsa (yanlış sembol/eski kayıt) yüzde
+    # anlamsız olur; bu durumda hiç hesaplanmaz.
     after_high = None
     after_low = None
     after_bars = 0
-    if exit_leg and candles:
-        after = [c for c in candles if int(c.get("time") or 0) > exit_ms]
-        after_bars = len(after)
-        if after:
-            after_high = max(float(c.get("high") or 0) for c in after)
-            after_low = min(float(c.get("low") or 0) for c in after)
+    price_consistent = True
+    if candles:
+        lows = [float(c.get("low") or 0) for c in candles if float(c.get("low") or 0) > 0]
+        highs = [float(c.get("high") or 0) for c in candles if float(c.get("high") or 0) > 0]
+        if lows and highs:
+            low_edge, high_edge = min(lows) * 0.8, max(highs) * 1.2
+            checks = [p for p in (entry_price, exit_price) if p > 0]
+            if checks:
+                price_consistent = all(low_edge <= p <= high_edge for p in checks)
+        if price_consistent and exit_leg and exit_price > 0:
+            after = [c for c in candles if int(c.get("time") or 0) > exit_ms]
+            after_bars = len(after)
+            if after:
+                after_high = max(float(c.get("high") or 0) for c in after)
+                after_low = min(float(c.get("low") or 0) for c in after)
     return {
         "trade": row,
         "coin": coin,
@@ -388,6 +575,9 @@ def trade_chart(trade_id: int):
         "exit": exit_leg,
         "pnl_pct": round(pnl_pct, 3) if pnl_pct is not None else None,
         "candles": candles,
+        # Mum fiyatları işlem fiyatıyla uyuşmuyorsa (eski kayıt/farklı sembol)
+        # grafik yanıltıcı olur; panel bu durumda mumları çizmez.
+        "price_consistent": price_consistent,
         "after_exit": {
             "bars": after_bars,
             "high": after_high,
@@ -668,12 +858,15 @@ async def signals(bot_id: Optional[str] = None, decision: Optional[str] = None, 
 
 @router.get("/export.csv")
 async def export_csv(bot_id: Optional[str] = None):
-    sql = "SELECT * FROM trades"
+    sql = (
+        "SELECT trades.*, COALESCE(bots.name, '') AS bot_name "
+        "FROM trades LEFT JOIN bots ON bots.id=trades.bot_id"
+    )
     params = []
     if bot_id:
-        sql += " WHERE bot_id=?"
+        sql += " WHERE trades.bot_id=?"
         params.append(bot_id)
-    sql += " ORDER BY created_at DESC"
+    sql += " ORDER BY trades.created_at DESC"
     items = db.rows(sql, params)
     buffer = io.StringIO()
     if items:

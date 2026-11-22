@@ -448,6 +448,14 @@ td:first-child { color: var(--text); }
 .tag.amber { color: #fcd34d; border-color: rgba(251,191,36,.38); background: var(--amber-soft); }
 .tag.gray { color: var(--muted); }
 .tag.blue { color: #93c5fd; border-color: rgba(59,130,246,.38); background: rgba(59,130,246,.12); }
+/* İşlem geçmişi: alış fiyatı yeşil, satış fiyatı kırmızı (hizalı okunur). */
+.px-buy { color: #6ee7b7; font-weight: 600; font-variant-numeric: tabular-nums; }
+.px-sell { color: #fda4af; font-weight: 600; font-variant-numeric: tabular-nums; }
+/* İşlem geçmişi tabloları: sütunlar sığsın, sayılar tek satırda kalsın. */
+.tr-table { width: 100%; font-size: 11.5px; }
+.tr-table th, .tr-table td { padding: 6px 6px; }
+.tr-table td.mono { white-space: nowrap; }
+.tr-table .tag.tiny { padding: 1px 6px; font-size: 10px; }
 .tag.tf-tag { cursor: help; border: 1px dashed rgba(148, 163, 184, .45); }
 .tag.tf-tag.green { border-style: solid; }
 .tag.tf-tag.bad { color: #fda4af; border-color: rgba(251,113,133,.4); }

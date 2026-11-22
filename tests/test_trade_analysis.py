@@ -84,6 +84,37 @@ def test_trade_chart_returns_info_when_history_fails(monkeypatch):
     assert "veri yok" in result["error"]
 
 
+def test_after_exit_skipped_when_price_mismatches_candles(monkeypatch):
+    """Fiyat mum verisiyle uyuşmuyorsa satış sonrası yüzdeler üretilmez."""
+    bot = "bot_chart_3"
+    db.execute(
+        "INSERT INTO bots(id,name,type,mode,period,config_json,status,auto_restart,created_at,updated_at) "
+        "VALUES(?,?,?,?,?,?,?,?,?,?)",
+        (bot, "Grafik 3", "trade", "paper", "1h", '{"period": "1h"}',
+         "stopped", 1, "2026-01-01T09:00:00+00:00", "2026-01-01T09:00:00+00:00"),
+    )
+    _trade(bot, "BUY", 1.0, 100.0, 0.0, "2026-01-01T10:00:00+00:00")
+    _trade(bot, "SELL", 1.0, 1000.0, 0.0, "2026-01-01T11:00:00+00:00")
+    sell_id = db.row("SELECT id FROM trades WHERE side='SELL' AND bot_id=?", (bot,))["id"]
+
+    def fake_history(symbol, period, limit, start=None, end=None):
+        base = 1_767_265_200_000
+        step = 60 * 60 * 1000
+        return {
+            "opendate": [base + i * step for i in range(6)],
+            "open": [100.0] * 6, "high": [105.0] * 6, "low": [95.0] * 6,
+            "close": [101.0] * 6, "volume_usdt": [1.0] * 6,
+        }, {"rows": 6}
+
+    monkeypatch.setattr("app.market_data.load_history", fake_history)
+    result = trades_api.trade_chart(sell_id)
+
+    assert result["after_exit"]["bars"] == 0
+    assert result["after_exit"]["high_pct"] is None
+    # İşlem bilgisi yine gelir.
+    assert result["exit"]["price"] == pytest.approx(1000.0)
+
+
 def test_round_trip_pnl_and_hold_time():
     bot = "bot_an_1"
     _trade(bot, "BUY", 1.0, 100.0, 0.10, "2026-01-01T10:00:00+00:00")
@@ -101,6 +132,94 @@ def test_round_trip_pnl_and_hold_time():
     assert trade["pnl_pct"] == pytest.approx(9.78, abs=0.02)
     assert trade["hold_seconds"] == 3 * 3600 + 30 * 60
     assert summary["pnl_money"] == pytest.approx(9.79, abs=1e-6)
+
+
+def test_pair_history_keeps_bots_apart():
+    """Aynı coin iki botta işlem görse de turlar birbirine karışmaz."""
+    rows = [
+        {"id": 1, "bot_id": "bot_a", "bot_name": "Alfa", "coin": "BTCUSDT",
+         "side": "BUY", "quantity": 1.0, "price": 100.0, "fee": 0.1,
+         "created_at": "2026-01-01T00:00:00+00:00", "mode": "paper", "reason": "sinyal"},
+        {"id": 2, "bot_id": "bot_b", "bot_name": "Beta", "coin": "BTCUSDT",
+         "side": "BUY", "quantity": 1.0, "price": 200.0, "fee": 0.2,
+         "created_at": "2026-01-01T00:30:00+00:00", "mode": "paper", "reason": "sinyal"},
+        {"id": 3, "bot_id": "bot_a", "bot_name": "Alfa", "coin": "BTCUSDT",
+         "side": "SELL", "quantity": 1.0, "price": 110.0, "fee": 0.11,
+         "created_at": "2026-01-01T01:00:00+00:00", "mode": "paper", "reason": "stop"},
+    ]
+
+    result = trades_api.pair_history(rows)
+
+    assert len(result["trades"]) == 1
+    trade = result["trades"][0]
+    assert trade["bot_id"] == "bot_a"
+    assert trade["bot_name"] == "Alfa"
+    assert trade["entry_price"] == pytest.approx(100.0)
+    assert trade["exit_price"] == pytest.approx(110.0)
+    assert trade["exit_id"] == 3
+    assert trade["exit_reason"] == "stop"
+    # Beta'nın alımı eşleşmedi: açık pozisyon olarak duruyor.
+    assert len(result["open"]) == 1
+    assert result["open"][0]["bot_id"] == "bot_b"
+
+
+def test_pair_history_reports_unmatched_sell():
+    """Alışı pencerede olmayan satış kaybolmaz; K/Z hesaplanmaz."""
+    rows = [
+        {"id": 7, "bot_id": "bot_x", "bot_name": "X", "coin": "ETHUSDT",
+         "side": "SELL", "quantity": 2.0, "price": 50.0, "fee": 0.05,
+         "created_at": "2026-01-02T00:00:00+00:00", "mode": "live", "reason": "manuel"},
+    ]
+
+    result = trades_api.pair_history(rows)
+
+    assert len(result["trades"]) == 1
+    trade = result["trades"][0]
+    assert trade["unmatched"] is True
+    assert trade["entry_price"] is None
+    assert trade["pnl_money"] is None
+    assert trade["exit_price"] == pytest.approx(50.0)
+
+
+def test_trade_history_endpoint_returns_bot_name(monkeypatch):
+    bot = "bot_hist_1"
+    db.execute(
+        "INSERT INTO bots(id,name,type,mode,period,config_json,status,auto_restart,created_at,updated_at) "
+        "VALUES(?,?,?,?,?,?,?,?,?,?)",
+        (bot, "Momentum Botu", "trade", "paper", "1h", "{}", "stopped", 1,
+         "2026-01-01T00:00:00+00:00", "2026-01-01T00:00:00+00:00"),
+    )
+    _trade(bot, "BUY", 5.0, 0.2, 0.001, "2026-01-01T00:00:00+00:00", coin="DODOUSDT")
+    _trade(bot, "SELL", 5.0, 0.25, 0.001, "2026-01-01T02:00:00+00:00",
+           reason="take-profit", coin="DODOUSDT")
+
+    result = trades_api.trade_history(limit=2000)
+
+    assert result["orders"] == 2
+    trade = result["trades"][0]
+    assert trade["bot_name"] == "Momentum Botu"
+    assert trade["coin"] == "DODOUSDT"
+    assert trade["entry_price"] == pytest.approx(0.2)
+    assert trade["exit_price"] == pytest.approx(0.25)
+    assert trade["quantity"] == pytest.approx(5.0)
+    assert trade["hold_seconds"] == 2 * 3600
+    assert trade["pnl_pct"] > 0
+
+
+def test_trades_endpoint_includes_bot_name():
+    bot = "bot_hist_2"
+    db.execute(
+        "INSERT INTO bots(id,name,type,mode,period,config_json,status,auto_restart,created_at,updated_at) "
+        "VALUES(?,?,?,?,?,?,?,?,?,?)",
+        (bot, "Scalp Botu", "trade", "paper", "15m", "{}", "stopped", 1,
+         "2026-01-01T00:00:00+00:00", "2026-01-01T00:00:00+00:00"),
+    )
+    _trade(bot, "BUY", 1.0, 10.0, 0.0, "2026-01-01T00:00:00+00:00")
+
+    rows = asyncio.run(trades_api.trades(bot_id=bot, limit=50))
+
+    assert rows[0]["bot_name"] == "Scalp Botu"
+    assert rows[0]["bot_id"] == bot
 
 
 def test_partial_sells_split_one_entry():

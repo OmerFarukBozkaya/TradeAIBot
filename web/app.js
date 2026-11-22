@@ -34,8 +34,15 @@ function fmt(value, digits = 2) {
   return Number(value).toLocaleString("tr-TR", { maximumFractionDigits: digits });
 }
 function money(value) { return fmt(value, 2) + " USDT"; }
-function signedMoney(value) {
+/** Fiyat: büyüklüğe göre anlamlı hane (0,03125562 gibi fiyatlar kırpılmasın). */
+function priceText(value) {
   const n = Number(value);
+  if (value === null || value === undefined || !Number.isFinite(n) || n === 0) return "—";
+  const abs = Math.abs(n);
+  const digits = abs >= 1000 ? 2 : abs >= 1 ? 4 : abs >= 0.1 ? 6 : 8;
+  return n.toLocaleString("tr-TR", { minimumFractionDigits: 0, maximumFractionDigits: digits });
+}
+function signedMoney(value) {  const n = Number(value);
   if (!Number.isFinite(n)) return "—";
   return `${n > 0 ? "+" : ""}${money(n)}`;
 }
@@ -120,6 +127,20 @@ function shortDate(value) {
   const hh = String(d.getHours()).padStart(2, "0");
   const mm = String(d.getMinutes()).padStart(2, "0");
   return `${day} ${hh}:${mm}`;
+}
+
+/** ISO metnini de kabul eden kısa tarih-saat (tablo hücreleri için). */
+function shortStamp(value) {
+  if (value === null || value === undefined || value === "") return "";
+  let ms;
+  if (typeof value === "number" || /^\d+$/.test(String(value))) {
+    const n = Number(value);
+    ms = n > 1e11 ? n : n * 1000;
+  } else {
+    const t = new Date(String(value).replace(" ", "T")).getTime();
+    ms = Number.isFinite(t) ? t : null;
+  }
+  return ms === null || ms === undefined ? "" : shortDate(ms);
 }
 
 /** Epoch (ms/sn) veya ISO metnini okunur yerel tarih-saate çevirir. */
@@ -698,6 +719,7 @@ function tcRedraw() {
   const height = Number(d.height) || 380;
   wrap.innerHTML = tradePriceChart(vis.length >= 2 ? vis : d.price, ms, {
     height, lo: d.lo, hi: d.hi,
+    extraPrices: (d.markers || []).map((m) => Number(m.price)),
   });
   const info = document.getElementById("tc-info");
   if (info) {
@@ -820,6 +842,13 @@ function tradePriceChart(prices, markers, opts = {}) {
   const vals = pts.map((p) => p.c);
   let min = Math.min(...pts.map((p) => p.l));
   let max = Math.max(...pts.map((p) => p.h));
+  // İşlem işaretleri (alış/satış) mum aralığının dışında kalırsa grafik
+  // ölçeği onları da kapsar; aksi halde üçgenler kırpılıp görünmezdi.
+  const extras = (opts.extraPrices || []).map(Number).filter((v) => Number.isFinite(v) && v > 0);
+  if (extras.length) {
+    min = Math.min(min, ...extras);
+    max = Math.max(max, ...extras);
+  }
   if (!Number.isFinite(min) || !Number.isFinite(max) || max <= min) {
     min = Math.min(...vals);
     max = Math.max(...vals);
@@ -892,28 +921,40 @@ function tradePriceChart(prices, markers, opts = {}) {
 
   const shownTrades = Object.keys(byNo).length;
   const showNums = shownTrades <= 60;
+  const topEdge = pad.top;
+  const bottomEdge = h - pad.bottom;
   const marks = Object.values(byNo).map((t) => {
     let svg = "";
     if (t.buy) {
       const bx = x(Number(t.buy.idx));
-      const by = y(Number(t.buy.price));
+      const by = Math.min(bottomEdge - 2, Math.max(topEdge + 2, y(Number(t.buy.price))));
+      // Üçgen normalde fiyatın altında; yer yoksa üstüne çevrilir ki
+      // grafiğin kenarındaki işlemler kırpılıp kaybolmasın.
+      const below = by + 18 <= bottomEdge;
+      const base = below ? by + 8 : by - 8;
+      const tip = below ? by + 17 : by - 17;
+      const labelY = below ? by + 29 : by - 21;
       const title = `#${t.buy.no} AL · ${fmtTime(t.buy.time)} · ${fmt(t.buy.price, 4)}`;
       svg += `<g class="trade-mark"><title>${esc(title)}</title>
-        <polygon points="${bx.toFixed(1)},${(by + 8).toFixed(1)} ${(bx - 5).toFixed(1)},${(by + 17).toFixed(1)} ${(bx + 5).toFixed(1)},${(by + 17).toFixed(1)}"
+        <polygon points="${bx.toFixed(1)},${base.toFixed(1)} ${(bx - 5).toFixed(1)},${tip.toFixed(1)} ${(bx + 5).toFixed(1)},${tip.toFixed(1)}"
           fill="#34d399" stroke="#060b14" stroke-width="1"/>
-        ${showNums ? `<text x="${bx.toFixed(1)}" y="${(by + 29).toFixed(1)}" text-anchor="middle" fill="#6ee7b7" font-size="9">${t.buy.no}</text>` : ""}
+        ${showNums ? `<text x="${bx.toFixed(1)}" y="${labelY.toFixed(1)}" text-anchor="middle" fill="#6ee7b7" font-size="9">${t.buy.no}</text>` : ""}
       </g>`;
     }
     if (t.sell) {
       const sx = x(Number(t.sell.idx));
-      const sy = y(Number(t.sell.price));
+      const sy = Math.min(bottomEdge - 2, Math.max(topEdge + 2, y(Number(t.sell.price))));
       const pnl = Number(t.sell.pnl_pct);
       const st = sellStyle(t.sell.reason);
+      const above = sy - 18 >= topEdge;
+      const base = above ? sy - 8 : sy + 8;
+      const tip = above ? sy - 17 : sy + 17;
+      const labelY = above ? sy - 21 : sy + 29;
       const title = `#${t.sell.no} SAT · ${st.label} · ${fmtTime(t.sell.time)} · ${fmt(t.sell.price, 4)} · K/Z ${pnl >= 0 ? "+" : ""}${fmt(pnl, 2)}%`;
       svg += `<g class="trade-mark"><title>${esc(title)}</title>
-        <polygon points="${sx.toFixed(1)},${(sy - 8).toFixed(1)} ${(sx - 5).toFixed(1)},${(sy - 17).toFixed(1)} ${(sx + 5).toFixed(1)},${(sy - 17).toFixed(1)}"
+        <polygon points="${sx.toFixed(1)},${base.toFixed(1)} ${(sx - 5).toFixed(1)},${tip.toFixed(1)} ${(sx + 5).toFixed(1)},${tip.toFixed(1)}"
           fill="${st.color}" stroke="#060b14" stroke-width="1"/>
-        ${showNums ? `<text x="${sx.toFixed(1)}" y="${(sy - 21).toFixed(1)}" text-anchor="middle" fill="${st.light}" font-size="9">${t.sell.no}</text>` : ""}
+        ${showNums ? `<text x="${sx.toFixed(1)}" y="${labelY.toFixed(1)}" text-anchor="middle" fill="${st.light}" font-size="9">${t.sell.no}</text>` : ""}
       </g>`;
     }
     return svg;
@@ -5746,6 +5787,8 @@ window.tradeChart = async (tradeId) => {
         ${exit && exit.reason ? `<span>neden ${tradeReason(exit.reason)}</span>` : ""}
       </div>
       ${d.error ? `<p class="muted small mt">Grafik verisi alınamadı: ${esc(d.error)}</p>` : ""}
+      ${d.price_consistent === false ? `<p class="mt"><span class="tag amber">mum verisi işlem fiyatlarıyla uyuşmuyor</span>
+        <span class="muted small">Bu kayıt farklı bir sembol/eski fiyatla oluşmuş olabilir; grafik çizilmedi, işlem bilgileri yukarıda.</span></p>` : ""}
       <div class="row between mt" style="gap:8px;flex-wrap:wrap">
         <span class="muted small">tekerlek = yakınlaştır, sürükle = kaydır</span>
         <span class="row small" style="gap:8px">
@@ -5754,7 +5797,10 @@ window.tradeChart = async (tradeId) => {
           <button type="button" class="small ghost" onclick="window.tcReset()" title="Tüm görünüm">Sıfırla</button>
         </span>
       </div>
-      <div id="tc-wrap">${tradePriceChart(prices, validMarks, { height: 400, lo: fullLo, hi: fullHi })}</div>
+      <div id="tc-wrap">${tradePriceChart(prices, validMarks, {
+        height: 400, lo: fullLo, hi: fullHi,
+        extraPrices: validMarks.map((m) => Number(m.price)),
+      })}</div>
       <p class="muted small mt">Alış ve satış arasındaki mesafe, kararın ne kadar erken/geç olduğunu gösterir; çizgi rengi satış nedenine göredir.</p>`;
     modal(`${d.coin} · ${(d.trade || {}).side === "BUY" ? "alış" : "satış"} işlemi`, body);
   } catch (err) {
@@ -5763,9 +5809,16 @@ window.tradeChart = async (tradeId) => {
 };
 
 async function renderTrades(root) {
-  const [trades, summary, positions, stats, bots] = await Promise.all([
-    api("/trades?limit=200"), api("/summary"), api("/positions?status=open"), api("/stats"), api("/bots"),
+  const [trades, history, summary, positions, stats, bots] = await Promise.all([
+    api("/trades?limit=200"),
+    // Tur eşleştirmesi başarısız olsa da sayfa açılsın (ham emirler görünür).
+    api("/trades/history?limit=2000").catch(() => ({ trades: [], open: [] })),
+    api("/summary"), api("/positions?status=open"), api("/stats"), api("/bots"),
   ]);
+  const historyTours = history.trades || [];
+  const historyOpen = history.open || [];
+  const historyLimited = !!history.limited;
+  const historyOrders = Number(history.orders || 0);
   const total = summary.total || {};
   const t = stats.totals || {};
   const eq = (stats.equity || []).map((p) => p.value);
@@ -5810,11 +5863,70 @@ async function renderTrades(root) {
     </div>
 
     <div class="card mt">
-      <div class="row between"><h3>İşlemler</h3><span class="muted small">satıra tıkla → alış/satış grafiği</span><a class="small" href="/api/export.csv" target="_blank">CSV indir</a></div>
-      <div style="overflow:auto"><table><thead><tr><th>Zaman</th><th>Bot</th><th>Coin</th><th>Yön</th><th>Adet</th><th>Fiyat</th><th>K/Z</th><th>Mod</th><th>Neden</th></tr></thead><tbody>
-      ${trades.map((tr) => `<tr class="trade-row clickable" onclick="window.tradeChart(${Number(tr.id)})" title="Grafikte alış/satışı gör">
-        <td class="mono">${esc(fmtIso(tr.created_at))}</td><td>${esc(tr.bot_id || "—")}</td><td>${esc(tr.coin)}</td><td>${tr.side === "BUY" ? '<span class="tag green">AL</span>' : '<span class="tag red">SAT</span>'}</td><td>${fmt(tr.quantity, 8)}</td><td>${fmt(tr.price, 8)}</td><td>${tr.pnl_pct == null ? "—" : pct(tr.pnl_pct)}</td><td>${esc(tr.mode)}</td><td>${tradeReason(tr.reason)}</td></tr>`).join("") || '<tr><td colspan="9" class="muted">Henüz işlem yok.</td></tr>'}
-      </tbody></table></div>
+      <div class="row between" style="flex-wrap:wrap;gap:10px">
+        <div>
+          <h3 style="margin:0">İşlemler</h3>
+          <p class="muted small" style="margin:3px 0 0">
+            Her satır bir alım–satım turudur; alış ve satış fiyatı ayrı gösterilir.
+            Satıra tıkla → grafikte nereden alınıp nereden satıldığını gör.
+          </p>
+        </div>
+        <div class="row small" style="gap:8px;align-items:center">
+          <button type="button" class="small" id="tr-mode-tours">Turlar</button>
+          <button type="button" class="small ghost" id="tr-mode-orders">Ham emirler</button>
+          <a class="small" href="/api/export.csv" target="_blank">CSV indir</a>
+        </div>
+      </div>
+      <div id="tr-view-tours" class="mt">
+        <div style="overflow:auto"><table class="tr-table"><thead><tr>
+          <th>Giriş / Kapanış</th><th>Bot</th><th>Coin</th><th>Adet</th>
+          <th>Alış fiyatı</th><th>Satış fiyatı</th><th>K/Z</th><th>Neden</th>
+        </tr></thead><tbody>
+        ${historyTours.map((tr) => `<tr class="trade-row clickable" onclick="window.tradeChart(${Number(tr.exit_id)})"
+            title="Giriş: ${tr.entry_price == null ? "eşleşmedi" : `${esc(fmtTime(tr.entry_time))} · ${priceText(tr.entry_price)}`} → Çıkış: ${esc(fmtTime(tr.exit_time))} · ${priceText(tr.exit_price)}">
+          <td class="mono small">${tr.entry_time ? esc(shortStamp(tr.entry_time)) : "—"}
+            <span class="muted">→</span> ${esc(shortStamp(tr.exit_time))}
+            ${tr.hold_seconds ? `<br><span class="muted">${esc(uptimeText(tr.hold_seconds))}</span>` : ""}</td>          <td>${esc(tr.bot_name || tr.bot_id || "—")}</td>
+          <td>${esc(tr.coin)}
+            ${tr.mode === "live" ? '<span class="tag amber tiny">canlı</span>' : '<span class="tag gray tiny">test</span>'}
+            ${tr.partial ? '<span class="tag amber tiny" title="Pozisyonun bir kısmı satıldı">kısmi</span>' : ""}</td>
+          <td class="mono">${priceText(tr.quantity)}</td>
+          <td class="mono px-buy"${tr.unmatched ? ' title="Bu satışın alışı görünen kayıtlarda yok"' : ""}>${tr.entry_price == null ? "—" : priceText(tr.entry_price)}</td>
+          <td class="mono px-sell">${priceText(tr.exit_price)}</td>
+          <td>${tr.pnl_pct == null ? '<span class="muted">—</span>' : `${pct(tr.pnl_pct)}<br><span class="muted small ${pnlClass(tr.pnl_money)}">${signedMoney(tr.pnl_money)}</span>`}</td>
+          <td>${tradeReason(tr.exit_reason)}</td>
+        </tr>`).join("") || '<tr><td colspan="8" class="muted">Henüz kapanan işlem yok.</td></tr>'}
+        </tbody></table></div>
+        ${historyOpen.length ? `
+        <h4 class="mt">Açık pozisyonlar</h4>
+        <div style="overflow:auto"><table class="tr-table"><thead><tr>
+          <th>Giriş</th><th>Bot</th><th>Coin</th><th>Adet</th><th>Alış fiyatı</th><th>Yatırılan</th>
+        </tr></thead><tbody>
+        ${historyOpen.map((tr) => `<tr>
+          <td class="mono">${esc(fmtIso(tr.entry_time))}</td>
+          <td>${esc(tr.bot_name || tr.bot_id || "—")}</td>
+          <td>${esc(tr.coin)}</td>
+          <td class="mono">${priceText(tr.quantity)}</td>
+          <td class="mono px-buy">${priceText(tr.entry_price)}</td>
+          <td class="mono">${money(tr.invested)}</td>
+        </tr>`).join("")}
+        </tbody></table></div>` : ""}
+        ${historyLimited ? `<p class="muted small mt">Yalnızca son ${fmt(historyOrders, 0)} emir eşleştirildi.</p>` : ""}
+      </div>
+      <div id="tr-view-orders" class="mt hidden">
+        <div style="overflow:auto"><table class="tr-table"><thead><tr>
+          <th>Zaman</th><th>Bot</th><th>Coin</th><th>Yön</th><th>Adet</th><th>Fiyat</th><th>K/Z</th><th>Neden</th>
+        </tr></thead><tbody>
+        ${trades.map((tr) => `<tr class="trade-row clickable" onclick="window.tradeChart(${Number(tr.id)})" title="Grafikte alış/satışı gör">
+          <td class="mono">${esc(fmtIso(tr.created_at))}</td>
+          <td>${esc(tr.bot_name || tr.bot_id || "—")}</td><td>${esc(tr.coin)}
+            ${tr.mode === "live" ? '<span class="tag amber tiny">canlı</span>' : '<span class="tag gray tiny">test</span>'}</td>
+          <td>${tr.side === "BUY" ? '<span class="tag green">AL</span>' : '<span class="tag red">SAT</span>'}</td>
+          <td class="mono">${priceText(tr.quantity)}</td>
+          <td class="mono ${tr.side === "BUY" ? "px-buy" : "px-sell"}">${priceText(tr.price)}</td>
+          <td>${tr.pnl_pct == null ? "—" : pct(tr.pnl_pct)}</td><td>${tradeReason(tr.reason)}</td></tr>`).join("") || '<tr><td colspan="8" class="muted">Henüz işlem yok.</td></tr>'}
+        </tbody></table></div>
+      </div>
     </div>
 
     <div class="card danger-card mt">
@@ -5834,6 +5946,19 @@ async function renderTrades(root) {
         <button class="danger" id="tr-reset-btn" type="button">İstatistikleri sıfırla</button>
       </div>
     </div>`;
+
+  $("#tr-mode-tours").addEventListener("click", () => {
+    $("#tr-view-tours").classList.remove("hidden");
+    $("#tr-view-orders").classList.add("hidden");
+    $("#tr-mode-tours").classList.remove("ghost");
+    $("#tr-mode-orders").classList.add("ghost");
+  });
+  $("#tr-mode-orders").addEventListener("click", () => {
+    $("#tr-view-orders").classList.remove("hidden");
+    $("#tr-view-tours").classList.add("hidden");
+    $("#tr-mode-orders").classList.remove("ghost");
+    $("#tr-mode-tours").classList.add("ghost");
+  });
 
   $("#tr-reset-btn").addEventListener("click", async () => {
     const confirmText = $("#tr-reset-confirm").value.trim();
