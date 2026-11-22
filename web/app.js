@@ -695,8 +695,9 @@ function tcRedraw() {
   if (!wrap) return;
   const vis = d.price.filter((p) => Number(p.idx) >= d.lo && Number(p.idx) <= d.hi);
   const ms = d.markers.filter((m) => Number(m.idx) >= d.lo && Number(m.idx) <= d.hi);
+  const height = Number(d.height) || 380;
   wrap.innerHTML = tradePriceChart(vis.length >= 2 ? vis : d.price, ms, {
-    height: 380, lo: d.lo, hi: d.hi,
+    height, lo: d.lo, hi: d.hi,
   });
   const info = document.getElementById("tc-info");
   if (info) {
@@ -2026,7 +2027,7 @@ function botRow(bot, seriesMap = {}) {
       <span><span class="muted">aktif</span> <b>${esc(uptimeText(st.uptime_seconds))}</b></span>
       ${pos ? `<span class="tag amber">${esc(pos.coin)} @ ${fmt(pos.entry_price, 6)}</span>
         <span><span class="muted">güncel</span> <b data-live="price-${esc(bot.id)}">${fmt(pos.last_price, 8)}</b></span>
-        <span><b data-live="rowpnl-${esc(bot.id)}" class="${pnlClass(st.position_pnl_pct)}">${Number(st.position_pnl_pct) > 0 ? "+" : ""}${fmt(st.position_pnl_pct, 2)}%</b></span>` : '<span class="muted">pozisyon yok</span>'}
+        <span><b data-live="rowpnl-${esc(bot.id)}" class="${pnlClass(st.position_pnl_gross_pct)}">${Number(st.position_pnl_gross_pct) > 0 ? "+" : ""}${fmt(st.position_pnl_gross_pct, 2)}%</b></span>` : '<span class="muted">pozisyon yok</span>'}
     </div>
   </div>`;
 }
@@ -2242,7 +2243,13 @@ function botCard(bot, seriesMap = {}) {
       <span>adet <b>${fmt(pos.quantity, 8)}</b></span>
       <span>giriş <b>${fmt(pos.entry_price, 8)}</b></span>
       <span>güncel <b data-live="price-${esc(bot.id)}">${fmt(pos.last_price, 8)}</b>
-        <span class="muted small">${pos.price_source === "live" ? "canlı" : "mum"}</span></span>
+        <span class="muted small" title="${pos.price_source === "live" ? "Binance anlık fiyat" : "Canlı fiyat alınamadı; son mum kapanışı kullanılıyor"}">${
+          pos.price_source !== "live"
+            ? `mum${pos.price_at ? ` · ${esc(fmtTime(pos.price_at))}` : ""}`
+            : Number(pos.price_age_seconds) > 30
+              ? `canlı · ${fmt(pos.price_age_seconds, 0)} sn önce`
+              : "canlı"
+        }</span></span>
       <span>maliyet <b>${money(pos.cost)}</b></span>
       <span>şimdi satsan <b>${money(pos.net_value)}</b></span>
       ${pos.stop_price ? `<span>stop <b data-live="stop-${esc(bot.id)}">${fmt(pos.stop_price, 8)}</b>
@@ -2318,7 +2325,7 @@ async function botAction(action, id, mode) {
         `${pos.coin} pozisyonu hemen satılsın mı?\n\n` +
           `• Adet: ${fmt(pos.quantity, 8)}\n` +
           `• Giriş: ${fmt(pos.entry_price, 8)}\n` +
-          `• Güncel: ${fmt(pos.last_price, 8)} (K/Z ${fmt(pos.unrealized_pnl_pct, 2)}%)\n` +
+          `• Güncel: ${fmt(pos.last_price, 8)} (K/Z ${fmt(pos.pnl_gross_pct != null ? pos.pnl_gross_pct : pos.unrealized_pnl_pct, 2)}%)\n` +
           (live
             ? "• CANLI modda gerçek piyasa emri gönderilecek.\n"
             : "• Test modunda sanal satış yapılacak.\n") +
@@ -5653,6 +5660,108 @@ function renderAnalysisResult(type, job) {
 /* ------------------------------------------------------------------ */
 /* İşlem geçmişi                                                       */
 /* ------------------------------------------------------------------ */
+function _toMs(value) {
+  if (value === null || value === undefined || value === "") return null;
+  const n = Number(value);
+  if (Number.isFinite(n)) return n > 1e11 ? n : n * 1000;
+  const t = new Date(String(value).replace(" ", "T")).getTime();
+  return Number.isFinite(t) ? t : null;
+}
+
+/* İşlem satırına tıklanınca: bot nereden aldı, nereden sattı? */
+window.tradeChart = async (tradeId) => {
+  try {
+    modal("İşlem grafiği", `<p class="muted">Grafik yükleniyor…</p>`);
+    const d = await api(`/trades/${encodeURIComponent(tradeId)}/chart`);
+    const candles = d.candles || [];
+    const prices = candles.map((c, i) => ({
+      idx: i, t: Number(c.time), o: c.open, h: c.high, l: c.low, c: c.close,
+    }));
+    const candleIdx = (ms) => {
+      if (!candles.length || ms === null) return null;
+      let best = 0;
+      for (let i = 0; i < candles.length; i += 1) {
+        if (Number(candles[i].time) <= ms) best = i;
+        else break;
+      }
+      return best;
+    };
+    const marks = [];
+    const entry = d.entry || null;
+    const exit = d.exit || null;
+    if (entry) {
+      marks.push({
+        idx: candleIdx(_toMs(entry.time)), t: _toMs(entry.time), no: 1,
+        price: Number(entry.price), side: "buy", time: entry.time,
+      });
+    }
+    if (exit) {
+      marks.push({
+        idx: candleIdx(_toMs(exit.time)), t: _toMs(exit.time), no: 1,
+        price: Number(exit.price), side: "sell", time: exit.time,
+        reason: exit.reason, pnl_pct: d.pnl_pct,
+      });
+    }
+    const validMarks = marks.filter((m) => m.idx !== null && Number.isFinite(m.price));
+    // Modal grafiği de yakınlaştırma/kaydırma kullanabilsin diye aynı
+    // veri yuvasına yazılır (tcRedraw "tc-wrap" kapsayıcısını çizer).
+    const fullLo = prices.length ? Number(prices[0].idx) : 0;
+    const fullHi = prices.length ? Number(prices[prices.length - 1].idx) : 0;
+    window.__btData = {
+      markers: validMarks, price: prices, fullLo, fullHi, lo: fullLo, hi: fullHi,
+      height: 400,
+      label: `${d.coin || ""} ${d.period || ""}`.trim(),
+    };
+    const qty = Number((d.trade || {}).quantity) || 0;
+    const pnlMoney = entry && exit ? (Number(exit.price) - Number(entry.price)) * qty : null;
+    const pnlPct = d.pnl_pct;
+    const hold = entry && exit ? (_toMs(exit.time) - _toMs(entry.time)) / 1000 : null;
+    const after = d.after_exit || {};
+    const afterText = exit && after.bars
+      ? `<span>satış sonrası ${Number(after.bars)} mum · en yüksek <b class="${pnlClass(after.high_pct)}">${after.high_pct === null ? "—" : `${Number(after.high_pct) > 0 ? "+" : ""}${fmt(after.high_pct, 2)}%`}</b> · en düşük <b class="${pnlClass(after.low_pct)}">${after.low_pct === null ? "—" : `${Number(after.low_pct) > 0 ? "+" : ""}${fmt(after.low_pct, 2)}%`}</b></span>`
+      : "";
+    const entryTag = entry
+      ? `<span class="tag green">AL</span> <b>${fmt(entry.price, 8)}</b> <span class="muted small">${esc(fmtTime(entry.time))}</span>`
+      : `<span class="tag amber">eşleşen alış bulunamadı</span>`;
+    const exitTag = exit
+      ? `<span class="tag red">SAT</span> <b>${fmt(exit.price, 8)}</b> <span class="muted small">${esc(fmtTime(exit.time))}</span>`
+      : `<span class="tag gray">henüz satılmadı</span>`;
+    const body = `
+      <div class="row between">
+        <div>
+          <h3 style="margin:0">${esc(d.coin)} · ${esc(d.period)}</h3>
+          <p class="muted small" style="margin:4px 0 0">${candles.length} mum · yeşil üçgen alış, kırmızı üçgen satış</p>
+        </div>
+        <div class="pnl-value ${pnlClass(pnlPct)}" style="font-size:22px">
+          ${pnlPct === null || pnlPct === undefined ? "—" : `${Number(pnlPct) > 0 ? "+" : ""}${fmt(pnlPct, 2)}%`}
+        </div>
+      </div>
+      <div class="position-strip mt">
+        <span>${entryTag}</span>
+        <span>${exitTag}</span>
+        <span>adet <b>${fmt(qty, 8)}</b></span>
+        ${pnlMoney === null ? "" : `<span>K/Z <b class="${pnlClass(pnlMoney)}">${signedMoney(pnlMoney)}</b></span>`}
+        ${hold === null ? "" : `<span>süre <b>${esc(uptimeText(hold))}</b></span>`}
+        ${afterText}
+        ${exit && exit.reason ? `<span>neden ${tradeReason(exit.reason)}</span>` : ""}
+      </div>
+      ${d.error ? `<p class="muted small mt">Grafik verisi alınamadı: ${esc(d.error)}</p>` : ""}
+      <div class="row between mt" style="gap:8px;flex-wrap:wrap">
+        <span class="muted small">tekerlek = yakınlaştır, sürükle = kaydır</span>
+        <span class="row small" style="gap:8px">
+          <button type="button" class="small ghost" onclick="window.tcZoom(1/1.7)" title="Yakınlaş">＋</button>
+          <button type="button" class="small ghost" onclick="window.tcZoom(1.7)" title="Uzaklaş">−</button>
+          <button type="button" class="small ghost" onclick="window.tcReset()" title="Tüm görünüm">Sıfırla</button>
+        </span>
+      </div>
+      <div id="tc-wrap">${tradePriceChart(prices, validMarks, { height: 400, lo: fullLo, hi: fullHi })}</div>
+      <p class="muted small mt">Alış ve satış arasındaki mesafe, kararın ne kadar erken/geç olduğunu gösterir; çizgi rengi satış nedenine göredir.</p>`;
+    modal(`${d.coin} · ${(d.trade || {}).side === "BUY" ? "alış" : "satış"} işlemi`, body);
+  } catch (err) {
+    toast(err.message || "İşlem grafiği yüklenemedi", true);
+  }
+};
+
 async function renderTrades(root) {
   const [trades, summary, positions, stats, bots] = await Promise.all([
     api("/trades?limit=200"), api("/summary"), api("/positions?status=open"), api("/stats"), api("/bots"),
@@ -5701,9 +5810,10 @@ async function renderTrades(root) {
     </div>
 
     <div class="card mt">
-      <div class="row between"><h3>İşlemler</h3><a class="small" href="/api/export.csv" target="_blank">CSV indir</a></div>
+      <div class="row between"><h3>İşlemler</h3><span class="muted small">satıra tıkla → alış/satış grafiği</span><a class="small" href="/api/export.csv" target="_blank">CSV indir</a></div>
       <div style="overflow:auto"><table><thead><tr><th>Zaman</th><th>Bot</th><th>Coin</th><th>Yön</th><th>Adet</th><th>Fiyat</th><th>K/Z</th><th>Mod</th><th>Neden</th></tr></thead><tbody>
-      ${trades.map((tr) => `<tr><td class="mono">${esc(fmtIso(tr.created_at))}</td><td>${esc(tr.bot_id || "—")}</td><td>${esc(tr.coin)}</td><td>${tr.side === "BUY" ? '<span class="tag green">AL</span>' : '<span class="tag red">SAT</span>'}</td><td>${fmt(tr.quantity, 8)}</td><td>${fmt(tr.price, 8)}</td><td>${tr.pnl_pct == null ? "—" : pct(tr.pnl_pct)}</td><td>${esc(tr.mode)}</td><td>${tradeReason(tr.reason)}</td></tr>`).join("") || '<tr><td colspan="9" class="muted">Henüz işlem yok.</td></tr>'}
+      ${trades.map((tr) => `<tr class="trade-row clickable" onclick="window.tradeChart(${Number(tr.id)})" title="Grafikte alış/satışı gör">
+        <td class="mono">${esc(fmtIso(tr.created_at))}</td><td>${esc(tr.bot_id || "—")}</td><td>${esc(tr.coin)}</td><td>${tr.side === "BUY" ? '<span class="tag green">AL</span>' : '<span class="tag red">SAT</span>'}</td><td>${fmt(tr.quantity, 8)}</td><td>${fmt(tr.price, 8)}</td><td>${tr.pnl_pct == null ? "—" : pct(tr.pnl_pct)}</td><td>${esc(tr.mode)}</td><td>${tradeReason(tr.reason)}</td></tr>`).join("") || '<tr><td colspan="9" class="muted">Henüz işlem yok.</td></tr>'}
       </tbody></table></div>
     </div>
 

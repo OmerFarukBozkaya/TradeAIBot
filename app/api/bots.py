@@ -416,9 +416,14 @@ def _live_position(
     if live:
         price = float(live)
         pos["price_source"] = "live"
+        age = live_prices.ages([coin]).get(coin)
+        if age is not None:
+            pos["price_age_seconds"] = age
     else:
         price = float(pos.get("last_price") or entry or 0)
         pos["price_source"] = "candle"
+        if pos.get("last_price_at"):
+            pos["price_at"] = pos.get("last_price_at")
     stop = _stop_price(pos, risk or {})
     if stop:
         pos["stop_price"] = round(float(stop), 8)
@@ -481,8 +486,24 @@ def _enrich_coin_list(config: Dict[str, Any]) -> None:
 
 
 @router.get("")
-async def list_bots():
-    return [_serialize(b) for b in db.rows("SELECT * FROM bots ORDER BY created_at DESC")]
+def list_bots():
+    bots = db.rows("SELECT * FROM bots ORDER BY created_at DESC")
+    # Tüm açık pozisyonların fiyatı tek toplu istekte çekilir. Bot sayısı
+    # arttığında her bot için ayrı ağ çağrısı yapılması paneli yavaşlatıp
+    # anlık K/Z'nin takılmasına yol açıyordu.
+    coins = []
+    for bot in bots:
+        state = bot_state.load_state(bot["id"]) or {}
+        position = state.get("position") or {}
+        coin = str(position.get("coin") or "").strip().upper()
+        if coin and coin not in coins:
+            coins.append(coin)
+    if coins:
+        try:
+            live_prices.prices(coins)
+        except Exception:  # noqa: BLE001 - fiyat servisi paneli düşürmesin
+            pass
+    return [_serialize(b) for b in bots]
 
 
 @router.post("")

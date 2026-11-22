@@ -241,7 +241,7 @@ state/                 bot başına atomik JSON durum
 | Tarama | Seçilen stratejilerle anlık BUY/SELL taraması; coin listesi seçilebilir |
 | Coin Listeleri | Kendi coin listelerini oluştur/düzenle/sil, hazır listeler (Top 10, Layer 1, DeFi & L2, Meme); taramada ve botta tek seçimle kullan |
 | Analiz | İndikatör değerleri, destek/direnç, piyasa, aylık sonuç, coinlist |
-| İşlem Geçmişi | Grafikler, filtrelenebilir ledger, özet, CSV indirme |
+| İşlem Geçmişi | Grafikler, filtrelenebilir ledger, özet, CSV indirme; **satıra tıklayınca alış/satış grafiği** (giriş–çıkış noktaları, K/Z, satış sonrası fiyat hareketi) |
 | Ayarlar | İşlem, risk, limitler, Binance, bildirimler, coin listesi, güvenlik |
 | Sistem | CPU/RAM/disk, bot kaynak kullanımı |
 

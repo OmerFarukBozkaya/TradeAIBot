@@ -5,7 +5,7 @@ import io
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
-from fastapi import APIRouter, Query
+from fastapi import APIRouter, HTTPException, Query
 from fastapi.responses import StreamingResponse
 
 from app import db
@@ -274,6 +274,270 @@ async def bot_trade_analysis(bot_id: str, limit: int = Query(default=2000, le=10
     result["orders"] = len(rows)
     result["limited"] = len(rows) >= int(limit)
     return result
+
+
+@router.get("/trades/{trade_id}/chart")
+def trade_chart(trade_id: int):
+    """Bir işlemin grafiği: alış/satış noktaları ve aradaki mumlar.
+
+    İşlem geçmişinde satıra tıklandığında botun nereden alıp nereden sattığını
+    ve kararın sonucunu göstermek için kullanılır.
+    """
+    row = db.row("SELECT * FROM trades WHERE id=?", (trade_id,))
+    if not row:
+        raise HTTPException(404, "İşlem bulunamadı")
+    coin = str(row.get("coin") or "").upper()
+    side = str(row.get("side") or "").upper()
+    bot_id = row.get("bot_id")
+    if bot_id:
+        rows = db.rows(
+            "SELECT * FROM trades WHERE bot_id=? AND coin=? ORDER BY created_at, id",
+            (bot_id, coin),
+        )
+        if not rows:
+            rows = db.rows(
+                "SELECT * FROM trades WHERE coin=? ORDER BY created_at, id", (coin,)
+            )
+    else:
+        rows = db.rows("SELECT * FROM trades WHERE coin=? ORDER BY created_at, id", (coin,))
+
+    entry = None
+    exit_leg = None
+    if side == "SELL":
+        entry = _fifo_entry(rows, row)
+        exit_leg = {
+            "id": row.get("id"),
+            "price": float(row.get("price") or 0.0),
+            "time": row.get("created_at"),
+            "reason": row.get("reason"),
+        }
+    else:
+        entry = {
+            "id": row.get("id"),
+            "price": float(row.get("price") or 0.0),
+            "time": row.get("created_at"),
+            "reason": row.get("reason"),
+        }
+        exit_leg = _next_sell(rows, row)
+
+    period = _bot_period(bot_id)
+    entry_ms = _time_ms(entry.get("time") if entry else row.get("created_at"))
+    exit_ms = _time_ms(exit_leg.get("time") if exit_leg else None)
+    now_ms = int(datetime.now(timezone.utc).timestamp() * 1000)
+    if exit_ms is None:
+        exit_ms = now_ms
+    if entry_ms is None:
+        entry_ms = exit_ms
+    if exit_ms < entry_ms:
+        entry_ms, exit_ms = exit_ms, entry_ms
+
+    base_ms = _period_ms(period) or 3_600_000.0
+    span = max(1, exit_ms - entry_ms)
+    chart_period = _chart_period(span)
+    bar_ms = _period_ms(chart_period) or base_ms
+    padding = max(1, int(round(20 * bar_ms)))
+    start_ms = entry_ms - padding
+    end_ms = exit_ms + padding
+    limit = max(20, min(1000, int((end_ms - start_ms) / bar_ms) + 2))
+
+    candles: List[Dict[str, Any]] = []
+    error: Optional[str] = None
+    try:
+        from app.market_data import load_history
+
+        data, _meta = load_history(
+            coin, chart_period, limit, start=start_ms, end=end_ms
+        )
+        opens = data.get("opendate") or []
+        closes = data.get("close") or []
+        for i in range(len(opens)):
+            candles.append(
+                {
+                    "time": opens[i],
+                    "open": data["open"][i],
+                    "high": data["high"][i],
+                    "low": data["low"][i],
+                    "close": closes[i],
+                    "volume": (data.get("volume_usdt") or data.get("volume_coin") or [0] * len(opens))[i],
+                }
+            )
+    except Exception as exc:  # noqa: BLE001 - grafik yoksa işlem bilgisi yine dönsün
+        error = str(exc)
+
+    entry_price = float(entry.get("price") or 0.0) if entry else 0.0
+    exit_price = float(exit_leg.get("price") or 0.0) if exit_leg else 0.0
+    pnl_pct = (
+        (exit_price / entry_price - 1) * 100 if entry_price > 0 and exit_price > 0 else None
+    )
+    # Satıştan sonraki mumlar: "erken mi sattım?" sorusunu cevaplar.
+    after_high = None
+    after_low = None
+    after_bars = 0
+    if exit_leg and candles:
+        after = [c for c in candles if int(c.get("time") or 0) > exit_ms]
+        after_bars = len(after)
+        if after:
+            after_high = max(float(c.get("high") or 0) for c in after)
+            after_low = min(float(c.get("low") or 0) for c in after)
+    return {
+        "trade": row,
+        "coin": coin,
+        "side": side,
+        "period": chart_period,
+        "entry": entry,
+        "exit": exit_leg,
+        "pnl_pct": round(pnl_pct, 3) if pnl_pct is not None else None,
+        "candles": candles,
+        "after_exit": {
+            "bars": after_bars,
+            "high": after_high,
+            "low": after_low,
+            "high_pct": round((after_high / exit_price - 1) * 100, 3)
+            if after_high and exit_price > 0 else None,
+            "low_pct": round((after_low / exit_price - 1) * 100, 3)
+            if after_low and exit_price > 0 else None,
+        },
+        "error": error,
+    }
+
+
+def _fifo_entry(rows: List[dict], sell_row: dict) -> Optional[Dict[str, Any]]:
+    """Satışın FIFO ile eşleştiği alım lotlarının ağırlıklı girişini bulur."""
+    target_id = sell_row.get("id")
+    coin = str(sell_row.get("coin") or "").upper()
+    lots: List[Dict[str, Any]] = []
+    ordered = sorted(
+        rows, key=lambda r: (str(r.get("created_at") or ""), int(r.get("id") or 0))
+    )
+    for item in ordered:
+        if str(item.get("coin") or "").upper() != coin:
+            continue
+        item_side = str(item.get("side") or "").upper()
+        qty = float(item.get("quantity") or 0.0)
+        price = float(item.get("price") or 0.0)
+        if qty <= 0:
+            continue
+        if item_side == "BUY":
+            lots.append(
+                {
+                    "quantity": qty,
+                    "price": price,
+                    "time": item.get("created_at"),
+                    "id": item.get("id"),
+                }
+            )
+            continue
+        if item_side != "SELL":
+            continue
+        remaining = qty
+        consumed: List[Dict[str, Any]] = []
+        while remaining > 1e-12 and lots:
+            lot = lots[0]
+            take = min(remaining, float(lot["quantity"]))
+            consumed.append(
+                {
+                    "quantity": take,
+                    "price": float(lot["price"]),
+                    "time": lot.get("time"),
+                    "id": lot.get("id"),
+                }
+            )
+            lot["quantity"] = float(lot["quantity"]) - take
+            remaining -= take
+            if lot["quantity"] <= 1e-12:
+                lots.pop(0)
+        if item.get("id") == target_id:
+            if not consumed:
+                return None
+            total = sum(c["quantity"] for c in consumed)
+            if total <= 0:
+                return None
+            return {
+                "id": consumed[0].get("id"),
+                "ids": [c.get("id") for c in consumed],
+                "price": sum(c["quantity"] * c["price"] for c in consumed) / total,
+                "time": consumed[0].get("time"),
+                "quantity": total,
+            }
+    return None
+
+
+def _next_sell(rows: List[dict], buy_row: dict) -> Optional[Dict[str, Any]]:
+    """Bir alıştan sonra gelen ilk satışı (varsa) döndürür."""
+    buy_key = (str(buy_row.get("created_at") or ""), int(buy_row.get("id") or 0))
+    coin = str(buy_row.get("coin") or "").upper()
+    candidates = [
+        item
+        for item in rows
+        if str(item.get("side") or "").upper() == "SELL"
+        and str(item.get("coin") or "").upper() == coin
+        and (str(item.get("created_at") or ""), int(item.get("id") or 0)) > buy_key
+    ]
+    if not candidates:
+        return None
+    item = min(candidates, key=lambda r: (str(r.get("created_at") or ""), int(r.get("id") or 0)))
+    return {
+        "id": item.get("id"),
+        "price": float(item.get("price") or 0.0),
+        "time": item.get("created_at"),
+        "reason": item.get("reason"),
+    }
+
+
+def _bot_period(bot_id: Optional[str]) -> str:
+    if not bot_id:
+        return "1h"
+    try:
+        bot = db.row("SELECT config_json FROM bots WHERE id=?", (bot_id,))
+        if bot:
+            import json
+
+            config = json.loads(bot.get("config_json") or "{}")
+            period = str(config.get("period") or "").strip()
+            if period:
+                return period
+    except (TypeError, ValueError):
+        pass
+    return "1h"
+
+
+def _period_ms(period: str) -> Optional[float]:
+    try:
+        from app.market_data import parse_period
+
+        return parse_period(period).ms
+    except Exception:  # noqa: BLE001 - bilinmeyen periyot: varsayılana düş
+        return None
+
+
+def _time_ms(value: Any) -> Optional[int]:
+    stamp = _parse_ts(value) if not isinstance(value, (int, float)) else None
+    if isinstance(value, (int, float)):
+        number = float(value)
+        return int(number if number > 1e11 else number * 1000)
+    if stamp is None:
+        return None
+    return int(stamp.timestamp() * 1000)
+
+
+_CHART_PERIODS = [
+    "1m", "3m", "5m", "15m", "30m", "1h", "2h", "4h", "6h", "8h", "12h",
+    "1d", "3d", "1w",
+]
+
+
+def _chart_period(span_ms: int) -> str:
+    """İşlem süresine göre grafik periyodu seçer (yaklaşık 120 mum hedefi).
+
+    Kısa işlemlerde botun periyodu yerine daha ince bir periyot kullanılır ki
+    giriş ve çıkış aynı mumda kaybolmasın; uzun işlemlerde ise grafik
+    okunabilir kalsın diye periyot büyütülür.
+    """
+    ideal = max(1.0, span_ms / 120.0)
+    for text in _CHART_PERIODS:
+        if (_period_ms(text) or 0) >= ideal:
+            return text
+    return "1w"
 
 
 @router.get("/positions")

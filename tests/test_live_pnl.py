@@ -149,6 +149,32 @@ def test_serialize_computes_equity_and_total(monkeypatch):
     assert state["position"]["price_source"] == "live"
 
 
+def test_list_bots_prefetches_all_position_coins(monkeypatch):
+    """Panel tüm botların fiyatını tek toplu çağrıda ister (N bot = 1 istek)."""
+    calls = []
+
+    def fake_prices(symbols):
+        calls.append(sorted(str(s).upper() for s in symbols))
+        return {}
+
+    monkeypatch.setattr(live_prices, "prices", fake_prices)
+    for bot_id, coin in (("bot_pre_1", "BTCUSDT"), ("bot_pre_2", "ETHUSDT")):
+        _state(
+            bot_id,
+            position={"coin": coin, "quantity": 1.0, "entry_price": 100.0, "last_price": 100.0},
+        )
+        db.execute(
+            "INSERT INTO bots(id,name,type,mode,period,config_json,status,auto_restart,created_at,updated_at) "
+            "VALUES(?,?,?,?,?,?,?,?,?,?)",
+            (bot_id, bot_id, "trade", "paper", "1h", '{"strategies": [], "coins": []}',
+             "running", 1, db.utcnow(), db.utcnow()),
+        )
+
+    bots_api.list_bots()
+
+    assert calls[0] == ["BTCUSDT", "ETHUSDT"]
+
+
 def test_topbar_total_includes_unrealized(monkeypatch):
     """Toplam K/Z açık pozisyonun anlık (net) kısmını da içerir."""
     monkeypatch.setattr(live_prices, "prices", lambda symbols: {"ETHUSDT": 200.0})
