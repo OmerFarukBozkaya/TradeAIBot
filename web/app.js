@@ -720,6 +720,9 @@ function tcRedraw() {
   wrap.innerHTML = tradePriceChart(vis.length >= 2 ? vis : d.price, ms, {
     height, lo: d.lo, hi: d.hi,
     extraPrices: (d.markers || []).map((m) => Number(m.price)),
+    entryPrice: d.entryPrice,
+    exitPrice: d.exitPrice,
+    hover: true,
   });
   const info = document.getElementById("tc-info");
   if (info) {
@@ -757,7 +760,13 @@ window.tcWheel = (ev) => {
   if (!d) return true;
   ev.preventDefault();
   const r = ev.currentTarget.getBoundingClientRect();
-  const padL = 58, padR = 16, vw = 760;
+  // Grafik çiziminde kullanılan gerçek kenar boşlukları (pad.left/right):
+  // yakınlaştırma imlecin altındaki muma odaklansın.
+  const chartId = ev.currentTarget.dataset ? ev.currentTarget.dataset.chartId : null;
+  const geom = chartId ? _chartGeom.get(chartId) : null;
+  const padL = geom ? geom.pad.left : 64;
+  const padR = geom ? geom.pad.right : 16;
+  const vw = geom ? geom.w : 760;
   const innerW = Math.max(1, r.width * (vw - padL - padR) / vw);
   const leftPx = r.width * padL / vw;
   const frac = Math.min(1, Math.max(0, (ev.clientX - r.left - leftPx) / innerW));
@@ -770,7 +779,13 @@ window.tcDown = (ev) => {
   const d = tcData();
   if (!d || ev.button !== 0) return;
   const r = ev.currentTarget.getBoundingClientRect();
-  TC.drag = { x: ev.clientX, lo: d.lo, hi: d.hi, width: r.width };
+  const chartId = ev.currentTarget.dataset ? ev.currentTarget.dataset.chartId : null;
+  const geom = chartId ? _chartGeom.get(chartId) : null;
+  // Sürükleme, çizim alanının gerçek genişliğine göre ölçeklenir.
+  const plotWidth = geom
+    ? r.width * (geom.w - geom.pad.left - geom.pad.right) / geom.w
+    : r.width;
+  TC.drag = { x: ev.clientX, lo: d.lo, hi: d.hi, width: Math.max(1, plotWidth) };
   ev.preventDefault();
 };
 
@@ -821,6 +836,126 @@ function sellStyle(reason) {
   return SELL_REASON_STYLE[reason] || { color: "#fb7185", light: "#fda4af", label: reason || "sinyal satışı" };
 }
 
+/* ---------------- Eksen / imleç yardımcıları ---------------- */
+
+/** Eksen için "yuvarlak" adım (1, 2, 2.5, 5 × 10^n). */
+function niceStep(span, target = 4) {
+  const raw = Math.abs(Number(span)) / Math.max(1, target);
+  if (!Number.isFinite(raw) || raw <= 0) return 1;
+  const mag = Math.pow(10, Math.floor(Math.log10(raw)));
+  const norm = raw / mag;
+  const mult = norm <= 1 ? 1 : norm <= 2 ? 2 : norm <= 2.5 ? 2.5 : norm <= 5 ? 5 : 10;
+  return mult * mag;
+}
+
+/** Adım büyüklüğüne göre gereken ondalık sayısı (0,04'lük coinlerde 5 hane). */
+function axisDecimals(step) {
+  const s = Math.abs(Number(step));
+  if (!Number.isFinite(s) || s <= 0) return 2;
+  return Math.max(0, Math.min(10, -Math.floor(Math.log10(s))));
+}
+
+function axisLabel(value, decimals) {
+  const n = Number(value);
+  if (!Number.isFinite(n)) return "";
+  return n.toLocaleString("tr-TR", {
+    minimumFractionDigits: decimals,
+    maximumFractionDigits: decimals,
+  });
+}
+
+/** Grafik geometrisi: imleç (crosshair) için saklanır. */
+const _chartGeom = new Map();
+
+function _chartHideHover(svg) {
+  const g = svg && svg.querySelector(".tc-hover");
+  if (g) {
+    g.style.display = "none";
+    g.innerHTML = "";
+  }
+}
+
+function _chartHoverMove(ev) {
+  const svg = ev.target && ev.target.closest ? ev.target.closest("svg.trade-chart") : null;
+  if (!svg) return;
+  const geom = _chartGeom.get(svg.dataset.chartId);
+  if (!geom) return;
+  const rect = svg.getBoundingClientRect();
+  if (!rect.width || !rect.height) return;
+  const vx = ((ev.clientX - rect.left) / rect.width) * geom.w;
+  if (vx < geom.pad.left || vx > geom.w - geom.pad.right) {
+    _chartHideHover(svg);
+    return;
+  }
+  const target =
+    geom.i0 + ((vx - geom.pad.left) / (geom.w - geom.pad.left - geom.pad.right)) * geom.span;
+  let best = null;
+  let bestD = Infinity;
+  for (const p of geom.pts) {
+    const d = Math.abs(p.idx - target);
+    if (d < bestD) {
+      bestD = d;
+      best = p;
+    }
+  }
+  if (!best) {
+    _chartHideHover(svg);
+    return;
+  }
+  const cx = geom.x(best.idx);
+  const cy = geom.y(best.c);
+  const change = best.o > 0 ? (best.c / best.o - 1) * 100 : 0;
+  const up = change >= 0;
+  const col = up ? "#34d399" : "#fb7185";
+  const hasVol = best.v > 0;
+  // Kutu değerleri fiyat büyüklüğüne göre tek bir hassasiyette yazılır
+  // (0,04'lük coinlerde 0,040022 gibi gerçek seviyeler görünür) ve dört
+  // değer birbiriyle hizalı kalır.
+  const magnitudeDecimals = Math.abs(best.c) >= 1000 ? 2
+    : Math.abs(best.c) >= 1 ? 4
+      : Math.abs(best.c) >= 0.01 ? 6
+        : 8;
+  const valueDecimals = Math.min(10, Math.max(geom.decimals + 2, magnitudeDecimals));
+  const valueText = (v) => axisLabel(v, valueDecimals);
+  const boxW = 216;
+  const boxH = hasVol ? 58 : 45;
+  const boxX = Math.min(Math.max(geom.pad.left + 4, cx + 12), geom.w - geom.pad.right - boxW - 4);
+  const boxY = geom.pad.top + 18;
+  const row = (label, value, x, yy, anchor = "start") =>
+    `<text x="${x}" y="${yy}" text-anchor="${anchor}" font-size="9.5" fill="#94a3b8">${esc(label)}</text>
+     <text x="${x + (anchor === "start" ? 34 : -34)}" y="${yy}" text-anchor="${anchor}" font-size="9.5" fill="#e2e8f0">${esc(value)}</text>`;
+  let g = svg.querySelector(".tc-hover");
+  if (!g) {
+    g = document.createElementNS("http://www.w3.org/2000/svg", "g");
+    g.setAttribute("class", "tc-hover");
+    svg.appendChild(g);
+  }
+  g.style.display = "";
+  g.innerHTML = `
+    <line x1="${cx.toFixed(1)}" y1="${geom.pad.top}" x2="${cx.toFixed(1)}" y2="${(geom.h - geom.pad.bottom).toFixed(1)}"
+      stroke="rgba(148,163,184,.42)" stroke-width="1" stroke-dasharray="3 3"/>
+    <line x1="${geom.pad.left}" y1="${cy.toFixed(1)}" x2="${(geom.w - geom.pad.right).toFixed(1)}" y2="${cy.toFixed(1)}"
+      stroke="rgba(148,163,184,.22)" stroke-width="1" stroke-dasharray="3 3"/>
+    <circle cx="${cx.toFixed(1)}" cy="${cy.toFixed(1)}" r="3.4" fill="${col}" stroke="#0b1220" stroke-width="1.2"/>
+    <rect x="${boxX.toFixed(1)}" y="${boxY}" width="${boxW}" height="${boxH}" rx="7"
+      fill="rgba(9,15,26,.94)" stroke="rgba(120,156,210,.28)"/>
+    <text x="${(boxX + 9).toFixed(1)}" y="${boxY + 14}" font-size="9.5" fill="#7f90aa">${esc(fmtTime(best.t))}</text>
+    <text x="${(boxX + boxW - 9).toFixed(1)}" y="${boxY + 14}" text-anchor="end" font-size="9.5" fill="${col}">
+      ${up ? "+" : ""}${fmt(change, 2)}%</text>
+    ${row("Açılış", valueText(best.o), boxX + 9, boxY + 27)}
+    ${row("Yüksek", valueText(best.h), boxX + 116, boxY + 27)}
+    ${row("Düşük", valueText(best.l), boxX + 9, boxY + 40)}
+    ${row("Kapanış", valueText(best.c), boxX + 116, boxY + 40)}
+    ${hasVol ? row("Hacim", fmt(best.v, 0), boxX + 9, boxY + 53) : ""}`;
+}
+
+document.addEventListener("mousemove", _chartHoverMove);
+document.addEventListener("mouseleave", (ev) => {
+  if (ev.target && ev.target.closest && ev.target.closest("svg.trade-chart")) {
+    _chartHideHover(ev.target.closest("svg.trade-chart"));
+  }
+}, true);
+
 function tradePriceChart(prices, markers, opts = {}) {
   const pts = (prices || [])
     .map((p) => ({
@@ -829,13 +964,16 @@ function tradePriceChart(prices, markers, opts = {}) {
       h: Number(p.h != null ? p.h : p.c),
       l: Number(p.l != null ? p.l : p.c),
       c: Number(p.c),
+      v: Number(p.v != null ? p.v : 0),
     }))
     .filter((p) => Number.isFinite(p.idx) && Number.isFinite(p.c) && p.c > 0
       && Number.isFinite(p.h) && Number.isFinite(p.l) && p.h >= p.l);
   if (pts.length < 2) return chartEmpty(opts.height || 320);
   const h = opts.height || 320;
   const w = 760;
-  const pad = { top: 16, right: 16, bottom: 34, left: 58 };
+  // Sağ tarafta son fiyat balonu için yer bırakılır.
+  const showLast = opts.showLast !== false && opts.hover !== false;
+  const pad = { top: 24, right: showLast ? 68 : 16, bottom: 34, left: 64 };
   const i0 = opts.lo != null ? Number(opts.lo) : pts[0].idx;
   const i1 = opts.hi != null ? Number(opts.hi) : pts[pts.length - 1].idx;
   const span = i1 - i0 || 1;
@@ -844,7 +982,11 @@ function tradePriceChart(prices, markers, opts = {}) {
   let max = Math.max(...pts.map((p) => p.h));
   // İşlem işaretleri (alış/satış) mum aralığının dışında kalırsa grafik
   // ölçeği onları da kapsar; aksi halde üçgenler kırpılıp görünmezdi.
-  const extras = (opts.extraPrices || []).map(Number).filter((v) => Number.isFinite(v) && v > 0);
+  const extras = (opts.extraPrices || [])
+    .concat(opts.entryPrice ? [opts.entryPrice] : [])
+    .concat(opts.exitPrice ? [opts.exitPrice] : [])
+    .map(Number)
+    .filter((v) => Number.isFinite(v) && v > 0);
   if (extras.length) {
     min = Math.min(min, ...extras);
     max = Math.max(max, ...extras);
@@ -853,28 +995,39 @@ function tradePriceChart(prices, markers, opts = {}) {
     min = Math.min(...vals);
     max = Math.max(...vals);
   }
-  const grip = (max - min) * 0.06 || max * 0.01;
+  // Tamamen yatay seride bile okunabilir bir bant kalsın.
+  const rawSpan = max - min;
+  const grip = rawSpan > 0 ? rawSpan * 0.08 : Math.max(Math.abs(max) * 0.005, 1e-9);
   min -= grip;
   max += grip;
   const vspan = max - min || 1;
   const x = (idx) => pad.left + ((idx - i0) / span) * (w - pad.left - pad.right);
   const y = (v) => h - pad.bottom - ((v - min) / vspan) * (h - pad.top - pad.bottom);
 
-  const labels = [0, 0.25, 0.5, 0.75, 1].map((r) => {
-    const gy = pad.top + r * (h - pad.top - pad.bottom);
-    const val = max - r * vspan;
-    return `<line x1="${pad.left}" y1="${gy.toFixed(1)}" x2="${w - pad.right}" y2="${gy.toFixed(1)}"
-              stroke="rgba(120,156,210,.10)" stroke-dasharray="3 5"/>
-            <text x="${pad.left - 8}" y="${(gy + 4).toFixed(1)}" text-anchor="end"
-              fill="#64748b" font-size="10">${fmt(val, 2)}</text>`;
-  }).join("");
+  // Y ekseni: "yuvarlak" adımlar + adıma göre ondalık (0,04'lük coinler
+  // "0,04" gibi tekrar eden etiketler yerine 0,0403 / 0,0406 gösterir).
+  const plotH = Math.max(60, h - pad.top - pad.bottom);
+  const step = niceStep(vspan, Math.max(3, Math.min(8, Math.round(plotH / 46))));
+  const decimals = axisDecimals(step);
+  const ticks = [];
+  const firstTick = Math.ceil(min / step) * step;
+  for (let v = firstTick; v <= max + step * 1e-6; v += step) {
+    const rounded = Number(v.toFixed(10));
+    ticks.push({ value: rounded, y: y(rounded) });
+    if (ticks.length > 12) break;
+  }
+  const labels = ticks.map((tick) => `
+      <line x1="${pad.left}" y1="${tick.y.toFixed(1)}" x2="${w - pad.right}" y2="${tick.y.toFixed(1)}"
+        stroke="rgba(120,156,210,.10)" stroke-dasharray="3 5"/>
+      <text x="${pad.left - 8}" y="${(tick.y + 3.5).toFixed(1)}" text-anchor="end"
+        fill="#7b8ba6" font-size="9.5" style="font-variant-numeric:tabular-nums">${axisLabel(tick.value, decimals)}</text>`).join("");
 
   const line = pts.map((p, i) => `${i === 0 ? "M" : "L"} ${x(p.idx).toFixed(1)},${y(p.c).toFixed(1)}`).join(" ");
 
   // Yakınlaşınca mum çiz; uzakta çizgi kullan.
   const slotW = (w - pad.left - pad.right) / Math.max(1, pts.length);
-  const useCandles = pts.length <= 320 && slotW >= 2.6;
-  const candleW = Math.max(1.2, Math.min(9, slotW * 0.62));
+  const useCandles = pts.length <= 320 && slotW >= 2.2;
+  const candleW = Math.max(1.6, Math.min(10, slotW * 0.66));
   const candlesSvg = useCandles ? pts.map((p) => {
     const up = p.c >= p.o;
     const col = up ? "#34d399" : "#fb7185";
@@ -883,11 +1036,11 @@ function tradePriceChart(prices, markers, opts = {}) {
     const yc = y(p.c);
     const top = Math.min(yo, yc);
     const bodyH = Math.max(1, Math.abs(yc - yo));
-    return `<g><title>${esc(fmtTime(p.t))} · A ${fmt(p.o, 4)} Y ${fmt(p.c, 4)} · Yük ${fmt(p.h, 4)} Düş ${fmt(p.l, 4)}</title>
+    return `<g><title>${esc(fmtTime(p.t))} · A ${priceText(p.o)} · Y ${priceText(p.c)} · Yük ${priceText(p.h)} · Düş ${priceText(p.l)}</title>
       <line x1="${cx.toFixed(1)}" y1="${y(p.h).toFixed(1)}" x2="${cx.toFixed(1)}" y2="${y(p.l).toFixed(1)}"
-        stroke="${col}" stroke-width="1" opacity=".75"/>
+        stroke="${col}" stroke-width="1" opacity=".9"/>
       <rect x="${(cx - candleW / 2).toFixed(1)}" y="${top.toFixed(1)}" width="${candleW.toFixed(1)}"
-        height="${bodyH.toFixed(1)}" fill="${col}" opacity=".85"/>
+        height="${bodyH.toFixed(1)}" fill="${col}" opacity=".92"/>
     </g>`;
   }).join("") : "";
 
@@ -901,6 +1054,22 @@ function tradePriceChart(prices, markers, opts = {}) {
     }
     return `<text x="${x(best.idx).toFixed(1)}" y="${(h - 8).toFixed(1)}" text-anchor="middle"
         fill="#64748b" font-size="9.5">${esc(shortDate(best.t))}</text>`;
+  }).join("");
+
+  // Referans ve son fiyat etiketleri, eksen adımından daha hassas yazılır:
+  // alış 0,0406 yerine 0,040622 gibi gerçek işlem seviyesi görünür.
+  const preciseDecimals = Math.min(10, Math.max(decimals + 2, axisDecimals(step / 100)));
+
+  // Alış/satış yatay referans çizgileri: seviyeyi eksende birebir okutur.
+  const refLines = [
+    opts.entryPrice > 0 ? { v: Number(opts.entryPrice), color: "#34d399", label: "alış" } : null,
+    opts.exitPrice > 0 ? { v: Number(opts.exitPrice), color: "#fb7185", label: "satış" } : null,
+  ].filter(Boolean).map((ref) => {
+    const ry = Math.min(h - pad.bottom, Math.max(pad.top, y(ref.v)));
+    return `<line x1="${pad.left}" y1="${ry.toFixed(1)}" x2="${w - pad.right}" y2="${ry.toFixed(1)}"
+        stroke="${ref.color}" stroke-width="1" stroke-dasharray="6 4" opacity=".38"/>
+      <text x="${(w - pad.right + 4).toFixed(1)}" y="${(ry + 3).toFixed(1)}"
+        fill="${ref.color}" font-size="8.5" opacity=".9">${esc(ref.label)} ${axisLabel(ref.v, preciseDecimals)}</text>`;
   }).join("");
 
   // İşlem çiftleri: giriş → çıkış bağlantı çizgisi (hangi işlem olduğu görünsün)
@@ -934,7 +1103,7 @@ function tradePriceChart(prices, markers, opts = {}) {
       const base = below ? by + 8 : by - 8;
       const tip = below ? by + 17 : by - 17;
       const labelY = below ? by + 29 : by - 21;
-      const title = `#${t.buy.no} AL · ${fmtTime(t.buy.time)} · ${fmt(t.buy.price, 4)}`;
+      const title = `#${t.buy.no} AL · ${fmtTime(t.buy.time)} · ${priceText(t.buy.price)}`;
       svg += `<g class="trade-mark"><title>${esc(title)}</title>
         <polygon points="${bx.toFixed(1)},${base.toFixed(1)} ${(bx - 5).toFixed(1)},${tip.toFixed(1)} ${(bx + 5).toFixed(1)},${tip.toFixed(1)}"
           fill="#34d399" stroke="#060b14" stroke-width="1"/>
@@ -950,7 +1119,7 @@ function tradePriceChart(prices, markers, opts = {}) {
       const base = above ? sy - 8 : sy + 8;
       const tip = above ? sy - 17 : sy + 17;
       const labelY = above ? sy - 21 : sy + 29;
-      const title = `#${t.sell.no} SAT · ${st.label} · ${fmtTime(t.sell.time)} · ${fmt(t.sell.price, 4)} · K/Z ${pnl >= 0 ? "+" : ""}${fmt(pnl, 2)}%`;
+      const title = `#${t.sell.no} SAT · ${st.label} · ${fmtTime(t.sell.time)} · ${priceText(t.sell.price)} · K/Z ${pnl >= 0 ? "+" : ""}${fmt(pnl, 2)}%`;
       svg += `<g class="trade-mark"><title>${esc(title)}</title>
         <polygon points="${sx.toFixed(1)},${base.toFixed(1)} ${(sx - 5).toFixed(1)},${tip.toFixed(1)} ${(sx + 5).toFixed(1)},${tip.toFixed(1)}"
           fill="${st.color}" stroke="#060b14" stroke-width="1"/>
@@ -960,23 +1129,57 @@ function tradePriceChart(prices, markers, opts = {}) {
     return svg;
   }).join("");
 
-  return `<svg class="chart-svg trade-chart" viewBox="0 0 ${w} ${h}" width="100%" height="${h}" role="img"
-      style="cursor:grab;touch-action:none"
+  // Son mumun kapanışı: sağ kenarda fiyat balonu.
+  let lastBadge = "";
+  if (showLast) {
+    const lastPt = pts[pts.length - 1];
+    const ly = Math.min(h - pad.bottom - 1, Math.max(pad.top + 1, y(lastPt.c)));
+    const up = lastPt.c >= lastPt.o;
+    const col = up ? "#34d399" : "#fb7185";
+    lastBadge = `<rect x="${(w - pad.right + 2).toFixed(1)}" y="${(ly - 8).toFixed(1)}" width="64" height="16" rx="3"
+        fill="${col}" opacity=".16" stroke="${col}" stroke-width="0.8"/>
+      <text x="${(w - pad.right + 6).toFixed(1)}" y="${(ly + 3).toFixed(1)}" font-size="9" fill="${col}"
+        style="font-variant-numeric:tabular-nums">${axisLabel(lastPt.c, preciseDecimals)}</text>`;
+  }
+
+  const chartId = `tc${++_chartSeq}`;
+  _chartGeom.set(chartId, {
+    w, h, pad, i0, i1, span, min, max, vspan, pts, x, y,
+    step, decimals,
+  });
+  // Yeniden çizilen/yenilenen grafiklerin eski geometrisi bellekte kalmasın;
+  // her kayıt mum listesini ve kapanışları tuttuğu için önemli.
+  for (const [key, geom] of _chartGeom) {
+    if (key === chartId) continue;
+    const node = document.querySelector(`svg.trade-chart[data-chart-id="${key}"]`);
+    if (!node) _chartGeom.delete(key);
+  }
+  if (_chartGeom.size > 40) {
+    const oldest = _chartGeom.keys().next().value;
+    _chartGeom.delete(oldest);
+  }
+
+  return `<svg class="chart-svg trade-chart" data-chart-id="${chartId}"
+      viewBox="0 0 ${w} ${h}" width="100%" height="${h}" role="img"
+      style="cursor:crosshair;touch-action:none"
       onwheel="return window.tcWheel(event)"
       onmousedown="window.tcDown(event)">
     ${labels}
     ${xTicks}
     ${useCandles ? candlesSvg : `<path d="${line}" fill="none" stroke="#3b82f6" stroke-width="1.5" stroke-linejoin="round"/>`}
+    ${refLines}
     ${tradeLines}
     ${marks}
+    ${lastBadge}
     <text x="${pad.left}" y="12" fill="#7f90aa" font-size="10">
-      ${shownTrades} işlem · ${pts.length} mum · ${useCandles ? "mum" : "çizgi"} görünümü · tekerlek = yakınlaştır, sürükle = kaydır
+      ${shownTrades} işlem · ${pts.length} mum · ${useCandles ? "mum" : "çizgi"} görünümü · tekerlek = yakınlaştır, sürükle = kaydır, imleç = değerler
     </text>
     <text x="${w - pad.right}" y="12" text-anchor="end" fill="#64748b" font-size="10">
       ${esc(shortDate(pts[0].t))} → ${esc(shortDate(pts[pts.length - 1].t))}
     </text>
   </svg>`;
 }
+
 
 function lineChart(values, opts = {}) {
   const nums = (values || []).map(Number).filter((n) => Number.isFinite(n));
@@ -5716,7 +5919,8 @@ window.tradeChart = async (tradeId) => {
     const d = await api(`/trades/${encodeURIComponent(tradeId)}/chart`);
     const candles = d.candles || [];
     const prices = candles.map((c, i) => ({
-      idx: i, t: Number(c.time), o: c.open, h: c.high, l: c.low, c: c.close,
+      idx: i, t: Number(c.time), o: Number(c.open), h: Number(c.high),
+      l: Number(c.low), c: Number(c.close), v: Number(c.volume) || 0,
     }));
     const candleIdx = (ms) => {
       if (!candles.length || ms === null) return null;
@@ -5751,6 +5955,8 @@ window.tradeChart = async (tradeId) => {
     window.__btData = {
       markers: validMarks, price: prices, fullLo, fullHi, lo: fullLo, hi: fullHi,
       height: 400,
+      entryPrice: entry ? Number(entry.price) : null,
+      exitPrice: exit ? Number(exit.price) : null,
       label: `${d.coin || ""} ${d.period || ""}`.trim(),
     };
     const qty = Number((d.trade || {}).quantity) || 0;
@@ -5790,7 +5996,7 @@ window.tradeChart = async (tradeId) => {
       ${d.price_consistent === false ? `<p class="mt"><span class="tag amber">mum verisi işlem fiyatlarıyla uyuşmuyor</span>
         <span class="muted small">Bu kayıt farklı bir sembol/eski fiyatla oluşmuş olabilir; grafik çizilmedi, işlem bilgileri yukarıda.</span></p>` : ""}
       <div class="row between mt" style="gap:8px;flex-wrap:wrap">
-        <span class="muted small">tekerlek = yakınlaştır, sürükle = kaydır</span>
+        <span class="muted small">tekerlek = yakınlaştır, sürükle = kaydır, fareyle üzerine gel = mum değerleri</span>
         <span class="row small" style="gap:8px">
           <button type="button" class="small ghost" onclick="window.tcZoom(1/1.7)" title="Yakınlaş">＋</button>
           <button type="button" class="small ghost" onclick="window.tcZoom(1.7)" title="Uzaklaş">−</button>
@@ -5800,8 +6006,14 @@ window.tradeChart = async (tradeId) => {
       <div id="tc-wrap">${tradePriceChart(prices, validMarks, {
         height: 400, lo: fullLo, hi: fullHi,
         extraPrices: validMarks.map((m) => Number(m.price)),
+        entryPrice: entry ? Number(entry.price) : null,
+        exitPrice: exit ? Number(exit.price) : null,
+        hover: true,
       })}</div>
-      <p class="muted small mt">Alış ve satış arasındaki mesafe, kararın ne kadar erken/geç olduğunu gösterir; çizgi rengi satış nedenine göredir.</p>`;
+      <p class="muted small mt">
+        Yeşil kesikli çizgi alış, kırmızı kesikli çizgi satış seviyesidir; sağdaki balon son mumun kapanışıdır.
+        Mumların üzerine fareyle gelince açılış/yüksek/düşük/kapanış değerleri görünür.
+      </p>`;
     modal(`${d.coin} · ${(d.trade || {}).side === "BUY" ? "alış" : "satış"} işlemi`, body);
   } catch (err) {
     toast(err.message || "İşlem grafiği yüklenemedi", true);
