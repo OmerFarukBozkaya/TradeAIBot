@@ -709,6 +709,36 @@ function tcClampView(lo, hi) {
   return { lo, hi };
 }
 
+/** Grafiği kapsayıcı genişliğine oturtarak çizer.
+ *
+ * İlk çizim 760 birim genişlikle üretilir; gerçek piksel genişliği farklıysa
+ * `viewBox` o genişlikle yeniden oluşturulur. Böylece çizim kutuyu tam doldurur
+ * (yanlarda boşluk kalmaz) ve imleç tam olarak mumun üzerine gelir.
+ */
+function renderTradeChart(container, prices, markers, opts = {}) {
+  if (!container) return;
+  container.innerHTML = tradePriceChart(prices, markers, opts);
+  const svg = container.querySelector("svg.trade-chart");
+  if (!svg) return;
+  const width = Math.round(svg.getBoundingClientRect().width);
+  const current = Number(opts.width) || 760;
+  if (width >= 240 && Math.abs(width - current) > 2) {
+    container.innerHTML = tradePriceChart(prices, markers, { ...opts, width });
+  }
+}
+
+// Pencere/panel yeniden boyutlanınca grafik yeniden ölçeklensin: aksi halde
+// viewBox ile kutu oranı bozulur ve imleç yeniden kaymaya başlar.
+let _chartResizeTimer = null;
+window.addEventListener("resize", () => {
+  clearTimeout(_chartResizeTimer);
+  _chartResizeTimer = setTimeout(() => {
+    if (window.__btData && document.getElementById("tc-wrap")) {
+      window.tcRedraw();
+    }
+  }, 180);
+});
+
 function tcRedraw() {
   const d = tcData();
   if (!d) return;
@@ -717,13 +747,19 @@ function tcRedraw() {
   const vis = d.price.filter((p) => Number(p.idx) >= d.lo && Number(p.idx) <= d.hi);
   const ms = d.markers.filter((m) => Number(m.idx) >= d.lo && Number(m.idx) <= d.hi);
   const height = Number(d.height) || 380;
-  wrap.innerHTML = tradePriceChart(vis.length >= 2 ? vis : d.price, ms, {
+  renderTradeChart(wrap, vis.length >= 2 ? vis : d.price, ms, {
     height, lo: d.lo, hi: d.hi,
     extraPrices: (d.markers || []).map((m) => Number(m.price)),
     entryPrice: d.entryPrice,
     exitPrice: d.exitPrice,
     hover: true,
+    width: d.chartWidth,
   });
+  const svg = wrap.querySelector("svg.trade-chart");
+  if (svg && svg.dataset.chartId) {
+    const geom = _chartGeom.get(svg.dataset.chartId);
+    if (geom) d.chartWidth = geom.w;
+  }
   const info = document.getElementById("tc-info");
   if (info) {
     const trades = new Set(ms.map((m) => m.no)).size;
@@ -759,17 +795,15 @@ window.tcWheel = (ev) => {
   const d = tcData();
   if (!d) return true;
   ev.preventDefault();
-  const r = ev.currentTarget.getBoundingClientRect();
-  // Grafik çiziminde kullanılan gerçek kenar boşlukları (pad.left/right):
-  // yakınlaştırma imlecin altındaki muma odaklansın.
-  const chartId = ev.currentTarget.dataset ? ev.currentTarget.dataset.chartId : null;
+  const svg = ev.currentTarget;
+  const chartId = svg.dataset ? svg.dataset.chartId : null;
   const geom = chartId ? _chartGeom.get(chartId) : null;
-  const padL = geom ? geom.pad.left : 64;
-  const padR = geom ? geom.pad.right : 16;
-  const vw = geom ? geom.w : 760;
-  const innerW = Math.max(1, r.width * (vw - padL - padR) / vw);
-  const leftPx = r.width * padL / vw;
-  const frac = Math.min(1, Math.max(0, (ev.clientX - r.left - leftPx) / innerW));
+  if (!geom) return false;
+  const local = _svgPoint(svg, ev.clientX, ev.clientY);
+  if (!local) return false;
+  // İmlecin altındaki mum yakınlaştırma merkezi olur.
+  const plotW = Math.max(1, geom.w - geom.pad.left - geom.pad.right);
+  const frac = Math.min(1, Math.max(0, (local.x - geom.pad.left) / plotW));
   const span = d.hi - d.lo;
   window.tcZoom(ev.deltaY > 0 ? 1.28 : 1 / 1.28, d.lo + span * frac);
   return false;
@@ -778,22 +812,29 @@ window.tcWheel = (ev) => {
 window.tcDown = (ev) => {
   const d = tcData();
   if (!d || ev.button !== 0) return;
-  const r = ev.currentTarget.getBoundingClientRect();
-  const chartId = ev.currentTarget.dataset ? ev.currentTarget.dataset.chartId : null;
+  const svg = ev.currentTarget;
+  const chartId = svg.dataset ? svg.dataset.chartId : null;
   const geom = chartId ? _chartGeom.get(chartId) : null;
-  // Sürükleme, çizim alanının gerçek genişliğine göre ölçeklenir.
-  const plotWidth = geom
-    ? r.width * (geom.w - geom.pad.left - geom.pad.right) / geom.w
-    : r.width;
-  TC.drag = { x: ev.clientX, lo: d.lo, hi: d.hi, width: Math.max(1, plotWidth) };
+  const local = geom ? _svgPoint(svg, ev.clientX, ev.clientY) : null;
+  // Sürükleme kullanıcı uzayında (grafik birimi) izlenir; böylece ölçek ve
+  // kenar boşluklarından bağımsız olarak imleç grafiği birebir takip eder.
+  TC.drag = {
+    el: svg,
+    x: local ? local.x : 0,
+    lo: d.lo,
+    hi: d.hi,
+    plotW: geom ? Math.max(1, geom.w - geom.pad.left - geom.pad.right) : 1,
+  };
   ev.preventDefault();
 };
 
 document.addEventListener("mousemove", (ev) => {
   const g = TC.drag, d = tcData();
   if (!g || !d) return;
+  const local = g.el && g.el.isConnected ? _svgPoint(g.el, ev.clientX, ev.clientY) : null;
+  if (!local) return;
   const span = g.hi - g.lo;
-  const shift = -((ev.clientX - g.x) / Math.max(1, g.width)) * span;
+  const shift = -((local.x - g.x) / Math.max(1, g.plotW)) * span;
   let lo = g.lo + shift, hi = g.hi + shift;
   if (lo < d.fullLo) { lo = d.fullLo; hi = lo + span; }
   if (hi > d.fullHi) { hi = d.fullHi; lo = hi - span; }
@@ -875,14 +916,35 @@ function _chartHideHover(svg) {
   }
 }
 
+/** İmleç koordinatını SVG kullanıcı uzayına çevirir.
+ *
+ * Grafik `viewBox` ile ölçeklendiği için ekran pikselini doğrudan oranlamak
+ * yanlış muma denk gelir (kenar boşlukları, letterbox, farklı en/boy oranı).
+ * `getScreenCTM` ters matrisi bu dönüşümü birebir yapar.
+ */
+function _svgPoint(svg, clientX, clientY) {
+  const ctm = svg.getScreenCTM ? svg.getScreenCTM() : null;
+  if (!ctm) return null;
+  try {
+    const pt = svg.createSVGPoint();
+    pt.x = clientX;
+    pt.y = clientY;
+    const local = pt.matrixTransform(ctm.inverse());
+    if (!Number.isFinite(local.x) || !Number.isFinite(local.y)) return null;
+    return local;
+  } catch (e) {
+    return null;
+  }
+}
+
 function _chartHoverMove(ev) {
   const svg = ev.target && ev.target.closest ? ev.target.closest("svg.trade-chart") : null;
   if (!svg) return;
   const geom = _chartGeom.get(svg.dataset.chartId);
   if (!geom) return;
-  const rect = svg.getBoundingClientRect();
-  if (!rect.width || !rect.height) return;
-  const vx = ((ev.clientX - rect.left) / rect.width) * geom.w;
+  const local = _svgPoint(svg, ev.clientX, ev.clientY);
+  if (!local) return;
+  const vx = local.x;
   if (vx < geom.pad.left || vx > geom.w - geom.pad.right) {
     _chartHideHover(svg);
     return;
@@ -970,7 +1032,10 @@ function tradePriceChart(prices, markers, opts = {}) {
       && Number.isFinite(p.h) && Number.isFinite(p.l) && p.h >= p.l);
   if (pts.length < 2) return chartEmpty(opts.height || 320);
   const h = opts.height || 320;
-  const w = 760;
+  // Genişlik kapsayıcıdan gelir. `viewBox` oranı kutunun oranıyla eşleşmezse
+  // tarayıcı çizimi ortaya alıp yanlara boşluk koyar (letterbox); o durumda
+  // imleç birkaç mum kayar. Genişliği ölçüp vermek boşluğu kaldırır.
+  const w = Number(opts.width) >= 240 ? Math.round(Number(opts.width)) : 760;
   // Sağ tarafta son fiyat balonu için yer bırakılır.
   const showLast = opts.showLast !== false && opts.hover !== false;
   const pad = { top: 24, right: showLast ? 68 : 16, bottom: 34, left: 64 };
@@ -4681,7 +4746,7 @@ function openBacktest(spec, info = {}) {
           risk,
         },
       });
-      pollJob(job.id, (j) => { $("#bt-result").innerHTML = renderBacktest(j); });
+      pollJob(job.id, (j) => { $("#bt-result").innerHTML = renderBacktest(j); window.tcRedraw(); });
     } catch (e) { $("#bt-result").innerHTML = `<div class="error">${esc(e.message)}</div>`; }
   });
 }
@@ -4795,7 +4860,7 @@ function renderBacktest(job) {
             <button type="button" class="small ghost" onclick="window.tcReset()" title="Tüm görünüm">Sıfırla</button>
           </div>
         </div>
-        <div id="tc-wrap">${tradePriceChart(priceSeries, markers, { height: 380, lo: fullLo, hi: fullHi })}</div>
+        <div id="tc-wrap"><span class="muted small">grafik hazırlanıyor…</span></div>
       </div>`
     : "";
 
@@ -5197,6 +5262,7 @@ async function openCompareDetail(row) {
     pollJob(job.id, (j) => {
       const el = $("#cmp-detail");
       if (el) el.innerHTML = renderBacktest(j);
+      if (el) window.tcRedraw();
     });
   } catch (e) {
     const el = $("#cmp-detail");
@@ -6003,18 +6069,27 @@ window.tradeChart = async (tradeId) => {
           <button type="button" class="small ghost" onclick="window.tcReset()" title="Tüm görünüm">Sıfırla</button>
         </span>
       </div>
-      <div id="tc-wrap">${tradePriceChart(prices, validMarks, {
-        height: 400, lo: fullLo, hi: fullHi,
-        extraPrices: validMarks.map((m) => Number(m.price)),
-        entryPrice: entry ? Number(entry.price) : null,
-        exitPrice: exit ? Number(exit.price) : null,
-        hover: true,
-      })}</div>
+      <div id="tc-wrap"></div>
       <p class="muted small mt">
         Yeşil kesikli çizgi alış, kırmızı kesikli çizgi satış seviyesidir; sağdaki balon son mumun kapanışıdır.
         Mumların üzerine fareyle gelince açılış/yüksek/düşük/kapanış değerleri görünür.
       </p>`;
     modal(`${d.coin} · ${(d.trade || {}).side === "BUY" ? "alış" : "satış"} işlemi`, body);
+    // Grafik, modal yerleştikten sonra kapsayıcının gerçek genişliğiyle
+    // çizilir; böylece viewBox oranı kutuyu tam doldurur ve imleç kaymaz.
+    const wrap = document.getElementById("tc-wrap");
+    renderTradeChart(wrap, prices, validMarks, {
+      height: 400, lo: fullLo, hi: fullHi,
+      extraPrices: validMarks.map((m) => Number(m.price)),
+      entryPrice: entry ? Number(entry.price) : null,
+      exitPrice: exit ? Number(exit.price) : null,
+      hover: true,
+    });
+    const svg = wrap && wrap.querySelector("svg.trade-chart");
+    if (svg && svg.dataset.chartId) {
+      const geom = _chartGeom.get(svg.dataset.chartId);
+      if (geom) window.__btData.chartWidth = geom.w;
+    }
   } catch (err) {
     toast(err.message || "İşlem grafiği yüklenemedi", true);
   }
