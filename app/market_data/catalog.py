@@ -13,19 +13,76 @@ from typing import Any, Dict, List, Optional
 ASSET_CLASSES = [
     {"id": "crypto", "label": "Kripto", "provider": "binance", "live": True},
     {"id": "metal", "label": "Altın / Gümüş", "provider": "yahoo", "live": False},
+    {"id": "forex", "label": "Döviz", "provider": "yahoo", "live": False},
     {"id": "stock", "label": "Hisse", "provider": "yahoo", "live": False},
     {"id": "fund", "label": "TEFAS Fonu", "provider": "tefas", "live": False},
 ]
 
 # Kullanıcıya gösterilen altın/gümüş kısaltmaları -> Yahoo sembolü.
+# Fiyat birimi: ons (troy ounce) ve USD.
 METALS: Dict[str, Dict[str, str]] = {
-    "XAUUSD": {"native": "GC=F", "label": "Altın (vadeli, GC=F)"},
-    "XAUUSDSPOT": {"native": "XAUUSD=X", "label": "Altın (spot, XAU/USD)"},
-    "XAGUSD": {"native": "SI=F", "label": "Gümüş (vadeli, SI=F)"},
-    "XAGUSDSPOT": {"native": "XAGUSD=X", "label": "Gümüş (spot, XAG/USD)"},
-    "XPTUSD": {"native": "PL=F", "label": "Platin (vadeli)"},
-    "XPDUSD": {"native": "PA=F", "label": "Paladyum (vadeli)"},
+    "XAUUSD": {"native": "GC=F", "label": "Altın (ons, USD) · GC=F"},
+    "XAUUSDSPOT": {"native": "GC=F", "label": "Altın (ons, USD) · spot"},
+    "XAGUSD": {"native": "SI=F", "label": "Gümüş (ons, USD) · SI=F"},
+    "XAGUSDSPOT": {"native": "SI=F", "label": "Gümüş (ons, USD) · spot"},
+    "XPTUSD": {"native": "PL=F", "label": "Platin (ons, USD)"},
+    "XPDUSD": {"native": "PA=F", "label": "Paladyum (ons, USD)"},
 }
+
+# 1 troy ons = 31,1034768 gram. Gram/TL serisi ons USD fiyatı ile USDTRY
+# kurunun çarpımından türetilir; böylece ayrı bir ücretli sağlayıcı gerekmez.
+TROY_OUNCE_GRAMS = 31.1034768
+
+DERIVED_METALS: Dict[str, Dict[str, str]] = {
+    "GAUTRY": {
+        "native": "GAUTRY", "base": "GC=F", "label": "Gram Altın (TL)",
+        "kind": "gold",
+    },
+    "GUMUSTRY": {
+        "native": "GUMUSTRY", "base": "SI=F", "label": "Gram Gümüş (TL)",
+        "kind": "silver",
+    },
+}
+
+# Kullanıcının yaygın yazımları -> kanonik sembol.
+METAL_ALIASES: Dict[str, str] = {
+    "ALTIN": "XAUUSD",
+    "ALTINONS": "XAUUSD",
+    "ONSALTIN": "XAUUSD",
+    "GUMUS": "XAGUSD",
+    "GÜMÜŞ": "XAGUSD",
+    "ONSGUMUS": "XAGUSD",
+    "GRAMALTIN": "GAUTRY",
+    "ALTINTRY": "GAUTRY",
+    "XAUUSDTL": "GAUTRY",
+    "GRAMGUMUS": "GUMUSTRY",
+    "GUMUSTRY": "GUMUSTRY",
+    "GUMUSSTL": "GUMUSTRY",
+    "XAGTRY": "GUMUSTRY",
+}
+
+# Döviz: kullanıcıya gösterilen kısa ad -> Yahoo sembolü.
+FOREX: Dict[str, Dict[str, str]] = {
+    "USDTRY": {"native": "USDTRY=X", "label": "Dolar / Türk Lirası"},
+    "EURTRY": {"native": "EURTRY=X", "label": "Euro / Türk Lirası"},
+    "GBPTRY": {"native": "GBPTRY=X", "label": "Sterlin / Türk Lirası"},
+    "EURUSD": {"native": "EURUSD=X", "label": "Euro / Dolar"},
+    "GBPUSD": {"native": "GBPUSD=X", "label": "Sterlin / Dolar"},
+    "USDJPY": {"native": "USDJPY=X", "label": "Dolar / Japon Yeni"},
+    "AUDUSD": {"native": "AUDUSD=X", "label": "Avustralya Doları / Dolar"},
+    "USDCAD": {"native": "USDCAD=X", "label": "Dolar / Kanada Doları"},
+}
+
+FOREX_EXAMPLES = [
+    ("USDTRY", "Dolar / Türk Lirası"),
+    ("EURTRY", "Euro / Türk Lirası"),
+    ("GBPTRY", "Sterlin / Türk Lirası"),
+    ("EURUSD", "Euro / Dolar"),
+    ("GBPUSD", "Sterlin / Dolar"),
+    ("USDJPY", "Dolar / Japon Yeni"),
+    ("AUDUSD", "Avustralya Doları / Dolar"),
+    ("USDCAD", "Dolar / Kanada Doları"),
+]
 
 STOCK_EXAMPLES = [
     ("AAPL", "Apple"), ("MSFT", "Microsoft"), ("NVDA", "NVIDIA"),
@@ -71,7 +128,7 @@ class SymbolInfo:
     symbol: str          # kullanıcıya gösterilen sembol
     provider: str        # binance | yahoo | tefas
     native: str          # sağlayıcıdaki gerçek sembol
-    asset_class: str     # crypto | metal | stock | fund
+    asset_class: str     # crypto | metal | forex | stock | fund
     live_supported: bool
     label: str = ""
 
@@ -105,6 +162,11 @@ def resolve_symbol(
     source = str(source or "auto").strip().lower()
     asset_class = str(asset_class or "").strip().lower()
 
+    # Altın/gümüş yaygın yazımları kanonik sembole çevrilir.
+    raw = METAL_ALIASES.get(raw, raw)
+    if raw in FOREX and asset_class in {"", "auto", "forex"}:
+        asset_class = "forex"
+
     if source == "tefas" or raw.startswith("TEFAS:") or asset_class == "fund":
         code = raw.split(":", 1)[-1]
         if not re.match(r"^[A-Z0-9]{2,10}$", code):
@@ -113,6 +175,36 @@ def resolve_symbol(
             symbol=f"TEFAS:{code}", provider="tefas", native=code,
             asset_class="fund", live_supported=False,
             label=f"TEFAS {code}",
+        )
+
+    # Türetilmiş gram/TL altın ve gümüş.
+    if source == "derived" or raw in DERIVED_METALS or asset_class == "metal" and raw in DERIVED_METALS:
+        if raw not in DERIVED_METALS:
+            raise ValueError(
+                "Türetilmiş altın/gümüş için GAUTRY (gram altın) veya "
+                "GUMUSTRY (gram gümüş) kullanın."
+            )
+        info = DERIVED_METALS[raw]
+        return SymbolInfo(
+            symbol=raw, provider="derived", native=info["native"],
+            asset_class="metal", live_supported=False, label=info["label"],
+        )
+
+    if raw in FOREX or asset_class == "forex":
+        if raw in FOREX:
+            info = FOREX[raw]
+            native = info["native"]
+            label = info["label"]
+        elif raw.endswith("=X"):
+            native, label = raw, raw
+        else:
+            raise ValueError(
+                "Döviz için USDTRY, EURTRY, EURUSD, GBPUSD gibi bir sembol "
+                "veya USDTRY=X biçimini kullanın."
+            )
+        return SymbolInfo(
+            symbol=raw, provider="yahoo", native=native,
+            asset_class="forex", live_supported=False, label=label,
         )
 
     if source == "yahoo" or asset_class in {"metal", "stock"} or raw in METALS:
@@ -127,7 +219,7 @@ def resolve_symbol(
             # Yalnızca Yahoo'nun gerçek sembol biçimlerine izin ver.
             if not (raw.endswith(("=F", "=X")) or raw.startswith("^")):
                 raise ValueError(
-                    "Altın/gümüş için XAUUSD, XAGUSD, XAUUSDSPOT, XAGUSDSPOT "
+                    "Altın/gümüş için XAUUSD, XAGUSD, GAUTRY, GUMUSTRY "
                     "veya GC=F, SI=F gibi bir sembol kullanın."
                 )
             return SymbolInfo(
@@ -146,6 +238,16 @@ def resolve_symbol(
         )
 
     # auto
+    if raw.endswith("=X"):
+        return SymbolInfo(
+            symbol=raw, provider="yahoo", native=raw,
+            asset_class="forex", live_supported=False, label=raw,
+        )
+    if raw.endswith("=F"):
+        return SymbolInfo(
+            symbol=raw, provider="yahoo", native=raw,
+            asset_class="metal", live_supported=False, label=raw,
+        )
     if _looks_like_crypto(raw):
         return SymbolInfo(
             symbol=raw, provider="binance", native=raw,
@@ -185,12 +287,102 @@ def is_live_symbol(symbol: str) -> bool:
     return info.provider == "binance" and bool(_CRYPTO_RE.match(info.symbol))
 
 
-def catalog() -> Dict[str, List[Dict[str, str]]]:
+# ---------------------------------------------------------------------------
+# Sağlayıcı yetenekleri: hangi periyotlar gerçekten üretilebiliyor?
+# ---------------------------------------------------------------------------
+PERIOD_LABELS = {
+    "1m": "1 dakika", "3m": "3 dakika", "5m": "5 dakika",
+    "15m": "15 dakika", "30m": "30 dakika", "45m": "45 dakika",
+    "1h": "1 saat", "2h": "2 saat", "4h": "4 saat", "6h": "6 saat",
+    "8h": "8 saat", "12h": "12 saat", "1d": "günlük", "2d": "2 gün",
+    "3d": "3 gün", "1w": "haftalık", "1M": "aylık", "1y": "yıllık",
+}
+
+PROVIDER_PERIODS: Dict[str, List[str]] = {
+    "binance": [
+        "1m", "3m", "5m", "15m", "30m", "45m", "1h", "2h", "4h", "6h",
+        "8h", "12h", "1d", "3d", "1w", "1M", "1y",
+    ],
+    # Yahoo intraday aralıkları sınırlıdır; yine de bu periyotlarda veri
+    # üretilebilir. Daha büyükleri günlük/saatlik veriden yeniden örneklenir.
+    "yahoo": [
+        "1m", "5m", "15m", "30m", "1h", "2h", "4h", "6h", "12h",
+        "1d", "3d", "1w", "1M", "1y",
+    ],
+    "derived": [
+        "1m", "5m", "15m", "30m", "1h", "2h", "4h", "6h", "12h",
+        "1d", "3d", "1w", "1M", "1y",
+    ],
+    # TEFAS yalnızca günlük NAV verir; haftalık/aylık/yıllık yeniden üretilir.
+    "tefas": ["1d", "1w", "1M", "1y"],
+}
+
+_PERIOD_NOTES = {
+    "1m": "Kaynakta yalnızca son ~7 gün",
+    "5m": "Kaynakta yalnızca son ~60 gün",
+    "15m": "Kaynakta yalnızca son ~60 gün",
+    "30m": "Kaynakta yalnızca son ~60 gün",
+    "1h": "Kaynakta yalnızca son ~2 yıl",
+}
+
+
+def periods_for_provider(provider: str) -> List[Dict[str, str]]:
+    items = PROVIDER_PERIODS.get(str(provider or "").strip().lower())
+    if not items:
+        items = PROVIDER_PERIODS["yahoo"]
+    note = _PERIOD_NOTES
+    return [
+        {
+            "id": item,
+            "label": PERIOD_LABELS.get(item, item),
+            "note": note.get(item, "") if provider in {"yahoo", "derived"} else "",
+        }
+        for item in items
+    ]
+
+
+def available_periods(
+    symbol: str = "",
+    *,
+    source: str = "auto",
+    asset_class: str = "",
+) -> List[Dict[str, str]]:
+    """Sembol/sınıf için seçilebilecek periyotlar.
+
+    Arayüz bu listeyi kullanır; böylece TEFAS fonunda 1h, Yahoo hissesinde
+    kaynağın üretemediği bir periyot gösterilmez.
+    """
+    provider = ""
+    if symbol:
+        try:
+            provider = resolve_symbol(symbol, source=source, asset_class=asset_class).provider
+        except ValueError:
+            provider = ""
+    if not provider:
+        cls = str(asset_class or "").strip().lower()
+        for item in ASSET_CLASSES:
+            if item["id"] == cls:
+                provider = str(item["provider"])
+                break
+        if cls == "metal":
+            provider = "yahoo"
+    return periods_for_provider(provider or "binance")
+
+
+def catalog() -> Dict[str, Any]:
     metals = [
         {"symbol": key, "label": value["label"], "native": value["native"]}
         for key, value in METALS.items()
     ]
+    metals += [
+        {"symbol": key, "label": value["label"], "native": value["native"]}
+        for key, value in DERIVED_METALS.items()
+    ]
     stocks = [{"symbol": sym, "label": label} for sym, label in STOCK_EXAMPLES]
+    forex = [
+        {"symbol": sym, "label": label, "native": FOREX[sym]["native"]}
+        for sym, label in FOREX_EXAMPLES
+    ]
     funds = [{"symbol": f"TEFAS:{code}", "label": f"{code} - {label}"} for code, label in TEFAS_EXAMPLES]
     crypto = [
         {"symbol": sym, "label": f"{label} ({sym})"}
@@ -199,10 +391,17 @@ def catalog() -> Dict[str, List[Dict[str, str]]]:
     return {
         "classes": ASSET_CLASSES,
         "metals": metals,
+        "forex": forex,
         "stocks": stocks,
         "funds": funds,
         "crypto": crypto,
-        "periods": ["1m", "5m", "15m", "30m", "45m", "1h", "2h", "4h", "6h", "12h", "1d", "3d", "1w", "1M", "1y"],
+        "periods": ["1m", "3m", "5m", "15m", "30m", "45m", "1h", "2h", "4h", "6h", "8h", "12h", "1d", "3d", "1w", "1M", "1y"],
+        "periods_by_provider": {
+            name: periods_for_provider(name) for name in PROVIDER_PERIODS
+        },
+        "periods_by_class": {
+            item["id"]: available_periods(asset_class=item["id"]) for item in ASSET_CLASSES
+        },
     }
 
 
@@ -371,11 +570,17 @@ def _yahoo_search(query: str, limit: int = 12) -> List[Dict[str, str]]:
             if not symbol or kind not in allowed:
                 continue
             name = row.get("shortname") or row.get("longname") or ""
+            if kind == "CURRENCY" or symbol.endswith("=X"):
+                asset_class = "forex"
+            elif kind == "FUTURE":
+                asset_class = "metal"
+            else:
+                asset_class = "stock"
             items.append(
                 {
                     "symbol": symbol,
                     "label": str(name),
-                    "asset_class": "stock",
+                    "asset_class": asset_class,
                     "provider": "yahoo",
                     "kind": kind,
                 }
@@ -392,6 +597,20 @@ def _local_items() -> List[Dict[str, str]]:
             {
                 "symbol": key, "label": info["label"], "asset_class": "metal",
                 "provider": "yahoo", "native": info["native"],
+            }
+        )
+    for key, info in DERIVED_METALS.items():
+        items.append(
+            {
+                "symbol": key, "label": info["label"], "asset_class": "metal",
+                "provider": "derived", "native": info["native"],
+            }
+        )
+    for sym, label in FOREX_EXAMPLES:
+        items.append(
+            {
+                "symbol": sym, "label": label, "asset_class": "forex",
+                "provider": "yahoo", "native": FOREX[sym]["native"],
             }
         )
     for sym, label in STOCK_EXAMPLES:
@@ -425,6 +644,10 @@ def _decorate(item: Dict[str, str]) -> Dict[str, Any]:
         "provider": item.get("provider") or {"crypto": "binance", "fund": "tefas"}.get(asset_class, "yahoo"),
         "live": asset_class == "crypto",
         "native": item.get("native") or symbol,
+        # Arayüz, seçili sembolün sağlayıcısına göre periyot listesini daraltır.
+        "periods": [p["id"] for p in periods_for_provider(
+            item.get("provider") or {"crypto": "binance", "fund": "tefas"}.get(asset_class, "yahoo")
+        )],
     }
 
 
@@ -470,7 +693,7 @@ def search_symbols(query: str = "", asset_class: str = "", limit: int = 25) -> L
             item for item in _binance_symbols()
             if text in _fold(item["symbol"])
         ][: limit]))
-    if cls in ("", "stock", "metal"):
+    if cls in ("", "stock", "metal", "forex"):
         tasks.append(("yahoo", lambda: _yahoo_search(query, max(10, limit // 2))))
     if cls in ("", "fund"):
         tasks.append(("tefas", lambda: [
@@ -497,7 +720,7 @@ def search_symbols(query: str = "", asset_class: str = "", limit: int = 25) -> L
                 # Vadeli altın/gümüş kontratları da bu sınıfa kabul et.
                 item = {**item, "asset_class": "metal"}
             else:
-                # Yahoo araması "metal" seçiliyken hisse döndürebilir; filtrele.
+                # Yahoo araması seçili sınıf dışında sonuç döndürebilir; filtrele.
                 continue
         seen.add(symbol)
         results.append(_decorate(item))

@@ -215,14 +215,37 @@ function limitSpanLabel(candles, period) {
 }
 const LIMIT_CHOICES = [3000, 5000, 10000, 20000, 50000, 100000, 250000];
 /* Varlık sınıfları: test/backtest için kripto dışı da seçilebilir. */
+/* Sağlayıcı yetenekleri sunucudan gelir; aşağıdakiler çevrimdışı yedektir. */
 const ASSET_CLASS_OPTIONS = [
-  { id: "crypto", label: "Kripto", source: "binance" },
-  { id: "metal", label: "Altın / Gümüş", source: "yahoo" },
-  { id: "stock", label: "Hisse", source: "yahoo" },
-  { id: "fund", label: "TEFAS Fonu", source: "tefas" },
+  { id: "crypto", label: "Kripto", source: "binance", provider: "binance" },
+  { id: "metal", label: "Altın / Gümüş", source: "yahoo", provider: "yahoo" },
+  { id: "forex", label: "Döviz", source: "yahoo", provider: "yahoo" },
+  { id: "stock", label: "Hisse", source: "yahoo", provider: "yahoo" },
+  { id: "fund", label: "TEFAS Fonu", source: "tefas", provider: "tefas" },
 ];
-const ASSET_DEFAULT_SYMBOL = { crypto: "BTCUSDT", metal: "XAUUSD", stock: "AAPL", fund: "TEFAS:AFT" };
+const ASSET_DEFAULT_SYMBOL = { crypto: "BTCUSDT", metal: "XAUUSD", forex: "USDTRY", stock: "AAPL", fund: "TEFAS:AFT" };
 const PERIOD_PRESETS = ["1m", "3m", "5m", "15m", "30m", "45m", "1h", "2h", "4h", "6h", "8h", "12h", "1d", "3d", "1w", "1M", "1y"];
+const PROVIDER_PERIOD_FALLBACK = {
+  binance: PERIOD_PRESETS,
+  yahoo: ["1m", "5m", "15m", "30m", "1h", "2h", "4h", "6h", "12h", "1d", "3d", "1w", "1M", "1y"],
+  derived: ["1m", "5m", "15m", "30m", "1h", "2h", "4h", "6h", "12h", "1d", "3d", "1w", "1M", "1y"],
+  tefas: ["1d", "1w", "1M", "1y"],
+};
+function providerForAsset(assetClass) {
+  const found = ASSET_CLASS_OPTIONS.find((c) => c.id === assetClass);
+  return found ? found.provider : "";
+}
+function periodsForProvider(provider) {
+  const seen = state.marketCatalog && state.marketCatalog.periods_by_provider;
+  const items = seen && seen[provider];
+  if (Array.isArray(items) && items.length) return items;
+  return (PROVIDER_PERIOD_FALLBACK[provider] || PERIOD_PRESETS).map((id) => ({
+    id, label: PERIOD_LABELS[id] || id, note: "",
+  }));
+}
+function periodsForAsset(assetClass) {
+  return periodsForProvider(providerForAsset(assetClass)).map((p) => p.id);
+}
 const PERIOD_LABELS = {
   "1m": "1 dakika", "3m": "3 dakika", "5m": "5 dakika", "15m": "15 dakika",
   "30m": "30 dakika", "45m": "45 dakika", "1h": "1 saat", "2h": "2 saat",
@@ -263,14 +286,19 @@ function normalizePeriod(text) {
   }
   return unit ? `${count}${unit}` : "";
 }
-/** Periyot alanı: hazır seçenekler + "Özel" serbest giriş. */
-function periodFieldHtml(id, value = "1h", extra = "") {
-  const current = normalizePeriod(value) || "1h";
-  const preset = PERIOD_PRESETS.includes(current);
-  const options = PERIOD_PRESETS.map(
+/** Periyot alanı: hazır seçenekler + "Özel" serbest giriş.
+ *  opts.periods verilirse yalnız sağlayıcının ürettiği periyotlar listelenir. */
+function periodFieldHtml(id, value = "1h", extra = "", opts = {}) {
+  const allowed = Array.from(new Set((opts.periods && opts.periods.length ? opts.periods : PERIOD_PRESETS)
+    .filter((p) => p === "custom" || normalizePeriod(p) === p || PERIOD_PRESETS.includes(p))));
+  const list = allowed.length ? allowed : PERIOD_PRESETS.slice();
+  let current = normalizePeriod(value) || String(value || "");
+  if (!list.includes(current)) current = list.includes("1h") ? "1h" : list.includes("1d") ? "1d" : list[0];
+  const preset = list.includes(current);
+  const options = list.map(
     (p) => `<option value="${p}" ${p === current ? "selected" : ""}>${p} — ${esc(PERIOD_LABELS[p] || p)}</option>`,
   ).join("");
-  return `<div class="period-picker" data-period-picker="${id}">
+  return `<div class="period-picker" data-period-picker="${id}" data-period-provider="${esc(opts.provider || "")}">
     <select id="${id}-preset" class="period-preset">
       ${options}
       <option value="custom" ${preset ? "" : "selected"}>Özel…</option>
@@ -278,6 +306,108 @@ function periodFieldHtml(id, value = "1h", extra = "") {
     <input id="${id}" class="period-custom ${preset ? "hidden" : ""}" value="${esc(preset ? "" : current)}"
       placeholder="ör. 10m, 90m, 2w" autocomplete="off" spellcheck="false" ${extra}>
   </div>`;
+}
+
+/** Seçili sağlayıcıya göre periyot listesini yeniden kurar. */
+function setPeriodOptions(id, periods, preferred = "", allowCustom = true) {
+  const select = document.getElementById(`${id}-preset`);
+  const input = document.getElementById(id);
+  if (!select) return;
+  const allowed = Array.from(new Set((periods && periods.length ? periods : PERIOD_PRESETS)
+    .filter((p) => PERIOD_PRESETS.includes(p) || normalizePeriod(p) === p)));
+  if (!allowed.length) return;
+  let current = select.value;
+  if (current === "custom") current = input ? normalizePeriod(input.value) : "";
+  const has = (p) => allowed.includes(p);
+  const next = has(current) ? current
+    : preferred && has(preferred) ? preferred
+    : has("1h") ? "1h" : has("1d") ? "1d" : allowed[0];
+  select.innerHTML = allowed.map(
+    (p) => `<option value="${p}">${p} — ${esc(PERIOD_LABELS[p] || p)}</option>`,
+  ).join("") + (allowCustom ? '<option value="custom">Özel…</option>' : "");
+  select.value = next;
+  if (input) {
+    input.classList.toggle("hidden", next !== "custom");
+    if (next !== "custom") input.value = next;
+  }
+  select.dispatchEvent(new Event("period-change", { bubbles: true }));
+}
+
+/** Sembol/varlık değişince ilgili periyot alanını sağlayıcıya göre daraltır. */
+function bindSymbolPeriods(inputId, assetSelectId, periodId) {
+  const input = document.getElementById(inputId);
+  const assetSelect = assetSelectId ? document.getElementById(assetSelectId) : null;
+  if (!input || !periodId) return;
+  let token = 0;
+  const localPeriods = () => {
+    const cls = assetSelect ? assetSelect.value : "";
+    const provider = cls && cls !== "auto" ? providerForAsset(cls) : "";
+    const items = provider ? periodsForProvider(provider) : periodsForProvider("binance")
+      .concat(periodsForProvider("yahoo"), periodsForProvider("tefas"));
+    const seen = new Set();
+    const ids = [];
+    items.forEach((p) => { if (!seen.has(p.id)) { seen.add(p.id); ids.push(p.id); } });
+    return { provider, ids };
+  };
+  const sync = async () => {
+    const { provider, ids } = localPeriods();
+    const current = periodValueOf(periodId) || "1h";
+    setPeriodOptions(periodId, ids, listToTimeline(ids, current), provider !== "tefas");
+    const wrap = document.querySelector(`[data-period-picker="${periodId}"]`);
+    if (wrap) wrap.dataset.periodProvider = provider;
+    // Sembolün gerçek sağlayıcısını sunucudan doğrula (TEFAS, türetilmiş altın…).
+    const symbol = String(input.value || "").trim();
+    if (!symbol) return;
+    const mine = ++token;
+    try {
+      const params = new URLSearchParams({
+        symbol,
+        asset_class: assetSelect && assetSelect.value !== "auto" ? assetSelect.value : "",
+        source: assetSelect ? assetSourceOf(assetSelect.value) : "auto",
+      });
+      const data = await api(`/market/periods?${params.toString()}`);
+      if (mine !== token) return;
+      const ids2 = (data.items || []).map((p) => p.id);
+      if (!ids2.length) return;
+      const wrap2 = document.querySelector(`[data-period-picker="${periodId}"]`);
+      if (wrap2) wrap2.dataset.periodProvider = data.provider || provider;
+      setPeriodOptions(periodId, ids2, listToTimeline(ids2, current), data.provider !== "tefas");
+    } catch (e) { /* yerel listeyle devam */ }
+  };
+  if (assetSelect && assetSelect.dataset.symbolPeriodsBound !== "1") {
+    assetSelect.dataset.symbolPeriodsBound = "1";
+    assetSelect.addEventListener("change", sync);
+  }
+  if (input.dataset.symbolPeriodsBound !== "1") {
+    input.dataset.symbolPeriodsBound = "1";
+    input.addEventListener("change", sync);
+  }
+  sync();
+}
+/** Yalnız varlık sınıfı seçiciye bağlı periyot daraltması. */
+function bindAssetPeriods(assetSelectId, periodId) {
+  const assetSelect = assetSelectId ? document.getElementById(assetSelectId) : null;
+  if (!assetSelect || !periodId) return;
+  const sync = () => {
+    const cls = assetSelect.value;
+    const provider = cls && cls !== "auto" ? providerForAsset(cls) : "";
+    const ids = provider
+      ? periodsForProvider(provider).map((p) => p.id)
+      : ["1m", "3m", "5m", "15m", "30m", "45m", "1h", "2h", "4h", "6h", "8h", "12h", "1d", "3d", "1w", "1M", "1y"];
+    setPeriodOptions(periodId, ids, listToTimeline(ids, "1h"), provider !== "tefas");
+  };
+  assetSelect.addEventListener("change", sync);
+  sync();
+}
+
+/** Tercih edilen periyot listede yoksa ona en yakın üst periyodu seçer. */
+function listToTimeline(ids, preferred) {
+  if (!preferred || ids.includes(preferred)) return preferred;
+  const order = ["1m", "3m", "5m", "15m", "30m", "45m", "1h", "2h", "4h", "6h", "8h", "12h", "1d", "2d", "3d", "1w", "1M", "1y"];
+  const start = order.indexOf(preferred);
+  for (let i = start; i < order.length; i += 1) if (ids.includes(order[i])) return order[i];
+  for (let i = start; i >= 0; i -= 1) if (ids.includes(order[i])) return order[i];
+  return ids[0] || "";
 }
 function periodValueOf(id) {
   const select = document.getElementById(`${id}-preset`);
@@ -387,6 +517,10 @@ function toast(message, isError = false) {
 function modal(title, content) {
   // Mobilde menü açıkken modal açılırsa çekmeceyi kapat.
   try { closeNav(); } catch (e) { /* henüz hazır değilse yoksay */ }
+  // Açık bir canlı izleme varsa durdur: yeni modalın grafiğini ezmesin.
+  if (typeof stopLiveWatch === "function") {
+    try { stopLiveWatch(); } catch (e) { /* henüz tanımlı değilse yoksay */ }
+  }
   $("#modal-title").textContent = title;
   const body = $("#modal-body");
   body.innerHTML = "";
@@ -394,7 +528,12 @@ function modal(title, content) {
   else body.appendChild(content);
   $("#modal").classList.remove("hidden");
 }
-function closeModal() { $("#modal").classList.add("hidden"); }
+function closeModal() {
+  if (typeof stopLiveWatch === "function") {
+    try { stopLiveWatch(); } catch (e) { /* yoksay */ }
+  }
+  $("#modal").classList.add("hidden");
+}
 $("#modal-close").addEventListener("click", closeModal);
 
 /* ------------------------------------------------------------------ */
@@ -428,9 +567,11 @@ function assetValueOf(selectId) {
 function applyAssetClass(selectId, assetClass) {
   const el = selectId ? document.getElementById(selectId) : null;
   if (!el || !assetClass) return;
-  if (Array.from(el.options).some((opt) => opt.value === assetClass)) {
-    el.value = assetClass;
-  }
+  if (!Array.from(el.options).some((opt) => opt.value === assetClass)) return;
+  if (el.value === assetClass) return;
+  el.value = assetClass;
+  // Periyot listesi ve diğer bağımlı alanlar güncellensin.
+  el.dispatchEvent(new Event("change", { bubbles: true }));
 }
 
 function symbolRowHtml(item, attrs) {
@@ -454,7 +595,7 @@ async function fetchSymbolSearch(query, assetClass, limit = 8) {
 }
 
 /** Sembol alanına yazarken öneri listesi bağlar. */
-function bindSymbolField(inputId, assetSelectId = "") {
+function bindSymbolField(inputId, assetSelectId = "", periodId = "") {
   const input = document.getElementById(inputId);
   if (!input || input.dataset.symbolBound === "1") return;
   const wrap = input.closest(".symbol-picker");
@@ -524,6 +665,7 @@ function bindSymbolField(inputId, assetSelectId = "") {
       }
     }
   });
+  if (periodId) bindSymbolPeriods(inputId, assetSelectId, periodId);
 }
 
 function closeSymbolModal() {
@@ -577,10 +719,12 @@ function openSymbolPicker(inputId, assetSelectId = "", append = false) {
       if (!items.length) {
         results.innerHTML = `<div class="empty-state small">Sonuç yok. Farklı bir kelime dene veya sembolü elle yaz.</div>`;
         hint.textContent = assetClass === "metal"
-          ? "Altın/gümüş için XAUUSD, XAGUSD, XAUUSDSPOT, XAGUSDSPOT kullanabilirsin."
-          : assetClass === "fund"
-            ? "Fon kodu ile arayabilirsin (ör. AFT, MAC, TTE)."
-            : "";
+          ? "Ons (USD): XAUUSD / XAGUSD · Gram (TL): GAUTRY / GUMUSTRY."
+          : assetClass === "forex"
+            ? "Döviz: USDTRY, EURTRY, EURUSD, GBPUSD gibi Yahoo pariteleri."
+            : assetClass === "fund"
+              ? "Fon kodu ile arayabilirsin (ör. AFT, MAC, TTE)."
+              : "";
         return;
       }
       results.innerHTML = items.map((item) => symbolRowHtml(item, "")).join("");
@@ -640,6 +784,12 @@ function openSymbolPicker(inputId, assetSelectId = "", append = false) {
 }
 
 document.addEventListener("click", (event) => {
+  const watch = event.target.closest("[data-live-watch]");
+  if (watch) {
+    event.preventDefault();
+    window.openLiveChart(watch.dataset.liveWatch || "");
+    return;
+  }
   const add = event.target.closest("[data-symbol-add]");
   if (add) {
     event.preventDefault();
@@ -702,7 +852,7 @@ function tcClampView(lo, hi) {
   const d = tcData();
   if (!d) return { lo, hi };
   const full = d.fullHi - d.fullLo;
-  const minSpan = Math.max(4, full / 4000);
+  const minSpan = Math.max(4, Number(d.minSpan) || full / 4000);
   let span = Math.min(Math.max(hi - lo, minSpan), full);
   if (lo < d.fullLo) { lo = d.fullLo; hi = lo + span; }
   if (hi > d.fullHi) { hi = d.fullHi; lo = hi - span; }
@@ -752,6 +902,7 @@ function tcRedraw() {
     extraPrices: (d.markers || []).map((m) => Number(m.price)),
     entryPrice: d.entryPrice,
     exitPrice: d.exitPrice,
+    refs: d.refs || [],
     hover: true,
     width: d.chartWidth,
   });
@@ -775,7 +926,7 @@ window.tcZoom = (factor, anchorIdx) => {
   const anchor = anchorIdx == null ? (d.lo + d.hi) / 2 : Number(anchorIdx);
   const full = d.fullHi - d.fullLo;
   let newSpan = span * factor;
-  newSpan = Math.max(Math.max(4, full / 4000), Math.min(full, newSpan));
+  newSpan = Math.max(Math.max(4, Number(d.minSpan) || full / 4000), Math.min(full, newSpan));
   const frac = span ? (anchor - d.lo) / span : 0.5;
   const v = tcClampView(anchor - newSpan * frac, anchor - newSpan * frac + newSpan);
   d.lo = v.lo;
@@ -1047,9 +1198,18 @@ function tradePriceChart(prices, markers, opts = {}) {
   let max = Math.max(...pts.map((p) => p.h));
   // İşlem işaretleri (alış/satış) mum aralığının dışında kalırsa grafik
   // ölçeği onları da kapsar; aksi halde üçgenler kırpılıp görünmezdi.
+  const refs = (Array.isArray(opts.refs) ? opts.refs : [])
+    .map((r) => ({
+      v: Number(r.value),
+      color: r.color || "#94a3b8",
+      label: String(r.label || ""),
+      band: String(r.band || ""),
+    }))
+    .filter((r) => Number.isFinite(r.v) && r.v > 0);
   const extras = (opts.extraPrices || [])
     .concat(opts.entryPrice ? [opts.entryPrice] : [])
     .concat(opts.exitPrice ? [opts.exitPrice] : [])
+    .concat(refs.map((r) => r.v))
     .map(Number)
     .filter((v) => Number.isFinite(v) && v > 0);
   if (extras.length) {
@@ -1089,10 +1249,17 @@ function tradePriceChart(prices, markers, opts = {}) {
 
   const line = pts.map((p, i) => `${i === 0 ? "M" : "L"} ${x(p.idx).toFixed(1)},${y(p.c).toFixed(1)}`).join(" ");
 
-  // Yakınlaşınca mum çiz; uzakta çizgi kullan.
-  const slotW = (w - pad.left - pad.right) / Math.max(1, pts.length);
-  const useCandles = pts.length <= 320 && slotW >= 2.2;
-  const candleW = Math.max(1.6, Math.min(10, slotW * 0.66));
+  // Mum genişliği gerçek zaman aralığından hesaplanır: hafta sonu/tatil
+  // boşluğu olan serilerde (hisse, altın, döviz) eşit genişlik varsayımı
+  // mumların üst üste binmesine yol açardı.
+  const diffs = [];
+  for (let i = 1; i < pts.length; i += 1) diffs.push(pts[i].idx - pts[i - 1].idx);
+  diffs.sort((a, b) => a - b);
+  const medianStep = diffs.length ? diffs[Math.floor(diffs.length / 2)] : 0;
+  const pxPerIdx = (w - pad.left - pad.right) / Math.max(1e-9, span);
+  const spacing = Math.max(0.0001, medianStep * pxPerIdx);
+  const candleW = Math.max(1.2, Math.min(10, spacing * 0.66));
+  const useCandles = pts.length <= 320 && spacing >= 2.2;
   const candlesSvg = useCandles ? pts.map((p) => {
     const up = p.c >= p.o;
     const col = up ? "#34d399" : "#fb7185";
@@ -1126,7 +1293,13 @@ function tradePriceChart(prices, markers, opts = {}) {
   const preciseDecimals = Math.min(10, Math.max(decimals + 2, axisDecimals(step / 100)));
 
   // Alış/satış yatay referans çizgileri: seviyeyi eksende birebir okutur.
-  const refLines = [
+  const refLines = refs.map((ref) => {
+    const ry = Math.min(h - pad.bottom, Math.max(pad.top, y(ref.v)));
+    return `<line x1="${pad.left}" y1="${ry.toFixed(1)}" x2="${w - pad.right}" y2="${ry.toFixed(1)}"
+        stroke="${ref.color}" stroke-width="1.2" stroke-dasharray="${ref.band === "strong" ? "" : "6 4"}" opacity=".55"/>
+      <text x="${(w - pad.right + 4).toFixed(1)}" y="${(ry + 3).toFixed(1)}"
+        fill="${ref.color}" font-size="8.5" opacity=".95">${esc(ref.label)} ${axisLabel(ref.v, preciseDecimals)}</text>`;
+  }).join("") + [
     opts.entryPrice > 0 ? { v: Number(opts.entryPrice), color: "#34d399", label: "alış" } : null,
     opts.exitPrice > 0 ? { v: Number(opts.exitPrice), color: "#fb7185", label: "satış" } : null,
   ].filter(Boolean).map((ref) => {
@@ -1529,7 +1702,10 @@ async function api(path, options = {}) {
   try { data = text ? JSON.parse(text) : null; } catch (e) { data = text; }
   if (!res.ok) {
     const detail = data && data.detail ? (typeof data.detail === "string" ? data.detail : JSON.stringify(data.detail)) : res.statusText;
-    throw new Error(detail);
+    const err = new Error(detail);
+    // Çağıranlar HTTP durumuna göre karar verebilsin (ör. 409 = pozisyon yok).
+    err.status = res.status;
+    throw err;
   }
   return data;
 }
@@ -1632,6 +1808,7 @@ function setupMobileNav() {
 async function boot() {
   setupMobileNav();
   if (!state.catalog) state.catalog = await api("/strategies/indicators");
+  try { state.marketCatalog = await api("/market/symbols"); } catch (e) { state.marketCatalog = null; }
   await loadCatalog();
   try {
     const cfg = await api("/settings");
@@ -1838,8 +2015,10 @@ async function renderDashboard(root) {
   const winRate = wins + losses ? (wins / (wins + losses) * 100).toFixed(1) : null;
   const hasLive = bots.some((b) => b.mode === "live");
   const totals = stats.totals || {};
-  const eqValues = (stats.equity || []).map((p) => p.value);
+  const eqPoints = stats.equity || [];
+  const eqValues = eqPoints.map((p) => Number(p.value));
   const eqLast = eqValues.length ? eqValues[eqValues.length - 1] : null;
+  const eqPct = eqPoints.length ? Number(eqPoints[eqPoints.length - 1].pct) : null;
   const daily = (stats.daily || []).slice(-14).map((d) => ({ label: (d.date || "").slice(5), value: d.pnl }));
   const seriesMap = {};
   (stats.by_bot || []).forEach((b) => { if (b.bot_id) seriesMap[b.bot_id] = b.series; });
@@ -1886,13 +2065,13 @@ async function renderDashboard(root) {
         <div class="row between">
           <div>
             <h3>Kümülatif K/Z</h3>
-            <p class="muted small">Kapanan işlemlerin bileşik getirisi</p>
+            <p class="muted small">Kapanan işlemlerin net K/Z'si (komisyon dahil, USDT)</p>
           </div>
           <span class="chart-big ${eqLast === null ? "" : eqLast >= 0 ? "pos" : "neg"}">
-            ${eqLast === null ? "—" : `${eqLast >= 0 ? "+" : ""}${fmt(eqLast, 2)}%`}
+            ${eqLast === null ? "—" : signedMoney(eqLast)}
           </span>
         </div>
-        ${lineChart(eqValues, { height: 230, caption: `${eqValues.length} kapanan işlem` })}
+        ${lineChart(eqValues, { height: 230, caption: `${eqValues.length} kapanan işlem${eqPct === null ? "" : ` · ${eqPct >= 0 ? "+" : ""}${fmt(eqPct, 2)}% getiri`}` })}
       </div>
       <div class="card chart-card">
         <h3>Kazanma oranı</h3>
@@ -2336,7 +2515,9 @@ function botRow(bot, seriesMap = {}) {
       <span><span class="muted">aktif</span> <b>${esc(uptimeText(st.uptime_seconds))}</b></span>
       ${pos ? `<span class="tag amber">${esc(pos.coin)} @ ${fmt(pos.entry_price, 6)}</span>
         <span><span class="muted">güncel</span> <b data-live="price-${esc(bot.id)}">${fmt(pos.last_price, 8)}</b></span>
-        <span><b data-live="rowpnl-${esc(bot.id)}" class="${pnlClass(st.position_pnl_gross_pct)}">${Number(st.position_pnl_gross_pct) > 0 ? "+" : ""}${fmt(st.position_pnl_gross_pct, 2)}%</b></span>` : '<span class="muted">pozisyon yok</span>'}
+        <span><b data-live="rowpnl-${esc(bot.id)}" class="${pnlClass(st.position_pnl_gross_pct)}">${Number(st.position_pnl_gross_pct) > 0 ? "+" : ""}${fmt(st.position_pnl_gross_pct, 2)}%</b></span>
+        <button class="ghost small live-watch-btn" type="button" data-live-watch="${esc(bot.id)}"
+          title="Canlı mum grafiği: fiyat, alış ve stop seviyeleri (10 sn'de bir güncellenir)">Canlı izle</button>` : '<span class="muted">pozisyon yok</span>'}
     </div>
   </div>`;
 }
@@ -2570,6 +2751,8 @@ function botCard(bot, seriesMap = {}) {
       ${pos.partial_target_price ? `<span>kısmi kâr <b>${fmt(pos.partial_target_price, 8)}</b></span>` : ""}
       ${pos.breakeven_armed ? `<span class="tag amber" title="Kısmi kâr sonrası stop girişe çekildi">breakeven</span>` : ""}
       <span>mum <b>${esc(pos.candles || 0)}</b></span>
+      <button class="ghost small live-watch-btn" data-action="livewatch" data-id="${esc(bot.id)}" type="button"
+        title="Canlı mum grafiği: fiyat, alış ve stop seviyeleri (10 sn'de bir güncellenir)">Canlı izle</button>
     </div>` : '<div class="mt muted small">Açık pozisyon yok.</div>'}
     ${bot.state && bot.state.last_error ? `<div class="error mt">${esc(String(bot.state.last_error).split("\n").slice(-3).join("\n"))}</div>` : ""}
     <div class="muted small mt" title="Canlı motor, backtest ile aynı risk kurallarını uygular">
@@ -2580,6 +2763,8 @@ function botCard(bot, seriesMap = {}) {
     <div class="row mt">
       <button data-action="start" data-id="${esc(bot.id)}" ${bot.status === "running" ? "disabled" : ""}>Başlat</button>
       <button data-action="stop" data-id="${esc(bot.id)}" ${bot.status !== "running" && bot.status !== "stopping" ? "disabled" : ""}>Durdur</button>
+      ${pos ? `<button class="ghost live-watch-btn" data-action="livewatch" data-id="${esc(bot.id)}" type="button"
+        title="Canlı mum grafiği: fiyat, alış ve stop seviyeleri (10 sn'de bir güncellenir)">Canlı izle</button>` : ""}
       ${pos ? `<button class="sell-btn" data-action="sell" data-id="${esc(bot.id)}" type="button"
         title="Açık pozisyonu hemen piyasa fiyatından sat">Sat</button>` : ""}
       <button data-action="restart" data-id="${esc(bot.id)}">Yeniden Başlat</button>
@@ -2598,6 +2783,7 @@ async function botAction(action, id, mode) {
     else if (action === "restart") { await api(`/bots/${id}/restart`, { method: "POST" }); toast("Bot yeniden başlatıldı"); }
     else if (action === "logs") { return showLogs(id); }
     else if (action === "analysis") { return showBotAnalysis(id); }
+    else if (action === "livewatch") { return window.openLiveChart(id); }
     else if (action === "edit") {
       const bot = (state.bots || []).find((b) => b.id === id);
       if (bot) return openBotForm(bot);
@@ -2684,6 +2870,26 @@ function field(label, inputHtml) {
 
 const BOT_PERIODS = ["1m", "3m", "5m", "15m", "30m", "45m", "1h", "2h", "4h", "6h", "8h", "12h", "1d", "3d", "1w", "1M"];
 const BOT_COIN_PRESETS = ["BTCUSDT", "ETHUSDT", "BNBUSDT", "SOLUSDT", "XRPUSDT", "ADAUSDT", "AVAXUSDT", "DOGEUSDT", "LINKUSDT", "DOTUSDT"];
+const BOT_ASSET_PRESETS = {
+  crypto: BOT_COIN_PRESETS,
+  metal: ["XAUUSD", "GAUTRY", "XAGUSD", "GUMUSTRY"],
+  forex: ["USDTRY", "EURTRY", "EURUSD", "GBPUSD"],
+  stock: ["AAPL", "MSFT", "NVDA", "GARAN.IS", "THYAO.IS", "ASELS.IS"],
+  fund: ["TEFAS:AFT", "TEFAS:MAC", "TEFAS:TTE"],
+};
+/** Sembolden varlık sınıfı tahmini (eski bot kayıtları için). */
+function inferAssetClass(coin) {
+  const value = String(coin || "").trim().toUpperCase();
+  if (!value) return "crypto";
+  if (value.startsWith("TEFAS:")) return "fund";
+  if (value.endsWith("=X")) return "forex";
+  if (value === "GAUTRY" || value === "GUMUSTRY" || value.endsWith("=F")) return "metal";
+  if (["USDTRY", "EURTRY", "GBPTRY", "EURUSD", "GBPUSD", "USDJPY", "AUDUSD", "USDCAD"].includes(value)) return "forex";
+  const cryptoQuotes = ["USDT", "USDC", "FDUSD", "BTC", "ETH", "BNB", "TRY"];
+  if (cryptoQuotes.some((q) => value.endsWith(q) && value.length > q.length + 1)) return "crypto";
+  if (value.startsWith("XAU") || value.startsWith("XAG")) return "metal";
+  return "stock";
+}
 const RISK_ITEMS = [
   ["dynamic_stop", "Dinamik stop", "ADX'e duyarlı takipli stop. ADX < 20 (yatay piyasa) iken devreye girmez."],
   ["static_stop", "Sabit stop", "Giriş fiyatının belirli bir yüzdesi (aşağıdaki 'Sabit stop yüzdesi') altında çıkar."],
@@ -2837,6 +3043,7 @@ async function openBotForm(existing = null, options = {}) {
     cash: cfg ? cfg.cash : 100,
     maxPos: cfg ? (cfg.max_position_pct ?? 100) : quick ? 25 : 100,
     coins: cfg ? (cfg.coins || []).slice() : presetCoins ? presetCoins.slice() : quick ? ["BTCUSDT", "ETHUSDT"] : [],
+    asset: (cfg && cfg.asset_class) || inferAssetClass((cfg ? (cfg.coins || [])[0] : presetCoins ? presetCoins[0] : "BTCUSDT") || "BTCUSDT"),
     coinListId: cfg && cfg.coin_list ? cfg.coin_list.id : options.coinListId || "",
     strategies: existing
       ? ((cfg && cfg.strategies) || []).map((s) =>
@@ -2899,9 +3106,13 @@ async function openBotForm(existing = null, options = {}) {
       </div>
       <div class="section-body">
         <label class="pf wide"><span>Bot adı</span><input id="b-name" value="${esc(draft.name)}" placeholder="Örn. 1h RSI + EMA"></label>
-        <div class="pf mt"><span>Zaman dilimi</span><div class="chip-cloud" id="period-chips"></div></div>
         <div class="row mt">
-          <label class="pf"><span>Başlangıç nakdi (USDT)</span><input id="b-cash" type="number" min="1" step="1" value="${draft.cash}"></label>
+          <label class="pf"><span>Varlık sınıfı</span>${assetSelectHtml("b-asset", draft.asset)}</label>
+          <label class="pf"><span>Zaman dilimi</span><div class="chip-cloud" id="period-chips"></div></label>
+        </div>
+        <p class="muted small" id="b-asset-hint" style="margin:6px 0 0"></p>
+        <div class="row mt">
+          <label class="pf"><span>Başlangıç nakdi</span><input id="b-cash" type="number" min="1" step="1" value="${draft.cash}"></label>
           <label class="pf"><span>Maksimum pozisyon (%)</span><input id="b-pos" type="number" min="1" max="100" value="${draft.maxPos}"></label>
         </div>
       </div>
@@ -2910,7 +3121,7 @@ async function openBotForm(existing = null, options = {}) {
     <div class="editor-section">
       <div class="section-head">
         <span class="step">3</span>
-        <div><h4>Coinler</h4><p class="muted">Hiç seçmezsen <code>coin_list.txt</code> içindeki tüm coinler izlenir.</p></div>
+        <div><h4>Semboller</h4><p class="muted">Kripto dışı semboller yalnızca test (paper) modunda çalışır.</p></div>
       </div>
       <div class="section-body">
         <label class="pf wide"><span>Coin listesi (isteğe bağlı)</span>
@@ -2922,7 +3133,8 @@ async function openBotForm(existing = null, options = {}) {
         <p class="muted small" id="b-coin-list-hint">Liste seçince coinler aşağıya eklenir. Sonradan listeyi değiştirirsen bot kayıtlı coinleriyle çalışır.</p>
         <div class="chip-cloud mt" id="coin-chips"></div>
         <div class="row mt">
-          <input id="coin-add" placeholder="Başka coin ekle (örn. FETUSDT)" style="max-width:230px">
+          <input id="coin-add" placeholder="Sembol yaz veya ara (XAUUSD, AAPL, TEFAS:AFT…)" style="max-width:300px">
+          <button type="button" class="small" id="coin-search-btn">Ara</button>
           <button type="button" class="small" id="coin-add-btn">Ekle</button>
         </div>
       </div>
@@ -2982,8 +3194,10 @@ async function openBotForm(existing = null, options = {}) {
 
   const summary = () => {
     const coins = draft.coins.length ? draft.coins.join(", ") : "tüm coin listesi";
+    const assetLabel = (ASSET_CLASS_OPTIONS.find((c) => c.id === draft.asset) || {}).label || draft.asset;
     const parts = [
       draft.mode === "live" ? "CANLI" : "Test",
+      assetLabel,
       draft.period,
       money(draft.cash),
       `%${draft.maxPos} pozisyon`,
@@ -3011,11 +3225,24 @@ async function openBotForm(existing = null, options = {}) {
   }));
   renderMode();
 
-  /* Periyot */
+  /* Periyot: yalnız seçili varlık sınıfının sağlayıcısının ürettiği periyotlar */
+  const renderAssetHint = () => {
+    const hint = $("#b-asset-hint");
+    if (!hint) return;
+    const label = (ASSET_CLASS_OPTIONS.find((c) => c.id === draft.asset) || {}).label || draft.asset;
+    hint.innerHTML = draft.asset === "crypto"
+      ? `<b>${esc(label)}</b> · Binance gerçek zamanlı verisi. Canlı ve test modu kullanılabilir.`
+      : `<b>${esc(label)}</b> · Yahoo/TEFAS ücretsiz geçmiş verisi. Bu bot yalnızca <b>test (paper)</b> modunda çalışır.`;
+  };
   const renderPeriods = () => {
     const box = $("#period-chips");
     box.innerHTML = "";
-    BOT_PERIODS.forEach((p) => {
+    const allowed = periodsForAsset(draft.asset).filter((p) => BOT_PERIODS.includes(p));
+    if (!allowed.length) allowed.push("1h");
+    if (!allowed.includes(draft.period)) {
+      draft.period = allowed.includes("1h") ? "1h" : allowed.includes("1d") ? "1d" : allowed[0];
+    }
+    allowed.forEach((p) => {
       const b = document.createElement("button");
       b.type = "button";
       b.className = "chip" + (draft.period === p ? " active" : "");
@@ -3030,13 +3257,15 @@ async function openBotForm(existing = null, options = {}) {
       box.appendChild(b);
     });
   };
+  renderAssetHint();
   renderPeriods();
 
-  /* Coinler */
+  /* Semboller */
   const renderCoins = () => {
     const box = $("#coin-chips");
     box.innerHTML = "";
-    const all = Array.from(new Set([...BOT_COIN_PRESETS, ...draft.coins]));
+    const presets = BOT_ASSET_PRESETS[draft.asset] || BOT_COIN_PRESETS;
+    const all = Array.from(new Set([...presets, ...draft.coins]));
     all.forEach((coin) => {
       const on = draft.coins.includes(coin);
       const b = document.createElement("button");
@@ -3055,16 +3284,36 @@ async function openBotForm(existing = null, options = {}) {
   renderCoins();
   const addCoin = () => {
     const input = $("#coin-add");
-    const value = input.value.trim().toUpperCase();
-    if (!value) return;
-    if (!/^[A-Z0-9]{3,20}$/.test(value)) { toast("Geçersiz coin sembolü", true); return; }
-    if (!draft.coins.includes(value)) draft.coins.push(value);
+    const values = input.value.split(/[\s,;]+/).map((v) => v.trim().toUpperCase()).filter(Boolean);
+    if (!values.length) return;
+    let bad = "";
+    values.forEach((value) => {
+      if (!/^[A-Z0-9:._=/^+-]{2,40}$/.test(value)) { bad = value; return; }
+      if (!draft.coins.includes(value)) draft.coins.push(value);
+    });
+    if (bad) { toast(`Geçersiz sembol: ${bad}`, true); return; }
     input.value = "";
     renderCoins();
     summary();
   };
   $("#coin-add-btn").addEventListener("click", addCoin);
+  $("#coin-search-btn").addEventListener("click", () => openSymbolPicker("coin-add", "b-asset", true));
   $("#coin-add").addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); addCoin(); } });
+
+  /* Varlık sınıfı: periyot listesini ve coin önerilerini daraltır. */
+  $("#b-asset").addEventListener("change", () => {
+    draft.asset = $("#b-asset").value;
+    if (draft.asset !== "crypto" && draft.mode === "live") {
+      draft.mode = "paper";
+      renderMode();
+      toast("Canlı işlem yalnızca kripto içindir; bot test moduna alındı.");
+    }
+    draft.coins = draft.coins.filter((c) => inferAssetClass(c) === draft.asset);
+    renderAssetHint();
+    renderPeriods();
+    renderCoins();
+    summary();
+  });
 
   /* Coin listesi seçimi: seçilen listenin coinleri aşağıya eklenir. */
   const listSelect = $("#b-coin-list");
@@ -3239,6 +3488,9 @@ async function openBotForm(existing = null, options = {}) {
       const specs = draft.strategies.map(pick).filter(Boolean).map((item) => item.spec);
       if (!specs.length) throw new Error("En az bir strateji seçin");
       if (draft.mode === "live" && !state.liveUnlocked) throw new Error("Canlı işlem anahtarı kapalı. Üst çubuktan açın.");
+      if (draft.mode === "live" && draft.asset !== "crypto") {
+        throw new Error("Hisse/altın/döviz/fon botları yalnızca test (paper) modunda çalışır.");
+      }
       const numVal = (key) => {
         const el = $(`#rk-${key}`);
         if (!el) return null;
@@ -3255,6 +3507,7 @@ async function openBotForm(existing = null, options = {}) {
         name: $("#b-name").value.trim() || "İsimsiz bot",
         period: draft.period,
         mode: draft.mode,
+        asset_class: draft.asset,
         cash: Number($("#b-cash").value),
         max_position_pct: Number($("#b-pos").value),
         coins: draft.coins,
@@ -4489,7 +4742,7 @@ function openStrategyEditor(existing) {
       </div>
     </div>`;
   modal(existing ? "Strateji Düzenle" : "Yeni Strateji", wrap);
-  bindSymbolField("p-coin", "p-asset");
+  bindSymbolField("p-coin", "p-asset", "p-period");
   bindPeriodField("p-period");
 
   const updateSummaries = () => {
@@ -4678,7 +4931,7 @@ function openBacktest(spec, info = {}) {
     if (el) el.innerHTML = `${lim.toLocaleString("tr-TR")} mum × ${esc(per)} → <b>${limitSpanLabel(lim, per)}</b>. Gerçek süre çalıştırınca veri raporunda görünür.`;
   };
   modal("Backtest", wrap);
-  bindSymbolField("bt-coin", "bt-asset");
+  bindSymbolField("bt-coin", "bt-asset", "bt-period");
   const bindBtRisk = () => {
     $$("[data-brec]").forEach((btn) => btn.addEventListener("click", () => {
       const fieldDef = RISK_NUM_FIELDS.find((f) => f.key === btn.dataset.brec);
@@ -5102,7 +5355,7 @@ function openStrategyCompare() {
   state.compare = null;
   state.cmpSort = { key: "diff", dir: -1 };
   modal("Tüm Stratejiler - Karşılaştırma", wrap);
-  bindSymbolField("cmp-coin", "cmp-asset");
+  bindSymbolField("cmp-coin", "cmp-asset", "cmp-period");
   const updateEstimate = () => {
     const lim = Number($("#cmp-limit").value || 20000);
     const per = periodValueOf("cmp-period") || "4h";
@@ -5459,6 +5712,7 @@ async function renderScan(root) {
     </div>
     <div id="scan-result" class="mt"></div>`;
   bindPeriodField("scan-period");
+  bindAssetPeriods("scan-asset", "scan-period");
   const updateHint = () => {
     const found = lists.find((l) => l.id === $("#scan-list").value);
     $("#scan-list-hint").innerHTML = found
@@ -5673,10 +5927,11 @@ async function renderAnalysis(root) {
     </div>
 
     <div id="analysis-result" class="mt"></div>`;
-  bindSymbolField("an-coin", "an-asset");
-  bindSymbolField("sr-coin", "sr-asset");
-  bindSymbolField("mo-coin", "mo-asset");
+  bindSymbolField("an-coin", "an-asset", "an-period");
+  bindSymbolField("sr-coin", "sr-asset", "sr-period");
+  bindSymbolField("mo-coin", "mo-asset", "mo-period");
   ["an-period", "sr-period", "mo-period", "mk-period", "cl-period"].forEach(bindPeriodField);
+  bindAssetPeriods("mk-asset", "mk-period");
   $$("[data-job]").forEach((btn) => btn.addEventListener("click", () => {
     if (btn.dataset.job === "__goto_ai") { location.hash = "#ai"; return; }
     runAnalysisJob(btn.dataset.job, opts, btn);
@@ -6095,6 +6350,244 @@ window.tradeChart = async (tradeId) => {
   }
 };
 
+/* ------------------------------------------------------------------ */
+/* Canlı izleme: açık pozisyon grafiği (10 saniyede bir)               */
+/* ------------------------------------------------------------------ */
+const LIVE_WATCH_MS = 10000;
+
+function stopLiveWatch() {
+  const current = window.__liveWatch;
+  if (current && current.timer) clearInterval(current.timer);
+  window.__liveWatch = null;
+}
+
+/** Canlı veriyi grafiğe uygular: mumlar + alış/stop/kâr al seviyeleri. */
+function _applyLiveChart(data, initial) {
+  const rows = Array.isArray(data.candles) ? data.candles : [];
+  const prices = rows
+    .map((c) => ({
+      idx: Number(c.time), t: Number(c.time),
+      o: Number(c.open), h: Number(c.high), l: Number(c.low), c: Number(c.close),
+      v: Number(c.volume) || 0,
+    }))
+    .filter((p) => Number.isFinite(p.idx) && Number.isFinite(p.c) && p.c > 0);
+  if (!prices.length) throw new Error("Mum verisi boş");
+
+  const pos = data.position || {};
+  const live = Number(data.live_price);
+  // Son (devam eden) mumu canlı fiyatla güncelle: grafik 10 sn'de bir
+  // "canlı" hissi versin, yeni bir mum gelene kadar kapanış takip etsin.
+  const last = prices[prices.length - 1];
+  if (Number.isFinite(live) && live > 0) {
+    last.c = live;
+    if (live > last.h) last.h = live;
+    if (live < last.l) last.l = live;
+    last.live = true;
+  }
+
+  const fullLo = Number(prices[0].idx);
+  const fullHi = Number(prices[prices.length - 1].idx);
+
+  // Alış anını ilgili muma yerleştir (mum verisi alıştan öncesini kapsar).
+  const markers = [];
+  const entryPrice = Number(pos.entry_price);
+  const openedMs = _toMs(pos.opened_at);
+  if (Number.isFinite(entryPrice) && entryPrice > 0) {
+    let idx = fullHi;
+    if (openedMs !== null) {
+      idx = fullLo;
+      for (const p of prices) {
+        if (p.idx <= openedMs) idx = p.idx;
+        else break;
+      }
+    }
+    markers.push({
+      idx, t: openedMs, no: 1, price: entryPrice, side: "buy",
+      time: pos.opened_at,
+    });
+  }
+
+  const refs = [];
+  if (Number.isFinite(entryPrice) && entryPrice > 0) {
+    refs.push({ value: entryPrice, color: "#34d399", label: "alış" });
+  }
+  const stop = Number(pos.stop_price);
+  if (Number.isFinite(stop) && stop > 0) {
+    refs.push({ value: stop, color: "#fb7185", label: "stop", band: "strong" });
+  }
+  const tp = Number(pos.take_profit_price);
+  if (Number.isFinite(tp) && tp > 0) {
+    refs.push({ value: tp, color: "#38bdf8", label: "kâr al" });
+  }
+  const partial = Number(pos.partial_target_price);
+  if (Number.isFinite(partial) && partial > 0) {
+    refs.push({ value: partial, color: "#fbbf24", label: "kısmi kâr" });
+  }
+  if (Number.isFinite(live) && live > 0) {
+    refs.push({ value: live, color: "#e2e8f0", label: "canlı", band: "strong" });
+  }
+
+  // Yakınlaştırmada en az iki mum görünsün (ms tabanlı indekste "4" anlamsız).
+  const steps = [];
+  for (let i = 1; i < prices.length; i += 1) steps.push(prices[i].idx - prices[i - 1].idx);
+  steps.sort((a, b) => a - b);
+  const medianStep = steps.length ? steps[Math.floor(steps.length / 2)] : 0;
+  const minSpan = medianStep > 0 ? medianStep * 2 : undefined;
+
+  const prev = window.__btData;
+  const follow = initial || !prev || Number(prev.hi) >= Number(prev.fullHi) - 1;
+  window.__btData = {
+    markers,
+    price: prices,
+    fullLo,
+    fullHi,
+    lo: follow ? fullLo : Math.max(fullLo, Number(prev.lo)),
+    hi: follow ? fullHi : Math.min(fullHi, Number(prev.hi)),
+    minSpan,
+    height: 400,
+    refs,
+    label: `${data.coin || ""} ${data.period || ""}`.trim(),
+  };
+}
+
+function _liveWatchStrip(data) {
+  const pos = data.position || {};
+  const live = Number(data.live_price);
+  const entry = Number(pos.entry_price);
+  const stop = Number(pos.stop_price);
+  const pct = Number(pos.pnl_gross_pct);
+  const source = data.price_source === "live"
+    ? (Number(data.price_age_seconds) > 30 ? `canlı · ${fmt(data.price_age_seconds, 0)} sn önce` : "canlı")
+    : "mum kapanışı";
+  const be = pos.breakeven_armed
+    ? '<span class="tag amber" title="Kısmi kâr sonrası stop girişe çekildi">breakeven</span>'
+    : "";
+  const dist = stop > 0 && live > 0 ? ` (${fmt((live / stop - 1) * 100, 2)}% uzak)` : "";
+  return `<div class="position-strip mt">
+    <span class="tag amber">${esc(data.coin)}</span>
+    <span>güncel <b class="${pnlClass(pct)}">${priceText(live)}</b>
+      <span class="muted small">${esc(source)}</span></span>
+    <span>alış <b>${priceText(entry)}</b></span>
+    ${stop > 0 ? `<span>stop <b class="neg">${priceText(stop)}</b><span class="muted small">${esc(dist)}</span></span>` : ""}
+    ${Number(pos.take_profit_price) > 0 ? `<span>kâr al <b>${priceText(pos.take_profit_price)}</b></span>` : ""}
+    <span>K/Z <b class="${pnlClass(pct)}">${Number.isFinite(pct) ? `${pct > 0 ? "+" : ""}${fmt(pct, 2)}%` : "—"}</b></span>
+    <span>adet <b>${fmt(pos.quantity, 8)}</b></span>
+    ${be}
+  </div>`;
+}
+
+/** Açık pozisyonu canlı izle: mum grafiği + alış/stop seviyeleri. */
+window.openLiveChart = async (botId) => {
+  stopLiveWatch();
+  const bot = (state.bots || []).find((b) => b.id === botId) || {};
+  const wrap = document.createElement("div");
+  wrap.innerHTML = `
+    <div class="row between" style="flex-wrap:wrap;gap:10px">
+      <div>
+        <h3 style="margin:0" id="live-title">${esc(bot.name || botId)}</h3>
+        <p class="muted small" style="margin:4px 0 0" id="live-sub">Grafik yükleniyor…</p>
+      </div>
+      <div class="row" style="gap:8px;align-items:center">
+        <span class="status-dot on" title="Canlı izleme açık"></span>
+        <span class="muted small" id="live-ago">—</span>
+      </div>
+    </div>
+    <div id="live-strip"></div>
+    <div class="row between mt" style="gap:8px;flex-wrap:wrap">
+      <span class="muted small">tekerlek = yakınlaştır · sürükle = kaydır · imleç = mum değerleri</span>
+      <span class="row small" style="gap:8px">
+        <button type="button" class="small ghost" onclick="window.tcZoom(1/1.7)" title="Yakınlaş">＋</button>
+        <button type="button" class="small ghost" onclick="window.tcZoom(1.7)" title="Uzaklaş">−</button>
+        <button type="button" class="small ghost" onclick="window.tcReset()" title="Tüm görünüm">Sıfırla</button>
+      </span>
+    </div>
+    <div id="tc-wrap"></div>
+    <p class="muted small mt">
+      Yeşil kesikli çizgi <b>alış</b>, kırmızı düz çizgi <b>stop</b>, mavi çizgi <b>kâr al</b>,
+      açık çizgi <b>canlı fiyat</b>. Grafik <b>10 saniyede bir</b> kendini günceller.
+    </p>`;
+  modal(`Canlı izle · ${bot.name || botId}`, wrap);
+
+  const watch = { timer: null, data: null, botId, failures: 0 };
+  window.__liveWatch = watch;
+
+  const drawNow = (initial) => {
+    const data = watch.data;
+    if (!data) return;
+    _applyLiveChart(data, initial);
+    const chartWrap = document.getElementById("tc-wrap");
+    if (!chartWrap) return;
+    // Görünür aralık, yakınlaştırma ve referans çizgileri tcRedraw'da uygulanır.
+    tcRedraw();
+    const svg = chartWrap.querySelector("svg.trade-chart");
+    if (svg && svg.dataset.chartId) {
+      const geom = _chartGeom.get(svg.dataset.chartId);
+      if (geom) window.__btData.chartWidth = geom.w;
+    }
+    const strip = document.getElementById("live-strip");
+    if (strip) strip.innerHTML = _liveWatchStrip(data);
+    const sub = document.getElementById("live-sub");
+    if (sub) {
+      const d = window.__btData || {};
+      sub.textContent = `${data.coin} · ${data.period} · ${(d.price || []).length} mum · ${data.provider || "—"}`
+        + `${data.mode ? ` · ${data.mode === "live" ? "CANLI" : "test"}` : ""}`;
+    }
+  };
+
+  const load = async (initial) => {
+    try {
+      const data = await api(`/bots/${encodeURIComponent(botId)}/live-chart?candles=150`);
+      watch.data = data;
+      watch.failures = 0;
+      drawNow(initial);
+      const ago = document.getElementById("live-ago");
+      if (ago) {
+        const now = new Date();
+        ago.textContent = `son güncelleme ${now.toLocaleTimeString("tr-TR")}`;
+      }
+    } catch (err) {
+      // Pozisyon kapandıysa izlemeyi bitir (sunucu 409 döner).
+      if (err && err.status === 409) {
+        stopLiveWatch();
+        const ago = document.getElementById("live-ago");
+        if (ago) ago.innerHTML = '<span class="tag gray">pozisyon kapandı</span>';
+        const sub = document.getElementById("live-sub");
+        if (sub) sub.textContent = "Bu botta açık pozisyon kalmadı; canlı izleme durduruldu.";
+        if (!watch.data) {
+          const chartWrap = document.getElementById("tc-wrap");
+          if (chartWrap) chartWrap.innerHTML = chartEmpty(320, "Açık pozisyon yok");
+        }
+        return;
+      }
+      watch.failures += 1;
+      const ago = document.getElementById("live-ago");
+      if (ago) {
+        ago.innerHTML = `<span class="neg">güncellenemedi (${watch.failures})</span>`;
+      }
+      if (initial) {
+        const sub = document.getElementById("live-sub");
+        if (sub) sub.innerHTML = `<span class="neg">${esc(err.message || "veri alınamadı")}</span>`;
+        const strip = document.getElementById("live-strip");
+        if (strip) strip.innerHTML = "";
+        const chartWrap = document.getElementById("tc-wrap");
+        if (chartWrap) chartWrap.innerHTML = chartEmpty(320, "Grafik verisi alınamadı");
+      }
+      // Sonraki turlarda eski grafik korunur; kullanıcı kesintiyi görür.
+    }
+  };
+
+  await load(true);
+  if (!window.__liveWatch) return;
+  watch.timer = setInterval(() => {
+    // Modal kapandıysa veya başka bir grafik açıldıysa dur.
+    if (window.__liveWatch !== watch || !document.getElementById("tc-wrap")) {
+      stopLiveWatch();
+      return;
+    }
+    load(false);
+  }, LIVE_WATCH_MS);
+};
+
 async function renderTrades(root) {
   const [trades, history, summary, positions, stats, bots] = await Promise.all([
     api("/trades?limit=200"),
@@ -6108,8 +6601,10 @@ async function renderTrades(root) {
   const historyOrders = Number(history.orders || 0);
   const total = summary.total || {};
   const t = stats.totals || {};
-  const eq = (stats.equity || []).map((p) => p.value);
+  const eqPoints = stats.equity || [];
+  const eq = eqPoints.map((p) => Number(p.value));
   const eqLast = eq.length ? eq[eq.length - 1] : null;
+  const eqPct = eqPoints.length ? Number(eqPoints[eqPoints.length - 1].pct) : null;
   const coinItems = (stats.by_coin || []).map((c) => ({ label: c.coin, value: c.pnl }));
   const daily = (stats.daily || []).slice(-14).map((d) => ({ label: (d.date || "").slice(5), value: d.pnl }));
   root.innerHTML = `
@@ -6123,10 +6618,10 @@ async function renderTrades(root) {
     <div class="dash-grid mt">
       <div class="card chart-card">
         <div class="row between">
-          <div><h3>Kümülatif K/Z</h3><p class="muted small">Kapanan işlemlerin bileşik getirisi</p></div>
-          <span class="chart-big ${eqLast === null ? "" : eqLast >= 0 ? "pos" : "neg"}">${eqLast === null ? "—" : `${eqLast >= 0 ? "+" : ""}${fmt(eqLast, 2)}%`}</span>
+          <div><h3>Kümülatif K/Z</h3><p class="muted small">Kapanan işlemlerin net K/Z'si (komisyon dahil, USDT)</p></div>
+          <span class="chart-big ${eqLast === null ? "" : eqLast >= 0 ? "pos" : "neg"}">${eqLast === null ? "—" : signedMoney(eqLast)}</span>
         </div>
-        ${lineChart(eq, { height: 220, caption: `${eq.length} kapanan işlem` })}
+        ${lineChart(eq, { height: 220, caption: `${eq.length} kapanan işlem${eqPct === null ? "" : ` · ${eqPct >= 0 ? "+" : ""}${fmt(eqPct, 2)}% getiri`}` })}
       </div>
       <div class="card chart-card">
         <h3>Kazanma oranı</h3>
@@ -6140,7 +6635,7 @@ async function renderTrades(root) {
 
     <div class="dash-grid2 mt">
       <div class="card chart-card">
-        <div class="row between"><h3>Coin bazında K/Z</h3><span class="tag gray">%</span></div>
+        <div class="row between"><h3>Coin bazında K/Z</h3><span class="tag gray">net USDT</span></div>
         ${barChart(coinItems, { height: 190 })}
       </div>
       <div class="card chart-card">
@@ -7030,7 +7525,7 @@ async function renderAI(root) {
     createSnapshot($("#ds-coin").value, readPeriod("ds-period"), $("#ds-limit").value,
       "Veri kopyası alındı ve sabitlendi", $("#ds-asset").value);
   });
-  bindSymbolField("ds-coin", "ds-asset");
+  bindSymbolField("ds-coin", "ds-asset", "ds-period");
   bindPeriodField("ds-period");
   const refreshBtn = $("#ds-refresh");
   if (refreshBtn) refreshBtn.addEventListener("click", () => {
@@ -7217,7 +7712,7 @@ async function renderAI(root) {
     $("#ai-csv").closest("label").style.display = $("#ai-source").value === "csv" ? "" : "none";
   });
   $("#ai-source").dispatchEvent(new Event("change"));
-  bindSymbolField("ai-coin", "ai-asset");
+  bindSymbolField("ai-coin", "ai-asset", "ai-period");
   bindPeriodField("ai-period");
   ["pf-period", "auto-period"].forEach(bindPeriodField);
   $("#ai-asset").addEventListener("change", () => {

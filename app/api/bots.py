@@ -27,6 +27,7 @@ class BotBody(BaseModel):
     coin_list_id: Optional[str] = None
     cash: float = settings.DEFAULT_CASH
     mode: str = "paper"
+    asset_class: str = ""
     risk: Dict[str, Any] = {}
     filters: Dict[str, Any] = {}
     auto_restart: bool = True
@@ -160,24 +161,36 @@ def _bot_config(body: BotBody) -> Dict[str, Any]:
             coins = coin_lists.normalize_coins(listed["coins"])
         coin_list_meta = {"id": listed["id"], "name": listed["name"], "count": listed["count"]}
 
-    # Canlı/paper bot motoru Binance emir altyapısını kullanır. Altın, hisse ve
-    # TEFAS yalnızca test/backtest/analiz içindir; bot evrenine giremez.
-    from app.market_data import is_live_symbol
+    # Canlı emirler Binance altyapısını kullanır. Hisse, altın/gümüş, döviz ve
+    # TEFAS sembolleri **paper** botlarda desteklenir; gerçek emir göndermek
+    # broker entegrasyonu gerektirdiği için canlı modda reddedilir.
+    from app.market_data import available_periods, is_live_symbol
 
     unsupported = [coin for coin in coins if not is_live_symbol(coin)]
-    if unsupported:
+    if unsupported and body.mode == "live":
         preview = ", ".join(unsupported[:5])
         raise HTTPException(
             400,
-            f"Botlar yalnızca Binance kripto sembolleriyle çalışabilir. "
-            f"Test/backtest için kullanın: {preview}",
+            f"Canlı botlar yalnızca Binance kripto sembolleriyle çalışabilir. "
+            f"Hisse/altın/döviz/fon için test (paper) modunu seçin: {preview}",
         )
+    if unsupported:
+        # Seçilen periyot her sağlayıcıda üretilebilir olmalı (TEFAS günlük vb.).
+        for coin in unsupported:
+            allowed = {item["id"] for item in available_periods(coin, asset_class=body.asset_class)}
+            if body.period not in allowed:
+                raise HTTPException(
+                    400,
+                    f"{coin} için {body.period} periyodu kullanılamıyor. "
+                    f"Seçilebilir: {', '.join(sorted(allowed))}",
+                )
 
     config = {
         "period": body.period,
         "strategies": pinned,
         "coins": coins,
         "cash": body.cash,
+        "asset_class": str(body.asset_class or "").strip().lower(),
         "risk": risk,
         "filters": body.filters,
         "max_position_pct": body.max_position_pct,
@@ -574,6 +587,13 @@ async def duplicate_bot(bot_id: str, body: Optional[DuplicateBody] = None):
         raise HTTPException(400, "Mod paper veya live olmalı")
     if mode == "live":
         _live_gate()
+        from app.market_data import is_live_symbol
+
+        if any(not is_live_symbol(coin) for coin in (config.get("coins") or [])):
+            raise HTTPException(
+                400,
+                "Kripto dışı sembol içeren bot canlı modda kopyalanamaz; test modunu seçin.",
+            )
 
     name = ((body.name if body and body.name else "") or f"{source['name']} (kopya)").strip()
     if not name:
@@ -740,6 +760,19 @@ async def switch_mode(bot_id: str, body: ModeBody):
         raise HTTPException(400, "Mod paper veya live olmalı")
     if mode == "live":
         _live_gate()
+        from app.market_data import is_live_symbol
+
+        config = db.json.loads(bot.get("config_json") or "{}")
+        non_crypto = [
+            coin for coin in (config.get("coins") or [])
+            if not is_live_symbol(coin)
+        ]
+        if non_crypto:
+            raise HTTPException(
+                400,
+                "Bu bot hisse/altın/döviz/fon sembolleri içeriyor; canlı mod yalnızca "
+                "Binance kripto sembolleriyle çalışır. Test modunu kullanın.",
+            )
         state = bot_state.load_state(bot_id) or {}
         if state.get("position"):
             raise HTTPException(400, "Açık pozisyon varken canlıya geçilemez. Önce pozisyonu kapatın.")
@@ -813,3 +846,92 @@ async def bot_signals(bot_id: str, limit: int = 200):
         "SELECT * FROM signal_events WHERE bot_id=? ORDER BY created_at DESC LIMIT ?",
         (bot_id, limit),
     )
+
+
+@router.get("/{bot_id}/live-chart")
+def bot_live_chart(bot_id: str, candles: int = Query(default=150, ge=20, le=400)):
+    """Açık pozisyon için canlı izleme grafiği.
+
+    Mum geçmişini (botun periyodunda) ve pozisyonun alış/stop/kâr al
+    seviyelerini tek yanıtta döndürür. Panel bunu 10 saniyede bir çağırır.
+
+    Önbellek **yazılmaz** (``use_cache=False``): canlı izleme sık çalışır ve
+    kısa bir pencere istediği için uzun geçmiş önbelleğini küçültmemelidir.
+    Ağ hatasında panel son grafiği korur.
+    """
+    bot = db.row("SELECT * FROM bots WHERE id=?", (bot_id,))
+    if not bot:
+        raise HTTPException(404, "Bot bulunamadı")
+    payload = _serialize(bot)
+    position = (payload.get("state") or {}).get("position")
+    if not position:
+        raise HTTPException(409, "Bu botta açık pozisyon yok")
+
+    coin = str(position.get("coin") or "").upper()
+    period = str(bot.get("period") or "1h")
+    config = payload.get("config") or {}
+    asset_class = str(config.get("asset_class") or "")
+
+    from app.market_data import load_history
+
+    try:
+        data, meta = load_history(
+            coin, period, int(candles), asset_class=asset_class, use_cache=False
+        )
+    except Exception as exc:  # noqa: BLE001 - ağ/sağlayıcı hatası panele taşınır
+        raise HTTPException(400, f"{coin} mum verisi alınamadı: {exc}")
+
+    times = data.get("opendate") or []
+    opens = data.get("open") or []
+    highs = data.get("high") or []
+    lows = data.get("low") or []
+    closes = data.get("close") or []
+    volumes = data.get("volume_usdt") or data.get("volume_coin") or []
+    closedates = data.get("closedate") or []
+
+    rows = []
+    for i, stamp in enumerate(times):
+        try:
+            rows.append(
+                {
+                    "time": float(stamp),
+                    "open": float(opens[i]),
+                    "high": float(highs[i]),
+                    "low": float(lows[i]),
+                    "close": float(closes[i]),
+                    "volume": float(volumes[i]) if i < len(volumes) else 0.0,
+                    "close_time": float(closedates[i]) if i < len(closedates) else None,
+                }
+            )
+        except (IndexError, TypeError, ValueError):
+            continue
+
+    price = position.get("last_price") or position.get("entry_price")
+    return {
+        "bot_id": bot_id,
+        "name": payload.get("name"),
+        "mode": payload.get("mode"),
+        "coin": coin,
+        "period": period,
+        "asset_class": asset_class,
+        "provider": meta.get("provider") or meta.get("source"),
+        "candles": rows,
+        "live_price": price,
+        "price_source": position.get("price_source"),
+        "price_age_seconds": position.get("price_age_seconds"),
+        "position": {
+            "quantity": position.get("quantity"),
+            "entry_price": position.get("entry_price"),
+            "opened_at": position.get("opened_at"),
+            "stop_price": position.get("stop_price"),
+            "stop_distance_pct": position.get("stop_distance_pct"),
+            "take_profit_price": position.get("take_profit_price"),
+            "partial_target_price": position.get("partial_target_price"),
+            "breakeven_armed": position.get("breakeven_armed", False),
+            "pnl_gross": position.get("pnl_gross"),
+            "pnl_gross_pct": position.get("pnl_gross_pct"),
+            "unrealized_pnl": position.get("unrealized_pnl"),
+            "unrealized_pnl_pct": position.get("unrealized_pnl_pct"),
+            "candles_held": position.get("candles"),
+        },
+    }

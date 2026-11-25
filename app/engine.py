@@ -74,6 +74,7 @@ class TradingEngine:
         self.evaluators = [build_evaluator(spec) for spec in self.strategy_specs]
         self.strategy_labels = self._strategy_labels()
         self.coins = list(config.get("coins") or [])
+        self.asset_class = str(config.get("asset_class") or "")
         self.max_position_pct = float(config.get("max_position_pct", 100)) / 100.0
         self.adopt_external_buy = bool(settings.ADOPT_EXTERNAL_BUY)
         self.protective_enabled = bool(settings.EXCHANGE_PROTECTIVE_STOP)
@@ -204,8 +205,24 @@ class TradingEngine:
     # ------------------------------------------------------------------
     # Başlangıç
     # ------------------------------------------------------------------
+    def _is_binance_symbol(self, coin: str) -> bool:
+        try:
+            from app.market_data import resolve_symbol
+
+            return resolve_symbol(coin).provider == "binance"
+        except Exception:  # noqa: BLE001 - çözülemeyen sembol Binance'e bırakılır
+            return True
+
+    def _needs_binance(self) -> bool:
+        if self.mode == "live":
+            return True
+        if not self.coins:
+            # Evren boşsa varsayılan Binance coin listesi taranır.
+            return True
+        return any(self._is_binance_symbol(coin) for coin in self.coins)
+
     def _init_clients(self) -> None:
-        if self.binance is None:
+        if self.binance is None and self._needs_binance():
             from core import Binance
 
             while True:
@@ -689,7 +706,19 @@ class TradingEngine:
     # ------------------------------------------------------------------
     def _data(self, coin: str) -> Dict[str, List[float]]:
         """Mum verisi. Borsa geçici hata verirse (5xx / bağlantı / 429) kısa
-        bekleyip yeniden dener; kalıcı hatada (geçersiz sembol) hemen çıkar."""
+        bekleyip yeniden dener; kalıcı hatada (geçersiz sembol) hemen çıkar.
+
+        Kripto dışı semboller (hisse, altın/gümüş, döviz, TEFAS) ortak
+        ``app.market_data`` katmanından okunur; paper botlar için Binance
+        bağlantısı gerekmez.
+        """
+        if not self._is_binance_symbol(coin):
+            from app.market_data import load_history
+
+            data, _meta = load_history(
+                coin, self.period, 1000, asset_class=self.asset_class
+            )
+            return data
         last: Optional[Exception] = None
         for attempt in range(4):
             if self.stop_event or bot_state.stop_requested(self.bot_id):
@@ -714,6 +743,8 @@ class TradingEngine:
     def _coinlist(self) -> List[str]:
         if self.coins:
             return list(self.coins)
+        if self.binance is None:
+            return []
         try:
             return self.binance.coin_list()
         except Exception:
@@ -1055,17 +1086,18 @@ class TradingEngine:
     # ------------------------------------------------------------------
     def _filters(self, coin: str) -> Dict[str, Any]:
         """Parite filtreleri; borsa okunamazsa güvenli varsayılan."""
-        try:
-            filters = self.binance.get_coin_filters(coin)
-            if isinstance(filters, dict) and filters:
-                return filters
-        except Exception:
-            pass
         min_qty = 0.0
-        try:
-            min_qty = float(self.binance.get_coin_minQTY(coin) or 0.0)
-        except Exception:
-            pass
+        if self.binance is not None:
+            try:
+                filters = self.binance.get_coin_filters(coin)
+                if isinstance(filters, dict) and filters:
+                    return filters
+            except Exception:
+                pass
+            try:
+                min_qty = float(self.binance.get_coin_minQTY(coin) or 0.0)
+            except Exception:
+                pass
         return {
             "symbol": str(coin or "").upper(),
             "step_size": min_qty,

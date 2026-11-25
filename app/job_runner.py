@@ -61,7 +61,7 @@ def _history(
     """
     limit = max(1, int(limit))
     requested_source = str(source or "auto").strip().lower()
-    if requested_source in {"auto", "yahoo", "tefas"} or asset_class in {"metal", "stock", "fund"}:
+    if requested_source in {"auto", "yahoo", "tefas", "derived"} or asset_class in {"metal", "forex", "stock", "fund"}:
         from app.market_data import load_history
 
         return load_history(
@@ -224,11 +224,11 @@ def _data_report(data: Dict[str, Any], period: str, meta: Dict[str, Any]) -> Dic
     except ValueError:
         period_obj = None
 
-    # Hisse/altın/TEFAS verisi işlem günü takvimine uyar: hafta sonu ve resmi
-    # tatilde mum yoktur. Bu yüzden boşluk ölçümü takvim günü değil işlem
+    # Hisse/altın/döviz/TEFAS verisi işlem günü takvimine uyar: hafta sonu ve
+    # resmi tatilde mum yoktur. Bu yüzden boşluk ölçümü takvim günü değil işlem
     # günü (business day) üzerinden yapılır.
     session_based = (
-        meta.get("asset_class") in {"stock", "metal", "fund"} and n > 1
+        meta.get("asset_class") in {"stock", "metal", "forex", "fund"} and n > 1
     )
 
     def _business_between(first_ms: float, last_ms: float) -> int:

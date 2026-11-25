@@ -1,8 +1,9 @@
 """Çoklu piyasa verisi katmanı.
 
-Kripto (Binance), altın/gümüş ve hisse (Yahoo Finance) ile TEFAS fonlarını
-tek bir OHLCV formatında sunar. Yalnızca test/backtest/analiz içindir;
-canlı işlem yalnızca Binance kripto sembolleriyle yapılabilir.
+Kripto (Binance), altın/gümüş ve hisse ile döviz (Yahoo Finance), türetilmiş
+gram altın/gümüş (ons × USDTRY) ve TEFAS fonlarını tek bir OHLCV formatında
+sunar. Canlı emir yalnızca Binance kripto sembolleriyle yapılabilir; diğer
+varlıklar test/paper bot, backtest ve analiz içindir.
 """
 
 from __future__ import annotations
@@ -12,9 +13,11 @@ from typing import Any, Dict, Tuple
 from app.market_data.catalog import (
     ASSET_CLASSES,
     SymbolInfo,
+    available_periods,
     catalog,
     is_live_symbol,
     normalize_symbol,
+    periods_for_provider,
     resolve_symbol,
     search_symbols,
 )
@@ -25,6 +28,7 @@ __all__ = [
     "ASSET_CLASSES",
     "Period",
     "SymbolInfo",
+    "available_periods",
     "catalog",
     "choose_base_period",
     "clear_cache",
@@ -33,6 +37,7 @@ __all__ = [
     "normalize_symbol",
     "parse_period",
     "period_ms",
+    "periods_for_provider",
     "resolve_symbol",
     "search_symbols",
 ]

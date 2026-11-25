@@ -6,7 +6,7 @@ from typing import Any, Dict, Optional
 
 from fastapi import APIRouter, HTTPException, Query
 
-from app.market_data import catalog, clear_cache, load_history
+from app.market_data import available_periods, catalog, clear_cache, load_history
 from app.market_data.catalog import search_symbols
 
 router = APIRouter()
@@ -15,6 +15,40 @@ router = APIRouter()
 @router.get("/symbols")
 async def symbols():
     return catalog()
+
+
+@router.get("/periods")
+def periods(
+    symbol: str = Query(""),
+    source: str = Query("auto"),
+    asset_class: str = Query(""),
+):
+    """Sembolün sağlayıcısına göre seçilebilecek periyotlar."""
+    try:
+        items = available_periods(symbol, source=source, asset_class=asset_class)
+    except Exception as exc:  # noqa: BLE001
+        raise HTTPException(400, f"Periyotlar alınamadı: {exc}")
+    provider = ""
+    if symbol:
+        try:
+            from app.market_data import resolve_symbol
+
+            provider = resolve_symbol(symbol, source=source, asset_class=asset_class).provider
+        except ValueError:
+            provider = ""
+    if not provider:
+        provider = next(
+            (item["provider"] for item in catalog()["classes"]
+             if item["id"] == asset_class),
+            "",
+        )
+    return {
+        "symbol": symbol,
+        "asset_class": asset_class,
+        "provider": provider,
+        "count": len(items),
+        "items": items,
+    }
 
 
 @router.get("/search")

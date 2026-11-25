@@ -97,7 +97,7 @@ def load_history(
             pass
 
     data = (
-        resample_data(raw, target, session_based=info.asset_class in {"stock", "metal", "fund"})
+        resample_data(raw, target, session_based=info.asset_class in {"stock", "metal", "fund", "forex"})
         if base.text != target.text
         else raw
     )

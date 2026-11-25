@@ -17,6 +17,9 @@ from app.market_data.catalog import SymbolInfo
 
 NATIVE_PERIODS = ["1d"]
 
+# Günlük NAV verisinden haftalık/aylık/yıllık üretilebilir.
+SELECTABLE_PERIODS = ["1d", "1w", "1M", "1y"]
+
 _ENDPOINT = "https://www.tefas.gov.tr/api/funds/fonFiyatBilgiGetir"
 _HEADERS = {
     "User-Agent": (

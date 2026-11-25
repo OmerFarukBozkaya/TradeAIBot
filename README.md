@@ -71,43 +71,77 @@ Kripto para analizi, backtest, tarama ve otomatik alım-satım için **web aray�
 > Değişiklikten sonra `docker compose up -d` (yeniden derleme gerekmez). Giriş
 > yapmış oturumlar yeni çerez adıyla bir kez yeniden giriş ister.
 
-### Çoklu varlık: altın, gümüş, hisse ve TEFAS (yalnızca test)
+### Çoklu varlık: kripto, altın/gümüş, döviz, hisse ve TEFAS
 
-Backtest, tarama, analiz ve AI eğitimi artık Binance kripto dışındaki
-varlıklarla da çalışır. **Canlı/paper bot işlemleri yalnızca Binance kripto
-sembolleriyle sınırlıdır**; bu varlıklar gerçek emir göndermez.
+Backtest, tarama, analiz, AI eğitimi ve **test (paper) botları** Binance kripto
+dışındaki varlıklarla da çalışır. **Canlı (live) işlem yalnızca Binance kripto
+sembolleriyle sınırlıdır**; diğer varlıklar gerçek emir göndermez.
 
 | Varlık | Sembol örneği | Kaynak | Sınır |
 |---|---|---|---|
 | Kripto | `BTCUSDT` | Binance | Tüm Binance geçmişi |
-| Altın | `XAUUSD` | Yahoo `GC=F` | Günlükde on yıllar |
-| Gümüş | `XAGUSD` | Yahoo `SI=F` | Günlükde on yıllar |
-| ABD hissesi | `AAPL`, `MSFT` | Yahoo | Günlükde on yıllar |
+| Altın (ons, USD) | `XAUUSD` | Yahoo `GC=F` | Günlükde on yıllar |
+| Gümüş (ons, USD) | `XAGUSD` | Yahoo `SI=F` | Günlükde on yıllar |
+| Gram altın (TL) | `GAUTRY` | `GC=F × USDTRY=X ÷ 31,1035` | Günlükde on yıllar |
+| Gram gümüş (TL) | `GUMUSTRY` | `SI=F × USDTRY=X ÷ 31,1035` | Günlükde on yıllar |
+| Döviz | `USDTRY`, `EURTRY`, `EURUSD`, `GBPUSD` | Yahoo `=X` | Günlükde on yıllar |
+| ABD hissesi | `AAPL`, `MSFT`, `NVDA` | Yahoo | Günlükde on yıllar |
 | BIST hissesi | `GARAN.IS`, `THYAO.IS` | Yahoo | Günlükde on yıllar |
 | TEFAS fonu | `TEFAS:AFT` | TEFAS | Günlük, en fazla 5 yıl |
+
+**Ücretsiz veri sağlayıcıları.** Ek ücretli abonelik gerekmez:
+
+- **Binance** (`api.binance.com`) — kripto mumları, gerçek zamanlı fiyat,
+  sınırsız sayfalanmış geçmiş (1m'den 1M'ye).
+- **Yahoo Finance** (`query1.finance.yahoo.com`) — hisse, altın/gümüş, döviz,
+  endeks ve ETF. Geçmiş: 1m ~7 gün, 5–30m ~60 gün, 1h ~730 gün, günlük ve
+  üstünde on yıllar. Anlık fiyat gecikmeli olabilir (~15 dk); canlı emir
+  göndermek için değil, K/Z göstergesi için kullanılır.
+- **TEFAS** (`tefas.gov.tr` açık JSON API) — yatırım ve borsa yatırım fonlarının
+  günlük NAV fiyatları, en fazla 5 yıl geriye.
+- **Türetilmiş gram altın/gümüş** — ayrı bir sağlayıcı gerekmez: ons fiyatı
+  Yahoo'dan, USDTRY kuru Yahoo'dan alınır ve `ons × kur / 31,1034768` ile
+  gram TL serisi üretilir (1 troy ons = 31,1034768 g). Böylece hem ons (USD)
+  hem gram (TL) fiyatı aynı panelde izlenebilir.
 
 Arayüzde her formda **Varlık** ve **Sembol** ayrı seçilir. Sembol alanının
 yanındaki **Ara** düğmesi arama penceresini açar:
 
-- Sembol kodu veya şirket/fon adı ile arar (`garanti`, `altın`, `AFT`, `bitcoin`).
-- Sonuçlar varlık sınıfına göre filtrelenebilir; her satırda **canlı/test**
-  etiketi ve sağlayıcı bilgisi görünür.
+- Sembol kodu veya şirket/fon adı ile arar (`garanti`, `altın`, `gram`, `dolar`,
+  `AFT`, `bitcoin`). Türkçe karakterler sadeleştirilir (`gümüş` = `gumus`).
+- Yanlış yazım riskini azaltmak için sonuçlar listeden seçilir; sonuçlar varlık
+  sınıfına göre filtrelenebilir.
+- `ALTIN`, `GUMUS`, `GRAMALTIN` gibi yaygın yazımlar kanonik sembole çevrilir.
 - Yazarken öneri listesi açılır; Enter ilk öneriyi seçer.
 - Tarama ve piyasa analizinde **Ekle** ile birden çok sembol listeye eklenir.
 
-Periyot alanına `45m`, `2h`, `3d`, `1w`, `1M`, `1y` gibi serbest değer yazılabilir:
+**Periyotlar sağlayıcıya göre sınırlanır.** Arayüz, seçili sembolün
+sağlayıcısının gerçekten ürettiği periyotları listeler (`GET /api/market/periods`):
 
-- Kaynak periyodu istenenden küçükse veri otomatik yeniden örneklenir
-  (open=ilk, high=max, low=min, close=son, hacim=toplam).
-- Kaynak periyodu istenenden büyükse açık hata verilir.
+| Sağlayıcı | Seçilebilen periyotlar |
+|---|---|
+| Binance | 1m, 3m, 5m, 15m, 30m, 45m, 1h, 2h, 4h, 6h, 8h, 12h, 1d, 3d, 1w, 1M, 1y |
+| Yahoo (hisse/altın/gümüş/döviz) | 1m, 5m, 15m, 30m, 1h, 2h, 4h, 6h, 12h, 1d, 3d, 1w, 1M, 1y |
+| Gram altın/gümüş (türetilmiş) | Binance ile aynı liste (ons + kur) |
+| TEFAS fonu | **yalnızca** 1d, 1w, 1M, 1y |
+
+Böylece örneğin bir TEFAS fonunda `1h`, bir hissede `3m` gibi kaynağın
+üretemediği seçenekler hiç görünmez. Altın/gümüş gibi günlük serilerde daha
+büyük periyotlar otomatik yeniden örneklenir (open=ilk, high=max, low=min,
+close=son, hacim=toplam).
+
 - Yahoo intraday geçmişi sınırlıdır (1m ~7 gün, 5-30m ~60 gün, 1h ~730 gün).
 - TEFAS yalnızca günlük NAV verir; `open=high=low=close`, hacim 0 kabul edilir.
   High/low/hacim kullanan stratejilerde sonuçlar yanıltıcı olabilir.
+- Döviz, altın, hisse ve fon verisi **işlem günü** takvimine uyar; hafta sonu ve
+  tatillerde mum yoktur, veri raporu boşlukları buna göre sayar.
 
 Veriler `Data/market/<sağlayıcı>/<sembol>/<periyot>.csv` altında önbelleklenir.
 Ağ hatasında son önbellek kullanılır. API:
 
-- `GET /api/market/symbols` — hazır sembol kataloğu ve periyotlar
+- `GET /api/market/symbols` — hazır sembol kataloğu, varlık sınıfları ve
+  sağlayıcı başına periyotlar
+- `GET /api/market/periods?symbol=GAUTRY` — sembolün gerçek periyot listesi
 - `GET /api/market/history?symbol=XAUUSD&period=1d&limit=3000` — veri önizleme
   ve kalite raporu
 - `POST /api/market/cache/clear` — önbelleği temizle
@@ -477,9 +511,38 @@ bildirim ve olay kaydı (`MANUEL SATIŞ algılandı…`) üretilir; İşlem Geç
 - Üst çubuktaki **Toplam K/Z** de artık gerçekleşmemiş K/Z'yi içerir; üzerine gelince
   gerçekleşen + anlık dağılımı görünür.
 - Aynı değerler dashboard'daki **Toplam K/Z** kartında ve bot özet satırlarında da gösterilir.
+- Dashboard'daki **Kümülatif K/Z** grafiği işlem yüzdelerini bileşik olarak çarpıp
+  toplamaz: her turun komisyon dahil **net para K/Z'si** (USDT) toplanır. Böylece grafik
+  her zaman **Toplam K/Z** ile aynı işareti taşır; pozisyon büyüklüğü portföyün tamamı
+  olmadığı için yüzdelerin bileşik çarpımı yanıltıcıydı. Kısmi satışlar tek tur olarak
+  eşleştirilir (FIFO) ve iki bot aynı coini işlese bile lotları karışmaz.
 - API: `GET /api/bots` her bot için `state.unrealized_pnl`, `state.total_pnl`, `state.equity` ve
   `state.position.last_price`, `unrealized_pnl_pct`, `stop_price`, `stop_distance_pct`,
   `price_source` alanlarını döndürür.
+
+### Canlı izle: açık pozisyon grafiği
+
+Açık pozisyonu olan her bot kartında (Botlar sayfası) ve dashboard satırında
+**Canlı izle** düğmesi görünür. Düğme, pozisyonun mum grafiğini açar:
+
+| Bileşen | Anlamı |
+|---|---|
+| **Mum grafiği** | Botun periyodunda son 150 mum; son (devam eden) mum canlı fiyatla güncellenir |
+| **Alış çizgisi** (yeşil kesikli) | Pozisyonun giriş fiyatı + grafik üzerinde alış üçgeni |
+| **Stop çizgisi** (kırmızı düz) | Etkin stop seviyesi (ATR / sabit / takipli), üst sınır uygulanmış |
+| **Kâr al çizgisi** (mavi) | Risk kurallarından hesaplanan hedef fiyat (varsa) |
+| **Canlı fiyat çizgisi** (açık renk) | Son fiyat; sağ kenardaki balonda da yazar |
+| **Üst şerit** | Güncel fiyat, alış, stop (stopa uzaklık %), kâr al, anlık K/Z, adet |
+
+- Grafik **10 saniyede bir** kendini yeniler (`LIVE_WATCH_MS = 10000`).
+- Fiyat Binance'te gerçek zamanlı, hisse/altın/döviz/fonda Yahoo'dan (gecikmeli)
+  gelir; hangi kaynağın kullanıldığı şeritte **canlı / mum kapanışı** olarak yazar.
+- Tekerlekle yakınlaştır, sürükleyerek kaydır, imleçle mum değerlerini oku.
+  Yakınlaştırdığında görünüm korunur; uzaklaştırırsan yeni mumlar otomatik gelir.
+- Pozisyon kapanınca izleme kendini durdurur ve bunu bildirir.
+- API: `GET /api/bots/{bot_id}/live-chart?candles=150` → mumlar + alış/stop/kâr al
+  seviyeleri + anlık fiyat. Bu uç nokta **önbelleği yazmaz** (sık çalıştığı için
+  uzun geçmiş önbelleğini küçültmesin).
 
 **Risk kuralları canlıda backtest ile aynıdır.** Bot oluştururken strateji tanımındaki `risk`
 bloğu (ATR stop, takipli stop, kâr koruma, bekleme) otomatik devralınır; bot kartında
@@ -553,11 +616,17 @@ Ayarlar → **Coin listesi** sekmesindeki `Data/coin_list.txt` ise "hiç coin se
 - Gerçek emir gönderilmez.
 - Fiyat, komisyon ve slippage simüle edilir.
 - Bakiye ve K/Z yerel ledger'da tutulur.
+- **Kripto dışı varlıklarla da çalışır**: altın/gümüş (ons ve gram TL), döviz,
+  hisse ve TEFAS fonu. Bu botlar Yahoo/TEFAS ücretsiz geçmiş verisini kullanır
+  ve Binance API anahtarı gerektirmez.
 
 ### Canlı (live) — tek anahtar
 1. Üst çubuktaki **Canlı işlem** anahtarını aç
 2. Botun mod rozetine tıkla → **Canlı**
 
+Canlı mod **yalnızca Binance kripto sembolleriyle** çalışır. Kripto dışı sembol
+içeren bir botta canlı mod seçilemez; bot formu bu durumda otomatik olarak test
+moduna döner ve sunucu da isteği reddeder.
 Sunucu izni de panelden yönetilir: **Ayarlar → İşlem → Canlı işlem sunucu izni**. `.env` düzenlemek gerekmez.
 
 Anahtar kapatıldığında çalışan tüm canlı botlar güvenli şekilde durdurulur. Canlıya geçişte bot önce durdurulur; açık pozisyon varsa geçiş reddedilir. Başlangıçta Binance bakiyesi ile yerel ledger karşılaştırılır; uyuşmazlıkta bot `reconciliation_required` durumuna geçer.

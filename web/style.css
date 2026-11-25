@@ -689,6 +689,21 @@ pre {
 .position-strip .live-tick { animation: livePulse 1.6s ease-in-out infinite; }
 @keyframes livePulse { 0%, 100% { opacity: 1; } 50% { opacity: .55; } }
 
+/* Canlı izle: açık pozisyonun canlı mum grafiğini açar. */
+button.live-watch-btn {
+  display: inline-flex; align-items: center; gap: 6px;
+  border-color: rgba(52, 211, 153, .45);
+  color: #a7f3d0;
+}
+button.live-watch-btn::before {
+  content: "";
+  width: 6px; height: 6px; border-radius: 50%;
+  background: var(--green);
+  box-shadow: 0 0 8px var(--green);
+  animation: livePulse 1.6s ease-in-out infinite;
+}
+button.live-watch-btn:hover { border-color: rgba(52, 211, 153, .8); }
+
 /* Manuel satış: diğer düğmelerden ayrışsın, yanlışlıkla basılmayacak kadar net. */
 button.sell-btn {
   background: linear-gradient(180deg, rgba(251,113,133,.22), rgba(251,113,133,.12));

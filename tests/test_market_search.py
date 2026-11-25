@@ -31,7 +31,11 @@ def test_catalog_lists_crypto_and_classes():
     data = catalog_mod.catalog()
     assert data["crypto"]
     assert any(item["symbol"] == "BTCUSDT" for item in data["crypto"])
-    assert {item["id"] for item in data["classes"]} == {"crypto", "metal", "stock", "fund"}
+    assert {item["id"] for item in data["classes"]} == {
+        "crypto", "metal", "forex", "stock", "fund",
+    }
+    assert data["forex"]
+    assert any(item["symbol"] == "USDTRY" for item in data["forex"])
 
 
 def test_empty_query_returns_popular_for_class(offline):
