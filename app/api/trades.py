@@ -132,6 +132,10 @@ def pair_round_trips(rows: List[dict]) -> Dict[str, Any]:
                     "price": price,
                     "time": row.get("created_at"),
                     "reason": row.get("reason"),
+                    "pnl_pct": row.get("pnl_pct"),
+                    "fee": fee,
+                    "mode": row.get("mode"),
+                    "id": row.get("id"),
                 }
             )
             continue
@@ -264,6 +268,86 @@ def pair_round_trips(rows: List[dict]) -> Dict[str, Any]:
         "by_exit_reason": exit_reasons,
         "series": series,
     }
+
+
+def closed_round_trips(rows: List[dict]) -> List[Dict[str, Any]]:
+    """Tüm botların kapanmış turlarını **komisyon dahil para K/Z'si** ile toplar.
+
+    FIFO eşleştirmesi bot bazında yapılır: iki bot aynı coini alıp sattığında
+    lotlar birbirine karışmaz. Dönen liste çıkış zamanına göre artan sıradadır
+    ve her turda ``pnl_money`` (net para), ``invested`` (maliyet) ve
+    ``bot_id`` bulunur. Kümülatif K/Z bu seriden hesaplanır; işlem başına
+    yüzdeliklerin bileşik çarpımı yanlış sonuç verir (pozisyon büyüklüğü
+    portföyün tamamı değildir, kısmi satışlar çok kez sayılır).
+
+    Alış kaydı bulunmayan satışlar (eski sürümden kalan veriler) satırdaki
+    ``pnl_pct`` değerinden türetilir ve ``estimated=True`` ile işaretlenir.
+    """
+    groups: Dict[str, List[dict]] = {}
+    for row in rows:
+        key = str(row.get("bot_id") or "-")
+        groups.setdefault(key, []).append(row)
+
+    closed: List[Dict[str, Any]] = []
+    for key, group in groups.items():
+        bot_id = None if key == "-" else key
+        result = pair_round_trips(group)
+        for item in result["trades"]:
+            entry = dict(item)
+            entry["bot_id"] = bot_id
+            entry["estimated"] = False
+            closed.append(entry)
+        # Alış kaydı olmayan (eski sürüm/elle eklenmiş) satışlar: satırda
+        # kayıtlı ``pnl_pct`` tek doğru bilgidir. Satış gelirinden maliyeti
+        # türetip para K/Z'sine çevir; böylece geçmiş boş kalıp grafik sıfıra
+        # düşmez.
+        for sell in result["unmatched_sells"]:
+            raw_pct = sell.get("pnl_pct")
+            if raw_pct is None:
+                continue
+            try:
+                pct = float(raw_pct)
+                qty = float(sell.get("quantity") or 0.0)
+                price = float(sell.get("price") or 0.0)
+                fee = float(sell.get("fee") or 0.0)
+            except (TypeError, ValueError):
+                continue
+            if qty <= 0 or price <= 0 or pct <= -100:
+                continue
+            proceeds = qty * price - fee
+            if proceeds <= 0:
+                continue
+            cost = proceeds / (1.0 + pct / 100.0)
+            closed.append(
+                {
+                    "coin": sell.get("coin"),
+                    "quantity": round(qty, 10),
+                    "entry_price": None,
+                    "exit_price": round(price, 10),
+                    "entry_time": None,
+                    "exit_time": sell.get("time"),
+                    "hold_seconds": None,
+                    "invested": round(cost, 6),
+                    "proceeds": round(proceeds, 6),
+                    "pnl_money": round(proceeds - cost, 6),
+                    "pnl_pct": round(pct, 3),
+                    "fee": round(fee, 6),
+                    "exit_reason": sell.get("reason"),
+                    "entry_reason": None,
+                    "mode": sell.get("mode"),
+                    "partial": False,
+                    "estimated": True,
+                    "bot_id": bot_id,
+                }
+            )
+    closed.sort(
+        key=lambda t: (
+            str(t.get("exit_time") or ""),
+            str(t.get("bot_id") or ""),
+            str(t.get("coin") or ""),
+        )
+    )
+    return closed
 
 
 def pair_history(rows: List[dict]) -> Dict[str, Any]:
@@ -739,91 +823,199 @@ async def positions(status: str = "open"):
 
 @router.get("/stats")
 async def stats(days: int = Query(default=30, ge=1, le=365)):
-    """Dashboard grafikleri için özet seriler."""
-    rows = db.rows("SELECT created_at, pnl_pct, mode, bot_id, coin, side FROM trades ORDER BY created_at")
-    sells = [r for r in rows if r["side"] == "SELL" and r["pnl_pct"] is not None]
+    """Dashboard grafikleri için özet seriler.
 
-    equity = []
-    factor = 1.0
-    for r in sells:
-        try:
-            factor *= 1 + float(r["pnl_pct"]) / 100.0
-        except (TypeError, ValueError):
-            continue
-        equity.append({"t": r["created_at"], "value": round((factor - 1) * 100, 3)})
+    Tüm değerler **kapanmış turların net (komisyon dahil) para K/Z'si**
+    üzerinden hesaplanır. Kümülatif seri, işlem başına yüzdeliklerin bileşik
+    çarpımı değil, gerçekleşen K/Z'nin toplamıdır; böylece "Toplam K/Z" ile
+    aynı işareti ve büyüklüğü gösterir.
+    """
+    rows = db.rows(
+        "SELECT id, created_at, pnl_pct, mode, bot_id, coin, side, quantity, price, fee, reason "
+        "FROM trades ORDER BY created_at, id"
+    )
+    closed = closed_round_trips(rows)
 
-    daily_map = {}
-    for r in sells:
-        day = (r["created_at"] or "")[:10]
+    equity: List[Dict[str, Any]] = []
+    cumulative = 0.0
+    invested_cum = 0.0
+    for t in closed:
+        cumulative += float(t["pnl_money"])
+        invested_cum += float(t["invested"])
+        equity.append(
+            {
+                "t": t["exit_time"],
+                "value": round(cumulative, 4),
+                "pnl": round(float(t["pnl_money"]), 4),
+                "pct": round(cumulative / invested_cum * 100, 3) if invested_cum else 0.0,
+            }
+        )
+
+    daily_map: Dict[str, Dict[str, Any]] = {}
+    for t in closed:
+        day = str(t.get("exit_time") or "")[:10]
         if not day:
             continue
-        bucket = daily_map.setdefault(day, {"date": day, "pnl": 0.0, "trades": 0})
-        bucket["pnl"] += float(r["pnl_pct"])
-        bucket["trades"] += 1
-    daily = [daily_map[k] for k in sorted(daily_map)][-days:]
-
-    by_bot = {}
-    for r in rows:
-        key = r["bot_id"] or "-"
-        item = by_bot.setdefault(
-            key, {"bot_id": r["bot_id"], "trades": 0, "wins": 0, "losses": 0, "pnl": 0.0, "series": []}
+        bucket = daily_map.setdefault(
+            day, {"date": day, "pnl": 0.0, "trades": 0, "invested": 0.0}
         )
-        if r["side"] == "SELL" and r["pnl_pct"] is not None:
-            pnl = float(r["pnl_pct"])
-            item["trades"] += 1
-            item["wins" if pnl > 0 else "losses"] += 1
-            item["pnl"] = round(item["pnl"] + pnl, 3)
-            item["series"].append(item["pnl"])
-    for item in by_bot.values():
-        item["series"] = item["series"][-40:]
+        bucket["pnl"] += float(t["pnl_money"])
+        bucket["invested"] += float(t["invested"])
+        bucket["trades"] += 1
+    daily = []
+    for key in sorted(daily_map):
+        bucket = daily_map[key]
+        invested = bucket.pop("invested")
+        bucket["pnl"] = round(bucket["pnl"], 4)
+        bucket["pnl_pct"] = round(bucket["pnl"] / invested * 100, 3) if invested else None
+        daily.append(bucket)
+    daily = daily[-days:]
 
-    by_coin = {}
-    for r in sells:
-        key = r["coin"] or "-"
-        item = by_coin.setdefault(key, {"coin": key, "trades": 0, "pnl": 0.0})
+    names = {
+        str(row["id"]): row.get("name")
+        for row in db.rows("SELECT id, name FROM bots")
+    }
+    by_bot: Dict[str, Dict[str, Any]] = {}
+    for t in closed:
+        key = str(t.get("bot_id") or "-")
+        item = by_bot.setdefault(
+            key,
+            {
+                "bot_id": t.get("bot_id"),
+                "name": names.get(key),
+                "trades": 0,
+                "wins": 0,
+                "losses": 0,
+                "pnl": 0.0,
+                "invested": 0.0,
+                "series": [],
+            },
+        )
+        pnl = float(t["pnl_money"])
         item["trades"] += 1
-        item["pnl"] = round(item["pnl"] + float(r["pnl_pct"]), 3)
-    coins = sorted(by_coin.values(), key=lambda x: x["trades"], reverse=True)[:8]
+        item["wins" if pnl > 0 else "losses"] += 1
+        item["pnl"] += pnl
+        item["invested"] += float(t["invested"])
+        item["series"].append(round(item["pnl"], 4))
+    bot_rows = []
+    for item in by_bot.values():
+        invested = item.pop("invested")
+        item["pnl"] = round(item["pnl"], 4)
+        item["pnl_pct"] = round(item["pnl"] / invested * 100, 3) if invested else None
+        item["series"] = item["series"][-40:]
+        bot_rows.append(item)
+    bot_rows.sort(key=lambda x: x["pnl"], reverse=True)
+
+    by_coin: Dict[str, Dict[str, Any]] = {}
+    for t in closed:
+        key = str(t.get("coin") or "-")
+        item = by_coin.setdefault(
+            key, {"coin": key, "trades": 0, "pnl": 0.0, "invested": 0.0}
+        )
+        item["trades"] += 1
+        item["pnl"] += float(t["pnl_money"])
+        item["invested"] += float(t["invested"])
+    coins = []
+    for item in by_coin.values():
+        invested = item.pop("invested")
+        item["pnl"] = round(item["pnl"], 4)
+        item["pnl_pct"] = round(item["pnl"] / invested * 100, 3) if invested else None
+        coins.append(item)
+    coins.sort(key=lambda x: x["trades"], reverse=True)
+    coins = coins[:8]
 
     modes = {"paper": 0, "live": 0}
-    for r in sells:
-        if r["mode"] in modes:
-            modes[r["mode"]] += 1
+    for t in closed:
+        mode = t.get("mode")
+        if mode in modes:
+            modes[mode] += 1
 
-    wins = sum(1 for r in sells if float(r["pnl_pct"]) > 0)
-    losses = len(sells) - wins
+    wins = sum(1 for t in closed if float(t["pnl_money"]) > 0)
+    losses = sum(1 for t in closed if float(t["pnl_money"]) <= 0)
+    invested_total = sum(float(t["invested"]) for t in closed)
+    pnl_total = sum(float(t["pnl_money"]) for t in closed)
+    fees_total = sum(float(t.get("fee") or 0.0) for t in closed)
+    estimated_total = sum(1 for t in closed if t.get("estimated"))
     return {
         "equity": equity,
         "daily": daily,
-        "by_bot": list(by_bot.values()),
+        "by_bot": bot_rows,
         "by_coin": coins,
         "modes": modes,
         "totals": {
-            "trades": len(sells),
+            "trades": len(closed),
             "wins": wins,
             "losses": losses,
-            "win_rate": round(wins / len(sells) * 100, 1) if sells else None,
-            "pnl_pct": round(sum(float(r["pnl_pct"]) for r in sells), 2),
+            "win_rate": round(wins / len(closed) * 100, 1) if closed else None,
+            "pnl_money": round(pnl_total, 4),
+            "pnl_pct": round(pnl_total / invested_total * 100, 3) if invested_total else None,
+            "invested": round(invested_total, 4),
+            "fees": round(fees_total, 4),
+            "estimated_trades": estimated_total,
         },
     }
 
 
 @router.get("/summary")
 async def summary():
+    """Üst çubuk ve paneller için tur bazlı kazanma/kaybetme özeti.
+
+    ``wins``/``losses`` kapanmış **turlar** üzerinden sayılır; ham SATIŞ
+    satırları kısmi çıkışlarda aynı pozisyonu birden çok kez sayardı.
+    """
     rows = db.rows(
-        "SELECT bot_id, mode, COUNT(*) AS trades, "
-        "SUM(CASE WHEN side='SELL' AND pnl_pct > 0 THEN 1 ELSE 0 END) AS wins, "
-        "SUM(CASE WHEN side='SELL' AND pnl_pct <= 0 THEN 1 ELSE 0 END) AS losses, "
-        "AVG(CASE WHEN side='SELL' THEN pnl_pct END) AS avg_pnl "
-        "FROM trades GROUP BY bot_id, mode"
+        "SELECT id, created_at, pnl_pct, mode, bot_id, coin, side, quantity, price, fee, reason "
+        "FROM trades ORDER BY created_at, id"
     )
-    total = db.row(
-        "SELECT COUNT(*) AS trades, "
-        "SUM(CASE WHEN side='SELL' AND pnl_pct > 0 THEN 1 ELSE 0 END) AS wins, "
-        "SUM(CASE WHEN side='SELL' AND pnl_pct <= 0 THEN 1 ELSE 0 END) AS losses "
-        "FROM trades"
-    )
-    return {"by_bot": rows, "total": total}
+    closed = closed_round_trips(rows)
+
+    by_bot_map: Dict[str, Dict[str, Any]] = {}
+    for t in closed:
+        key = str(t.get("bot_id") or "-")
+        item = by_bot_map.setdefault(
+            key,
+            {
+                "bot_id": t.get("bot_id"),
+                "mode": t.get("mode"),
+                "trades": 0,
+                "wins": 0,
+                "losses": 0,
+                "pnl_money": 0.0,
+                "pnl_pct_sum": 0.0,
+            },
+        )
+        pnl = float(t["pnl_money"])
+        item["trades"] += 1
+        item["wins" if pnl > 0 else "losses"] += 1
+        item["pnl_money"] += pnl
+        item["pnl_pct_sum"] += float(t.get("pnl_pct") or 0.0)
+
+    by_bot = []
+    for item in by_bot_map.values():
+        count = item.pop("trades")
+        pct_sum = item.pop("pnl_pct_sum")
+        item.update(
+            {
+                "trades": count,
+                "pnl_money": round(item["pnl_money"], 4),
+                "avg_pnl": round(pct_sum / count, 3) if count else None,
+            }
+        )
+        by_bot.append(item)
+
+    wins = sum(1 for t in closed if float(t["pnl_money"]) > 0)
+    losses = len(closed) - wins
+    pnl_total = sum(float(t["pnl_money"]) for t in closed)
+    return {
+        "by_bot": by_bot,
+        "total": {
+            "trades": len(closed),
+            "wins": wins,
+            "losses": losses,
+            "win_rate": round(wins / len(closed) * 100, 1) if closed else None,
+            "pnl_money": round(pnl_total, 4),
+        },
+    }
 
 
 @router.get("/events")
