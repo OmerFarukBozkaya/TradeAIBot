@@ -692,17 +692,34 @@ pre {
 /* Canlı izle: açık pozisyonun canlı mum grafiğini açar. */
 button.live-watch-btn {
   display: inline-flex; align-items: center; gap: 6px;
-  border-color: rgba(52, 211, 153, .45);
   color: #a7f3d0;
 }
-button.live-watch-btn::before {
+button.live-watch-btn:not(.icon-btn) {
+  border-color: rgba(52, 211, 153, .45);
+}
+button.live-watch-btn:not(.icon-btn)::before {
   content: "";
   width: 6px; height: 6px; border-radius: 50%;
   background: var(--green);
   box-shadow: 0 0 8px var(--green);
   animation: livePulse 1.6s ease-in-out infinite;
 }
-button.live-watch-btn:hover { border-color: rgba(52, 211, 153, .8); }
+button.live-watch-btn:hover { color: #6ee7b7; }
+.bot-card button.icon-btn.live-watch-btn {
+  color: #6ee7b7;
+  border-color: rgba(52, 211, 153, .32);
+}
+.bot-card button.icon-btn.live-watch-btn:hover {
+  color: #a7f3d0;
+  background: rgba(52, 211, 153, .14);
+  border-color: rgba(52, 211, 153, .62);
+}
+
+/* Grafik: TradingView benzeri tut-tutup kaydırma imleci. */
+svg.trade-chart { cursor: grab; }
+svg.trade-chart.is-panning { cursor: grabbing; }
+body.tc-panning { user-select: none; -webkit-user-select: none; }
+body.tc-panning, body.tc-panning * { cursor: grabbing !important; }
 
 /* Manuel satış: diğer düğmelerden ayrışsın, yanlışlıkla basılmayacak kadar net. */
 button.sell-btn {

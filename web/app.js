@@ -945,55 +945,116 @@ window.tcReset = () => {
 window.tcWheel = (ev) => {
   const d = tcData();
   if (!d) return true;
-  ev.preventDefault();
+  if (ev.preventDefault) ev.preventDefault();
   const svg = ev.currentTarget;
-  const chartId = svg.dataset ? svg.dataset.chartId : null;
-  const geom = chartId ? _chartGeom.get(chartId) : null;
+  const geom = svg && svg.dataset ? _chartGeom.get(svg.dataset.chartId) : null;
   if (!geom) return false;
   const local = _svgPoint(svg, ev.clientX, ev.clientY);
   if (!local) return false;
-  // İmlecin altındaki mum yakınlaştırma merkezi olur.
   const plotW = Math.max(1, geom.w - geom.pad.left - geom.pad.right);
   const frac = Math.min(1, Math.max(0, (local.x - geom.pad.left) / plotW));
-  const span = d.hi - d.lo;
-  window.tcZoom(ev.deltaY > 0 ? 1.28 : 1 / 1.28, d.lo + span * frac);
+
+  // Yatay tekerlek veya Shift+tekerlek: sağa/sola kaydır (TradingView gibi).
+  const horizontal = ev.shiftKey || Math.abs(ev.deltaX) > Math.abs(ev.deltaY);
+  if (horizontal) {
+    const span = d.hi - d.lo;
+    const raw = ev.deltaX || ev.deltaY;
+    const unit = ev.deltaMode === 1 ? 16 : ev.deltaMode === 2 ? 400 : 1;
+    const shift = (raw * unit / plotW) * span;
+    const v = tcClampView(d.lo + shift, d.hi + shift);
+    d.lo = v.lo;
+    d.hi = v.hi;
+    tcRedraw();
+    return false;
+  }
+
+  // Kademeli değil, tekerlek miktarına bağlı yumuşak yakınlaştırma.
+  const unit = ev.deltaMode === 1 ? 16 : ev.deltaMode === 2 ? 400 : 1;
+  const factor = Math.pow(1.0018, ev.deltaY * unit);
+  window.tcZoom(Math.min(1.7, Math.max(1 / 1.7, factor)), d.lo + (d.hi - d.lo) * frac);
   return false;
 };
 
+/** Sürükleme: piksel tabanlı, yeniden çizimden etkilenmeyen (TradingView benzeri).
+ *
+ * Her `pointermove`'da grafik yeniden çizilir ve SVG düğümü değişir. Eski
+ * uygulama sürükleme durumunu SVG düğümüne bağlıyordu; ilk yeniden çizimde
+ * düğüm ayrıldığı için kaydırma tek adımda durup "takılıyordu". Artık durum
+ * başlangıçtaki **piksel konumuna** ve görünüm aralığına bağlıdır; düğüm
+ * değişse de kaydırma kesintisiz sürer.
+ */
 window.tcDown = (ev) => {
   const d = tcData();
-  if (!d || ev.button !== 0) return;
+  if (!d) return;
+  if (ev.button != null && ev.button !== 0) return;
+  if (ev.pointerType === "mouse" && ev.buttons === 0) return;
   const svg = ev.currentTarget;
-  const chartId = svg.dataset ? svg.dataset.chartId : null;
-  const geom = chartId ? _chartGeom.get(chartId) : null;
-  const local = geom ? _svgPoint(svg, ev.clientX, ev.clientY) : null;
-  // Sürükleme kullanıcı uzayında (grafik birimi) izlenir; böylece ölçek ve
-  // kenar boşluklarından bağımsız olarak imleç grafiği birebir takip eder.
+  const geom = svg && svg.dataset ? _chartGeom.get(svg.dataset.chartId) : null;
+  if (!svg || !geom) return;
+  const rect = svg.getBoundingClientRect();
+  const plotUnits = Math.max(1, geom.w - geom.pad.left - geom.pad.right);
+  // viewBox birimi → CSS pikseli. Grafik kutuyu tam doldurduğu için oran
+  // rect.width / geom.w olur; sürükleme süresince genişlik değişmez.
+  const plotPx = Math.max(1, (rect.width || geom.w) * (plotUnits / geom.w));
   TC.drag = {
-    el: svg,
-    x: local ? local.x : 0,
-    lo: d.lo,
-    hi: d.hi,
-    plotW: geom ? Math.max(1, geom.w - geom.pad.left - geom.pad.right) : 1,
+    startX: ev.clientX,
+    startY: ev.clientY,
+    lo0: d.lo,
+    hi0: d.hi,
+    plotPx,
+    moved: false,
   };
-  ev.preventDefault();
+  _chartHideHover(svg);
+  svg.classList.add("is-panning");
+  document.body && document.body.classList.add("tc-panning");
+  try {
+    if (ev.pointerId != null && svg.setPointerCapture) {
+      svg.setPointerCapture(ev.pointerId);
+    }
+  } catch (e) { /* yakalama desteklenmiyorsa belge dinleyicileri yeterli */ }
+  if (ev.preventDefault) ev.preventDefault();
 };
 
-document.addEventListener("mousemove", (ev) => {
-  const g = TC.drag, d = tcData();
-  if (!g || !d) return;
-  const local = g.el && g.el.isConnected ? _svgPoint(g.el, ev.clientX, ev.clientY) : null;
-  if (!local) return;
-  const span = g.hi - g.lo;
-  const shift = -((local.x - g.x) / Math.max(1, g.plotW)) * span;
-  let lo = g.lo + shift, hi = g.hi + shift;
-  if (lo < d.fullLo) { lo = d.fullLo; hi = lo + span; }
-  if (hi > d.fullHi) { hi = d.fullHi; lo = hi - span; }
+let _tcDragRaf = 0;
+
+function _tcEndDrag() {
+  const active = !!TC.drag;
+  TC.drag = null;
+  if (_tcDragRaf) {
+    cancelAnimationFrame(_tcDragRaf);
+    _tcDragRaf = 0;
+  }
+  if (document.body) document.body.classList.remove("tc-panning");
+  if (active) tcRedraw();
+}
+
+document.addEventListener("pointermove", (ev) => {
+  const g = TC.drag;
+  if (!g) return;
+  const d = tcData();
+  if (!d) return;
+  const dx = ev.clientX - g.startX;
+  if (Math.abs(dx) > 1) g.moved = true;
+  const span0 = g.hi0 - g.lo0 || 1;
+  const shift = -(dx / g.plotPx) * span0;
+  let lo = g.lo0 + shift;
+  let hi = g.hi0 + shift;
+  // Sınırda aralık korunur (kaydırma "kaçmaz"), geri çekince görünüm döner.
+  if (lo < d.fullLo) { lo = d.fullLo; hi = lo + span0; }
+  if (hi > d.fullHi) { hi = d.fullHi; lo = hi - span0; }
   d.lo = lo;
   d.hi = hi;
-  tcRedraw();
+  // Kare başına tek çizim: sürükleme akıcı kalır, DOM boğulmaz.
+  if (_tcDragRaf) return;
+  _tcDragRaf = requestAnimationFrame(() => {
+    _tcDragRaf = 0;
+    if (TC.drag) tcRedraw();
+  });
 });
-document.addEventListener("mouseup", () => { TC.drag = null; });
+
+["pointerup", "pointercancel", "blur"].forEach((name) => {
+  document.addEventListener(name, _tcEndDrag);
+});
 
 window.tcFocus = (no) => {
   const d = tcData();
@@ -1089,6 +1150,8 @@ function _svgPoint(svg, clientX, clientY) {
 }
 
 function _chartHoverMove(ev) {
+  // Sürükleme sırasında imleç kutusu kapalı kalsın (kaydırmayı engellemesin).
+  if (TC.drag) return;
   const svg = ev.target && ev.target.closest ? ev.target.closest("svg.trade-chart") : null;
   if (!svg) return;
   const geom = _chartGeom.get(svg.dataset.chartId);
@@ -1399,9 +1462,10 @@ function tradePriceChart(prices, markers, opts = {}) {
 
   return `<svg class="chart-svg trade-chart" data-chart-id="${chartId}"
       viewBox="0 0 ${w} ${h}" width="100%" height="${h}" role="img"
-      style="cursor:crosshair;touch-action:none"
+      style="touch-action:none"
       onwheel="return window.tcWheel(event)"
-      onmousedown="window.tcDown(event)">
+      onpointerdown="window.tcDown(event)"
+      ondblclick="window.tcReset()">
     ${labels}
     ${xTicks}
     ${useCandles ? candlesSvg : `<path d="${line}" fill="none" stroke="#3b82f6" stroke-width="1.5" stroke-linejoin="round"/>`}
@@ -1410,7 +1474,7 @@ function tradePriceChart(prices, markers, opts = {}) {
     ${marks}
     ${lastBadge}
     <text x="${pad.left}" y="12" fill="#7f90aa" font-size="10">
-      ${shownTrades} işlem · ${pts.length} mum · ${useCandles ? "mum" : "çizgi"} görünümü · tekerlek = yakınlaştır, sürükle = kaydır, imleç = değerler
+      ${shownTrades} işlem · ${pts.length} mum · ${useCandles ? "mum" : "çizgi"} görünümü · tekerlek = yakınlaştır, sürükle = kaydır, çift tıkla = sıfırla
     </text>
     <text x="${w - pad.right}" y="12" text-anchor="end" fill="#64748b" font-size="10">
       ${esc(shortDate(pts[0].t))} → ${esc(shortDate(pts[pts.length - 1].t))}
@@ -2695,6 +2759,17 @@ function botCard(bot, seriesMap = {}) {
           <span class="dot"></span>${live ? "CANLI" : "TEST"}
         </button>
         ${sparkline(series, { width: 90, height: 26, zeroBased: true, color: chartColor })}
+        ${pos ? `<button class="icon-btn live-watch-btn" data-action="livewatch" data-id="${esc(bot.id)}" type="button"
+          title="Canlı izle: açık pozisyonun mum grafiği (10 saniyede bir güncellenir)"
+          aria-label="Canlı izle">
+          <svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true">
+            <rect x="3.5" y="8" width="4" height="8" rx="1" fill="none" stroke="currentColor" stroke-width="1.8"/>
+            <line x1="5.5" y1="4" x2="5.5" y2="8" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+            <line x1="5.5" y1="16" x2="5.5" y2="20" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+            <rect x="16.5" y="4.5" width="4" height="7" rx="1" fill="none" stroke="currentColor" stroke-width="1.8"/>
+            <line x1="18.5" y1="11.5" x2="18.5" y2="20" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+          </svg>
+        </button>` : ""}
         <button class="icon-btn" data-action="analysis" data-id="${esc(bot.id)}" type="button"
           title="İşlem analizi: ne alındı, ne satıldı, ne kadar tutuldu, ne kadar kâr/zarar"
           aria-label="İşlem analizi">
@@ -2751,8 +2826,6 @@ function botCard(bot, seriesMap = {}) {
       ${pos.partial_target_price ? `<span>kısmi kâr <b>${fmt(pos.partial_target_price, 8)}</b></span>` : ""}
       ${pos.breakeven_armed ? `<span class="tag amber" title="Kısmi kâr sonrası stop girişe çekildi">breakeven</span>` : ""}
       <span>mum <b>${esc(pos.candles || 0)}</b></span>
-      <button class="ghost small live-watch-btn" data-action="livewatch" data-id="${esc(bot.id)}" type="button"
-        title="Canlı mum grafiği: fiyat, alış ve stop seviyeleri (10 sn'de bir güncellenir)">Canlı izle</button>
     </div>` : '<div class="mt muted small">Açık pozisyon yok.</div>'}
     ${bot.state && bot.state.last_error ? `<div class="error mt">${esc(String(bot.state.last_error).split("\n").slice(-3).join("\n"))}</div>` : ""}
     <div class="muted small mt" title="Canlı motor, backtest ile aynı risk kurallarını uygular">
@@ -2763,8 +2836,6 @@ function botCard(bot, seriesMap = {}) {
     <div class="row mt">
       <button data-action="start" data-id="${esc(bot.id)}" ${bot.status === "running" ? "disabled" : ""}>Başlat</button>
       <button data-action="stop" data-id="${esc(bot.id)}" ${bot.status !== "running" && bot.status !== "stopping" ? "disabled" : ""}>Durdur</button>
-      ${pos ? `<button class="ghost live-watch-btn" data-action="livewatch" data-id="${esc(bot.id)}" type="button"
-        title="Canlı mum grafiği: fiyat, alış ve stop seviyeleri (10 sn'de bir güncellenir)">Canlı izle</button>` : ""}
       ${pos ? `<button class="sell-btn" data-action="sell" data-id="${esc(bot.id)}" type="button"
         title="Açık pozisyonu hemen piyasa fiyatından sat">Sat</button>` : ""}
       <button data-action="restart" data-id="${esc(bot.id)}">Yeniden Başlat</button>
@@ -6494,11 +6565,12 @@ window.openLiveChart = async (botId) => {
     </div>
     <div id="live-strip"></div>
     <div class="row between mt" style="gap:8px;flex-wrap:wrap">
-      <span class="muted small">tekerlek = yakınlaştır · sürükle = kaydır · imleç = mum değerleri</span>
+      <span class="muted small">tekerlek = yakınlaştır · sürükle = kaydır · Shift+tekerlek = yana kaydır · çift tıkla = sıfırla</span>
       <span class="row small" style="gap:8px">
         <button type="button" class="small ghost" onclick="window.tcZoom(1/1.7)" title="Yakınlaş">＋</button>
         <button type="button" class="small ghost" onclick="window.tcZoom(1.7)" title="Uzaklaş">−</button>
-        <button type="button" class="small ghost" onclick="window.tcReset()" title="Tüm görünüm">Sıfırla</button>
+        <button type="button" class="small ghost" onclick="window.tcReset()" title="Tüm görünüm (çift tıklama)">Sıfırla</button>
+        <button type="button" class="small ghost" id="live-more" title="Daha eski mumları yükle">Daha fazla geçmiş</button>
       </span>
     </div>
     <div id="tc-wrap"></div>
@@ -6508,7 +6580,7 @@ window.openLiveChart = async (botId) => {
     </p>`;
   modal(`Canlı izle · ${bot.name || botId}`, wrap);
 
-  const watch = { timer: null, data: null, botId, failures: 0 };
+  const watch = { timer: null, data: null, botId, failures: 0, limit: 150 };
   window.__liveWatch = watch;
 
   const drawNow = (initial) => {
@@ -6534,12 +6606,22 @@ window.openLiveChart = async (botId) => {
     }
   };
 
-  const load = async (initial) => {
+  const load = async (initial, opts = {}) => {
     try {
-      const data = await api(`/bots/${encodeURIComponent(botId)}/live-chart?candles=150`);
+      // "Daha fazla geçmiş": sağ kenar korunur, sola doğru genişletilir.
+      const prevHi = window.__btData ? Number(window.__btData.hi) : null;
+      const data = await api(
+        `/bots/${encodeURIComponent(botId)}/live-chart?candles=${watch.limit}`
+      );
       watch.data = data;
       watch.failures = 0;
       drawNow(initial);
+      if (opts.expandToLeft && prevHi !== null && window.__btData) {
+        const d = window.__btData;
+        d.hi = Math.min(prevHi, d.fullHi);
+        d.lo = d.fullLo;
+        tcRedraw();
+      }
       const ago = document.getElementById("live-ago");
       if (ago) {
         const now = new Date();
@@ -6577,6 +6659,23 @@ window.openLiveChart = async (botId) => {
   };
 
   await load(true);
+
+  // Daha fazla geçmiş: mum sayısını artır, sağ kenarı koruyarak sola genişlet.
+  const moreBtn = document.getElementById("live-more");
+  if (moreBtn) {
+    moreBtn.addEventListener("click", async () => {
+      if (watch.limit >= 400) return;
+      moreBtn.disabled = true;
+      watch.limit = Math.min(400, watch.limit + 250);
+      await load(false, { expandToLeft: true });
+      moreBtn.disabled = false;
+      if (watch.limit >= 400) {
+        moreBtn.textContent = "Tüm geçmiş yüklendi";
+        moreBtn.disabled = true;
+      }
+    });
+  }
+
   if (!window.__liveWatch) return;
   watch.timer = setInterval(() => {
     // Modal kapandıysa veya başka bir grafik açıldıysa dur.

@@ -537,12 +537,28 @@ Açık pozisyonu olan her bot kartında (Botlar sayfası) ve dashboard satırın
 - Grafik **10 saniyede bir** kendini yeniler (`LIVE_WATCH_MS = 10000`).
 - Fiyat Binance'te gerçek zamanlı, hisse/altın/döviz/fonda Yahoo'dan (gecikmeli)
   gelir; hangi kaynağın kullanıldığı şeritte **canlı / mum kapanışı** olarak yazar.
-- Tekerlekle yakınlaştır, sürükleyerek kaydır, imleçle mum değerlerini oku.
-  Yakınlaştırdığında görünüm korunur; uzaklaştırırsan yeni mumlar otomatik gelir.
 - Pozisyon kapanınca izleme kendini durdurur ve bunu bildirir.
 - API: `GET /api/bots/{bot_id}/live-chart?candles=150` → mumlar + alış/stop/kâr al
   seviyeleri + anlık fiyat. Bu uç nokta **önbelleği yazmaz** (sık çalıştığı için
   uzun geçmiş önbelleğini küçültmesin).
+
+**Grafik inceleme (TradingView benzeri).** Sürükleme, tekerlek ve çift tıklama
+tüm fiyat grafiklerinde (canlı izleme, işlem grafiği, backtest) aynı çalışır:
+
+| Hareket | Sonuç |
+|---|---|
+| **Sürükle (basılı tut)** | Grafiği sağa/sola kaydırır; her karede tek çizim, kesintisiz |
+| **Tekerlek** | İmlecin altındaki mumu merkez alarak yakınlaştır/uzaklaştır |
+| **Shift + tekerlek** / yatay tekerlek | Görünümü yana kaydırır |
+| **Çift tıkla** | Tüm görünüme döner (`Sıfırla`) |
+| **＋ / −** düğmeleri | Kademeli yakınlaştırma |
+
+- Yakınlaştırma sınırlıdır (en az ~2 mum); sınırlarda kaydırma görünüm aralığını
+  bozmadan durur, geri çekince döner.
+- Canlı izlemede **Daha fazla geçmiş** düğmesi mum sayısını 150 → 400'e çıkarır;
+  sağ kenar (güncel fiyat) korunur, sola doğru eski mumlar eklenir.
+- Sürükleme durumu SVG düğümüne değil piksel konumuna bağlıdır; grafik her 10
+  saniyede yeniden çizilse de kaydırma kopmaz.
 
 **Risk kuralları canlıda backtest ile aynıdır.** Bot oluştururken strateji tanımındaki `risk`
 bloğu (ATR stop, takipli stop, kâr koruma, bekleme) otomatik devralınır; bot kartında
