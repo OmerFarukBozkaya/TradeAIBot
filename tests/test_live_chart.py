@@ -95,8 +95,11 @@ def test_live_chart_returns_candles_and_levels(monkeypatch):
     assert first["high"] >= first["close"] >= first["low"]
     assert res["live_price"] == pytest.approx(103.0)
     assert res["position"]["entry_price"] == pytest.approx(100.0)
-    # ATR stop 100 - 2*1 = 98, üst sınır %15 → 85; etkin stop 98.
-    assert res["position"]["stop_price"] == pytest.approx(98.0)
+    # ATR stop 100 - 2*1 = 98; pozisyon %4 kâra ulaştığı için breakeven
+    # devreye girer ve stop girişe (100) çekilir — "kârdan zarara dönme" koruması.
+    assert res["position"]["stop_price"] == pytest.approx(100.0)
+    # Stop girişe çekildiği için güncel fiyat (103) stopun %3 üzerinde.
+    assert res["position"]["stop_distance_pct"] == pytest.approx(3.0)
     assert res["position"]["take_profit_price"] == pytest.approx(105.0)
     assert res["position"]["opened_at"] == "2026-01-01T10:00:00+00:00"
 

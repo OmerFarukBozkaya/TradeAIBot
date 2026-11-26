@@ -64,6 +64,11 @@ class TradingEngine:
             # Panelde açıkça verilen değerler (0 ve false dahil) devralınanı ezer.
             **{k: v for k, v in (config.get("risk") or {}).items() if v is not None and v != ""},
         }
+        # Sert stop garantisi + periyot tavanı: 20–35×ATR gibi işe yaramaz
+        # ayarlar burada güvenli aralığa çekilir (canlı ile backtest aynı).
+        from app import risk as risk_rules
+
+        self.risk, self.risk_warnings = risk_rules.normalize_risk(self.risk, self.period)
         self.filters = config.get("filters") or {}
         self.poll_seconds = int(config.get("poll_seconds", 10))
         self.fee = float(config.get("fee", settings.PAPER_FEE))
@@ -267,6 +272,18 @@ class TradingEngine:
             print(f"[start_run] çalıştırma kaydı yazılamadı: {exc}", flush=True)
         names = ", ".join(self._evaluator_name(ev) for ev in self.evaluators)
         self._log(self.bot_id, f"Bot başladı ({self.mode}, {self.period}) · strateji: {names}", "info")
+        cap = float(self.risk.get("max_stop_pct") or 0)
+        stop_atr = float(self.risk.get("stop_atr") or 0)
+        trail_atr = float(self.risk.get("trail_atr") or 0)
+        breakeven = float(self.risk.get("breakeven_pct") or 0)
+        self._log(
+            self.bot_id,
+            f"Risk: stop {stop_atr:g}×ATR (en çok %{cap:g}) · takipli "
+            f"{trail_atr:g}×ATR · breakeven %{breakeven:g}",
+            "info",
+        )
+        for warning in getattr(self, "risk_warnings", []) or []:
+            self._log(self.bot_id, f"Risk ayarı düzeltildi: {warning}", "warning")
 
     def _finish_run(self, reason: str) -> None:
         if self.run_id:
@@ -1387,7 +1404,7 @@ class TradingEngine:
 
         cash_now = float(self.state.get("cash") or 0)
         stop_hint, _kind = risk_rules.effective_stop(
-            price, atr_value, price, self.risk
+            price, atr_value, price, self.risk, period=self.period
         )
         budget = risk_rules.position_budget(
             cash_now, price, stop_hint, self.risk, self.max_position_pct
@@ -1545,7 +1562,9 @@ class TradingEngine:
         try:
             from app import risk as risk_rules
 
-            stop, _kind = risk_rules.effective_stop(avg, atr_value, avg, self.risk)
+            stop, _kind = risk_rules.effective_stop(
+                avg, atr_value, avg, self.risk, period=self.period
+            )
             target = risk_rules.target_price(avg, atr_value, self.risk)
             self._sync_protective(coin, executed, stop, target)
         except Exception as exc:  # noqa: BLE001 - koruma botu durdurmamalı
@@ -1950,7 +1969,8 @@ class TradingEngine:
 
         # --- Stop / takipli stop / breakeven / kâr al (backtest ile ortak) ---
         stop_price, stop_kind = risk_rules.effective_stop(
-            entry, atr_base, highest, self.risk, floor=position.get("stop_floor")
+            entry, atr_base, highest, self.risk,
+            floor=position.get("stop_floor"), period=self.period,
         )
         target = risk_rules.target_price(entry, atr_base, self.risk)
         partial_target = risk_rules.partial_target_price(entry, atr_base, self.risk)

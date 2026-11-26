@@ -145,6 +145,12 @@ def _bot_config(body: BotBody) -> Dict[str, Any]:
             inherited = dict(candidate)
             break
     risk = {**inherited, **explicit}
+    # Stop güvenliği: 20–35×ATR gibi işe yaramaz ayarlar kaydedilmeden önce
+    # periyot tavanına çekilir ve sert stop garantilenir. Böylece hem canlı
+    # motor hem backtest aynı (mantıklı) seviyeleri kullanır.
+    from app import risk as risk_rules
+
+    risk, risk_warnings = risk_rules.normalize_risk(risk, body.period)
 
     # Coin evreni: elle seçilenler + varsa coin listesi (kayıt anında çözülür).
     try:
@@ -195,6 +201,8 @@ def _bot_config(body: BotBody) -> Dict[str, Any]:
         "filters": body.filters,
         "max_position_pct": body.max_position_pct,
     }
+    if risk_warnings:
+        config["risk_warnings"] = risk_warnings
     if coin_list_meta:
         config["coin_list"] = coin_list_meta
     return config
@@ -220,10 +228,17 @@ def _enrich_risk(config: Dict[str, Any]) -> None:
     Eski botlarda `risk` yalnızca 4 boolean içeriyordu; stratejinin ATR stop /
     kâr koruma ayarları kaydedilmemişti. Burada eksik anahtarlar tamamlanır ki
     canlı motor backtest ile aynı kuralları uygulasın.
+
+    Ayrıca **her zaman** güvenli aralığa normalize edilir: eski kayıtlardaki
+    20–35×ATR stoplar kartta ve motorda periyot tavanına çekilir; stop
+    tanımlı değilse 2×ATR eklenir. Böylece veritabanına dokunmadan mevcut
+    botlar da mantıklı stoplarla çalışır.
     """
     risk = config.get("risk")
     if not isinstance(risk, dict):
         risk = {}
+    merged = risk
+    found = False
     for spec in config.get("strategies") or []:
         if (spec.get("type") or spec.get("kind")) != "custom":
             continue
@@ -231,9 +246,17 @@ def _enrich_risk(config: Dict[str, Any]) -> None:
         definition = (item or {}).get("definition") or {}
         inherited = definition.get("risk") if isinstance(definition, dict) else None
         if isinstance(inherited, dict) and inherited:
-            config["risk"] = {**inherited, **{k: v for k, v in risk.items() if v is not None and v != ""}}
-            return
-    config["risk"] = risk
+            merged = {**inherited, **{k: v for k, v in risk.items() if v is not None and v != ""}}
+            found = True
+            break
+    from app import risk as risk_rules
+
+    clean, warnings = risk_rules.normalize_risk(merged, config.get("period"))
+    config["risk"] = clean
+    if warnings:
+        config["risk_warnings"] = warnings
+    elif found:
+        config.pop("risk_warnings", None)
 
 
 def _money_pnl(bot_id: str, fee: float) -> Optional[Dict[str, float]]:
@@ -282,7 +305,12 @@ def _serialize(bot: Dict[str, Any]) -> Dict[str, Any]:
     fee = float(settings.PAPER_FEE or 0.001)
     if item.get("mode") == "live":
         fee = float(item["config"].get("fee") or fee)
-    position = _live_position(state.get("position"), item["config"].get("risk"), fee=fee)
+    position = _live_position(
+        state.get("position"),
+        item["config"].get("risk"),
+        fee=fee,
+        period=str(item["config"].get("period") or item.get("period") or ""),
+    )
     money = _money_pnl(item["id"], fee)
     realized_state = float(state.get("total_realized_pnl") or 0)
 
@@ -385,7 +413,9 @@ def _serialize(bot: Dict[str, Any]) -> Dict[str, Any]:
     return item
 
 
-def _stop_price(pos: Dict[str, Any], risk: Dict[str, Any]) -> Optional[float]:
+def _stop_price(
+    pos: Dict[str, Any], risk: Dict[str, Any], period: str = ""
+) -> Optional[float]:
     """Pozisyonun etkin stop seviyesi (canlı motorla aynı kurallar)."""
     from app import risk as risk_rules
 
@@ -395,15 +425,16 @@ def _stop_price(pos: Dict[str, Any], risk: Dict[str, Any]) -> Optional[float]:
     atr = float(pos.get("atr") or 0)
     highest = float(pos.get("highest_price") or entry)
     stop, _kind = risk_rules.effective_stop(
-        entry, atr, highest, risk, floor=pos.get("stop_floor")
+        entry, atr, highest, risk, floor=pos.get("stop_floor"), period=period
     )
     if stop is None:
         existing = pos.get("stop_price")
-        # Eski kayıtta stop varsa onu da tavana tabi tut.
         stop = float(existing) if existing else None
-    max_stop_pct = float(risk.get("max_stop_pct") or 0)
-    if stop is not None and max_stop_pct > 0:
-        stop = max(stop, entry * (1 - max_stop_pct / 100))
+    # effective_stop artık periyot tavanını uyguluyor; yine de eski kayıtlardan
+    # gelen çok uzak stop değerleri tavanla sınırlanır.
+    cap_pct = risk_rules.stop_cap_pct(period, risk)
+    if stop is not None:
+        stop = max(float(stop), entry * (1 - cap_pct / 100))
     return stop
 
 
@@ -411,6 +442,7 @@ def _live_position(
     position: Optional[Dict[str, Any]],
     risk: Optional[Dict[str, Any]] = None,
     fee: float = 0.0,
+    period: str = "",
 ) -> Optional[Dict[str, Any]]:
     """Pozisyonu anlık fiyatla zenginleştirir.
 
@@ -437,7 +469,7 @@ def _live_position(
         pos["price_source"] = "candle"
         if pos.get("last_price_at"):
             pos["price_at"] = pos.get("last_price_at")
-    stop = _stop_price(pos, risk or {})
+    stop = _stop_price(pos, risk or {}, period)
     if stop:
         pos["stop_price"] = round(float(stop), 8)
     from app import risk as risk_rules

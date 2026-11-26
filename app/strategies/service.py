@@ -74,7 +74,25 @@ def get_version(strategy_id: str, version: int) -> Optional[Dict[str, Any]]:
     return json.loads(item["definition_json"]) if item else None
 
 
+def _normalized_definition(definition: Dict[str, Any]) -> Dict[str, Any]:
+    """Strateji tanımındaki risk çarpanlarını güvenli aralığa çeker.
+
+    Strateji tanımları periyottan bağımsızdır; bu yüzden yalnızca periyottan
+    bağımsız sınırlar (6×ATR, %20 mutlak tavan) uygulanır. Periyoda özel
+    tavanlar bot oluşturulurken eklenir. Girdi sözlüğü değiştirilmez.
+    """
+    from app import risk as risk_rules
+
+    clean = dict(definition or {})
+    risk = clean.get("risk")
+    if isinstance(risk, dict) and risk:
+        sanitized, _warnings = risk_rules.clamp_risk_multipliers(risk)
+        clean["risk"] = sanitized
+    return clean
+
+
 def create_custom(definition: Dict[str, Any], strategy_id: Optional[str] = None) -> Dict[str, Any]:
+    definition = _normalized_definition(definition)
     errors = validate_definition(definition)
     if errors:
         raise StrategyValidationError("; ".join(errors))
@@ -99,6 +117,7 @@ def update_custom(strategy_id: str, definition: Dict[str, Any]) -> Dict[str, Any
     current = get_custom(strategy_id)
     if not current:
         raise StrategyValidationError("Strateji bulunamadı")
+    definition = _normalized_definition(definition)
     errors = validate_definition(definition)
     if errors:
         raise StrategyValidationError("; ".join(errors))

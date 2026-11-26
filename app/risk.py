@@ -17,6 +17,101 @@ DEFAULT_STATIC_STOP_PCT = 2.5
 DEFAULT_SUPPORT_LOOKBACK = 300
 DEFAULT_PARTIAL_FRACTION = 0.5
 
+# ----------------------------------------------------------------------
+# Güvenli stop sınırları
+# ----------------------------------------------------------------------
+# ATR çarpanı olarak verilen stop, bu değerin üzerine çıkamaz. 6×ATR'den
+# uzak bir stop pratikte hiç tetiklenmez; pozisyon kârdan zarara döner.
+MAX_STOP_ATR = 6.0
+MAX_TRAIL_ATR = 6.0
+MAX_TAKE_PROFIT_ATR = 8.0
+DEFAULT_STOP_ATR = 2.0
+
+# Her durumda geçerli mutlak tavan (yüzde).
+ABSOLUTE_STOP_CAP = 20.0
+
+# Periyoda göre stop tavanı (yüzde). ATR çarpanı bu mesafeyi aşamaz.
+# Kısa periyotta stop yakın olmalı; yoksa zarar birikmeden çıkılmıyor.
+PERIOD_STOP_CAP: Dict[str, float] = {
+    "1m": 2.0, "3m": 2.5, "5m": 3.0, "15m": 4.0, "30m": 5.0,
+    "45m": 5.5, "1h": 6.0, "2h": 7.0, "4h": 8.0, "6h": 9.0,
+    "8h": 10.0, "12h": 10.0, "1d": 12.0, "3d": 14.0, "1w": 16.0,
+    "1M": 18.0,
+}
+
+# Hiç stop kuralı tanımlanmadıysa kullanılacak varsayılan stop mesafesi (yüzde).
+# Stratejide risk bloğu boş olan botlarda bile stop bulunmasını sağlar.
+PERIOD_STOP_PCT: Dict[str, float] = {
+    "1m": 1.0, "3m": 1.2, "5m": 1.5, "15m": 2.0, "30m": 2.5,
+    "45m": 2.8, "1h": 3.0, "2h": 3.5, "4h": 4.5, "6h": 5.0,
+    "8h": 5.5, "12h": 6.0, "1d": 7.0, "3d": 8.0, "1w": 10.0,
+    "1M": 12.0,
+}
+
+DEFAULT_STOP_CAP = 12.0
+DEFAULT_STOP_PCT = 5.0
+
+
+def period_key(period: Any) -> str:
+    """Periyot metnini kanonik anahtara çevirir (``2H`` → ``2h``, ``1Gun`` → ``1d``)."""
+    text = str(period or "").strip()
+    if not text:
+        return ""
+    try:
+        from app.market_data.periods import parse_period
+
+        return parse_period(text).text
+    except Exception:  # noqa: BLE001 - bilinmeyen periyot: ham metin
+        return text
+
+
+def period_stop_cap(period: Any) -> float:
+    """Periyodun izin verdiği en uzak stop mesafesi (yüzde)."""
+    key = period_key(period)
+    base = PERIOD_STOP_CAP.get(key)
+    if base:
+        return base
+    # Bilinmeyen periyot: adım sayısından kaba tahmin (1m → 2, 1d → 12).
+    if key:
+        try:
+            from app.market_data.periods import parse_period
+
+            ms = parse_period(key).ms
+            if ms <= 300_000:
+                return 3.0
+            if ms <= 3_600_000:
+                return 5.0
+            if ms <= 21_600_000:
+                return 8.0
+            if ms <= 86_400_000:
+                return 12.0
+            return 16.0
+        except Exception:  # noqa: BLE001
+            pass
+    return DEFAULT_STOP_CAP
+
+
+def period_default_stop_pct(period: Any) -> float:
+    """Stop kuralı yoksa kullanılacak varsayılan mesafe (yüzde)."""
+    key = period_key(period)
+    if key in PERIOD_STOP_PCT:
+        return PERIOD_STOP_PCT[key]
+    return DEFAULT_STOP_PCT
+
+
+def stop_cap_pct(period: Any, risk: Optional[Dict[str, Any]]) -> float:
+    """Etkin stop tavanı (yüzde).
+
+    Kullanıcı daha **sıkı** bir ``max_stop_pct`` verdiyse o kullanılır; daha
+    geniş bir değer verirse periyot tavanı geçerli olur. Böylece 15m bir botta
+    "%35 stop" gibi işe yaramaz ayarlar sessizce kabul edilmez.
+    """
+    cap = period_stop_cap(period)
+    user = _f(risk, "max_stop_pct")
+    if 0 < user < cap:
+        cap = user
+    return max(0.2, min(cap, ABSOLUTE_STOP_CAP))
+
 
 def _f(risk: Optional[Dict[str, Any]], key: str, default: float = 0.0) -> float:
     """Risk sözlüğünden güvenli sayı okur (boş/bozuk değer → varsayılan)."""
@@ -29,6 +124,113 @@ def _f(risk: Optional[Dict[str, Any]], key: str, default: float = 0.0) -> float:
         return default
 
 
+def clamp_risk_multipliers(risk: Optional[Dict[str, Any]]) -> Tuple[Dict[str, Any], List[str]]:
+    """Strateji tanımındaki ATR çarpanlarını güvenli sınıra çeker.
+
+    Periyot bilinmediği için yalnızca **periyottan bağımsız** sınırlar uygulanır
+    (``MAX_STOP_ATR``, ``MAX_TRAIL_ATR``, ``ABSOLUTE_STOP_CAP``). Periyoda özel
+    tavan ve varsayılanlar bot oluşturulurken ``normalize_risk`` ile eklenir.
+    """
+    clean: Dict[str, Any] = dict(risk or {})
+    warnings: List[str] = []
+    for key, limit in (
+        ("stop_atr", MAX_STOP_ATR),
+        ("trail_atr", MAX_TRAIL_ATR),
+        ("take_profit_atr", MAX_TAKE_PROFIT_ATR),
+        ("partial_tp_atr", MAX_TAKE_PROFIT_ATR),
+    ):
+        value = _f(clean, key)
+        if value > limit:
+            clean[key] = limit
+            warnings.append(f"{key} {value:g} → {limit:g}")
+    cap = _f(clean, "max_stop_pct")
+    if cap > ABSOLUTE_STOP_CAP:
+        clean["max_stop_pct"] = ABSOLUTE_STOP_CAP
+        warnings.append(f"max_stop_pct %{cap:g} → %{ABSOLUTE_STOP_CAP:g}")
+    for key in ("static_stop_pct",):
+        value = _f(clean, key)
+        if value > ABSOLUTE_STOP_CAP:
+            clean[key] = ABSOLUTE_STOP_CAP
+            warnings.append(f"{key} %{value:g} → %{ABSOLUTE_STOP_CAP:g}")
+    return clean, warnings
+
+
+def normalize_risk(
+    risk: Optional[Dict[str, Any]], period: Any = ""
+) -> Tuple[Dict[str, Any], List[str]]:
+    """Risk ayarlarını güvenli aralığa çeker ve **stop garantiler**.
+
+    Sorun: strateji tanımlarında ``stop_atr`` çoğu zaman yüzde sanılarak
+    20–35 yazılmıştı. Kod bunu ATR çarpanı olarak kullandığı için 1h'de %50,
+    15m'de %36 uzaklıkta stoplar oluşuyordu; bunlar hiç tetiklenmiyor,
+    pozisyon kârdan zarara dönüyordu. ``risk`` bloğu boş olan botlarda ise
+    hiç stop yoktu (yalnızca çok uzak destek stop).
+
+    Bu fonksiyon:
+      - ATR çarpanlarını ``MAX_*`` sınırına çeker,
+      - ``max_stop_pct`` değerini periyot tavanına indirir (her zaman yazar),
+      - breakeven tanımlı değilse kâr koruması ekler,
+      - hiç sert stop yoksa ``DEFAULT_STOP_ATR`` ekler.
+
+    Döndürür: ``(temiz_risk, uyarilar)``. Uyarılar bot/log kaydına yazılır.
+    """
+    clean: Dict[str, Any] = dict(risk or {})
+    warnings: List[str] = []
+
+    for key, limit in (
+        ("stop_atr", MAX_STOP_ATR),
+        ("trail_atr", MAX_TRAIL_ATR),
+        ("take_profit_atr", MAX_TAKE_PROFIT_ATR),
+        ("partial_tp_atr", MAX_TAKE_PROFIT_ATR),
+    ):
+        value = _f(clean, key)
+        if value > limit:
+            clean[key] = limit
+            warnings.append(f"{key} {value:g} → {limit:g} (güvenli üst sınır)")
+
+    cap = period_stop_cap(period)
+    user_cap = _f(clean, "max_stop_pct")
+    if user_cap <= 0:
+        clean["max_stop_pct"] = cap
+    elif user_cap > cap:
+        clean["max_stop_pct"] = cap
+        warnings.append(
+            f"max_stop_pct %{user_cap:g} → %{cap:g} ({period_key(period) or 'periyot'} tavanı)"
+        )
+
+    static_pct = _f(clean, "static_stop_pct")
+    if static_pct > cap:
+        clean["static_stop_pct"] = cap
+        warnings.append(f"static_stop_pct %{static_pct:g} → %{cap:g} (tavan)")
+
+    # Sert stop var mı? (breakeven tek başına sert stop değildir: kâr
+    # eşiğine ulaşmadan hiçbir seviye üretmez.)
+    hard_stop = (
+        _f(clean, "stop_atr") > 0
+        or _f(clean, "trail_atr") > 0
+        or bool(clean.get("static_stop"))
+        or bool(clean.get("dynamic_stop"))
+    )
+    if not hard_stop:
+        clean["stop_atr"] = DEFAULT_STOP_ATR
+        warnings.append(
+            f"tanımlı stop yoktu → {DEFAULT_STOP_ATR:g}×ATR eklendi "
+            f"(en çok %{cap:g})"
+        )
+
+    # Kâr koruması: breakeven tanımlı değilse stop mesafesinin ~%60'ı kadar
+    # kârda stop girişe çekilir. "Kârdayken zarara dönme" şikâyetini çözer;
+    # açıkça 0 yazıldıysa (kullanıcı kapattıysa) dokunulmaz.
+    raw_be = clean.get("breakeven_pct")
+    if raw_be is None or raw_be == "":
+        clean["breakeven_pct"] = max(0.5, round(cap * 0.6, 1))
+        warnings.append(
+            f"breakeven eklendi (%{clean['breakeven_pct']:g} kârda stop girişe)"
+        )
+
+    return clean, warnings
+
+
 # ----------------------------------------------------------------------
 # Seviyeler
 # ----------------------------------------------------------------------
@@ -38,13 +240,18 @@ def effective_stop(
     highest: float,
     risk: Optional[Dict[str, Any]],
     floor: Optional[float] = None,
+    period: Any = "",
 ) -> Tuple[Optional[float], str]:
     """Etkin stop seviyesi ve türü.
 
-    - ATR stop: ``giriş − stop_atr × ATR``, ``max_stop_pct`` ile tavanlanır.
+    - ATR stop: ``giriş − stop_atr × ATR``, periyot tavanı ile sınırlanır.
     - Takipli stop: kâr ``trail_after_pct`` eşiğini geçince ``zirve − trail_atr × ATR``.
     - Breakeven: kâr ``breakeven_pct`` eşiğini geçince stop en az girişe çekilir.
     - ``floor``: kısmi kâr sonrası zorunlu taban (genelde giriş fiyatı).
+
+    **Stop garantisi:** hiçbir kural stop üretmiyorsa periyodun varsayılan
+    yüzdesi kullanılır. Ayrıca hiçbir stop periyot tavanından (``max_stop_pct``
+    veya ``PERIOD_STOP_CAP``) daha uzağa konamaz.
 
     Döndürür: ``(fiyat, tür)``; tür ``stop`` / ``takipli-stop`` / ``breakeven``.
     """
@@ -54,18 +261,24 @@ def effective_stop(
     stop: Optional[float] = None
     kind = "stop"
 
+    cap_pct = stop_cap_pct(period, risk)
+    cap_price = entry * (1 - cap_pct / 100.0)
+
     stop_atr = _f(risk, "stop_atr")
-    if atr > 0 and stop_atr > 0:
-        stop = entry - stop_atr * atr
-        max_stop_pct = _f(risk, "max_stop_pct")
-        if max_stop_pct > 0:
-            stop = max(stop, entry * (1 - max_stop_pct / 100))
+    if stop_atr > 0:
+        stop_atr = min(stop_atr, MAX_STOP_ATR)
+        if atr > 0:
+            stop = entry - stop_atr * atr
+        else:
+            # ATR hesaplanamadıysa çarpanı anlamsız; varsayılan yüzdeyi kullan.
+            stop = entry * (1 - period_default_stop_pct(period) / 100.0)
 
     trail_atr = _f(risk, "trail_atr")
     trail_after = _f(risk, "trail_after_pct")
-    if atr > 0 and trail_atr > 0:
+    if trail_atr > 0:
+        trail_atr = min(trail_atr, MAX_TRAIL_ATR)
         armed = trail_after <= 0 or highest >= entry * (1 + trail_after / 100)
-        if armed:
+        if armed and atr > 0:
             trail = highest - trail_atr * atr
             if stop is None or trail > stop:
                 stop = trail
@@ -87,7 +300,28 @@ def effective_stop(
         stop = floor_price
         kind = "breakeven"
 
+    if stop is None:
+        # Hiç kural yok: varsayılan yüzde stop (periyoda göre).
+        stop = entry * (1 - period_default_stop_pct(period) / 100.0)
+        kind = "stop"
+
+    # Tavan: periyot/kullanıcı sınırından daha uzak stop yok.
+    if stop < cap_price:
+        stop = cap_price
+
     return stop, kind
+
+
+def stop_distance_pct(entry: float, stop: Optional[float]) -> Optional[float]:
+    """Stop mesafesi (yüzde, pozitif = girişin altında)."""
+    try:
+        entry = float(entry)
+        stop = float(stop)  # type: ignore[arg-type]
+    except (TypeError, ValueError):
+        return None
+    if entry <= 0 or stop <= 0:
+        return None
+    return (entry - stop) / entry * 100.0
 
 
 def target_price(

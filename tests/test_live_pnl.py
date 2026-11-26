@@ -27,9 +27,10 @@ def test_position_uses_live_price(monkeypatch):
         "quantity": 0.5,
         "entry_price": 100.0,
         "last_price": 100.0,
+        "atr": 2.0,
         "stop_price": 90.0,
     }
-    pos = bots_api._live_position(position)
+    pos = bots_api._live_position(position, {"stop_atr": 5}, period="1d")
     assert pos["price_source"] == "live"
     assert pos["last_price"] == 120.0
     assert pos["unrealized_pnl"] == 10.0
@@ -80,14 +81,14 @@ def test_trailing_stop_arms_after_threshold(monkeypatch):
         "highest_price": 130.0,
     }
     pos = bots_api._live_position(
-        position, {"stop_atr": 5, "trail_atr": 8, "trail_after_pct": 20}
+        position, {"stop_atr": 5, "trail_atr": 6, "trail_after_pct": 20}, period="1d"
     )
-    # 130 - 8*2 = 114 > 100 - 5*2 = 90 → takipli stop devrede
-    assert pos["stop_price"] == 114.0
+    # 130 - 6*2 = 118 > 100 - 5*2 = 90 → takipli stop devrede
+    assert pos["stop_price"] == 118.0
 
 
-def test_max_stop_pct_caps_wide_stop(monkeypatch):
-    """Yüksek volatiliteli coin: 35×ATR neredeyse sıfıra inerken tavan devreye girer."""
+def test_wide_stop_is_capped_by_period(monkeypatch):
+    """35×ATR (saçma) stop periyot tavanına çekilir; 1h'de en çok %6."""
     monkeypatch.setattr(live_prices, "prices", lambda symbols: {"DODOUSDT": 0.0312})
     position = {
         "coin": "DODOUSDT",
@@ -96,10 +97,12 @@ def test_max_stop_pct_caps_wide_stop(monkeypatch):
         "atr": 0.0008631765124977679,
         "highest_price": 0.03406,
     }
-    pos = bots_api._live_position(position, {"stop_atr": 35, "max_stop_pct": 15})
-    # sınırsız stop 0.00104 olurdu; tavan %15 → 0.02657
-    assert pos["stop_price"] == pytest.approx(0.02656728, rel=1e-6)
-    assert pos["stop_distance_pct"] == pytest.approx(round((0.0312 / 0.02656728 - 1) * 100, 2))
+    pos = bots_api._live_position(position, {"stop_atr": 35, "max_stop_pct": 15}, period="1h")
+    # 35×ATR ~ %96 uzak; 1h tavanı %6 → 0.029379
+    assert pos["stop_price"] == pytest.approx(0.03125562 * 0.94, rel=1e-6)
+    assert pos["stop_distance_pct"] == pytest.approx(
+        round((0.0312 / (0.03125562 * 0.94) - 1) * 100, 2)
+    )
 
 
 def test_saved_stop_is_also_capped(monkeypatch):
@@ -113,8 +116,9 @@ def test_saved_stop_is_also_capped(monkeypatch):
         "atr": 0.0,
         "highest_price": 100.0,
     }
-    pos = bots_api._live_position(position, {"stop_atr": 5, "max_stop_pct": 15})
-    assert pos["stop_price"] == 85.0
+    pos = bots_api._live_position(position, {"stop_atr": 5, "max_stop_pct": 15}, period="1h")
+    # ATR yok → varsayılan %3 stop; kayıtlı 3 seviyesi tavanla yukarı çekilir.
+    assert pos["stop_price"] == 97.0
 
 
 def test_serialize_computes_equity_and_total(monkeypatch):

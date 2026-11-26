@@ -389,6 +389,7 @@ def _risk_exit(
     idx: int,
     atr: List[Optional[float]],
     risk: Dict[str, Any],
+    period: str = "",
 ) -> Optional[tuple]:
     """Açık pozisyon için stop / takipli stop / breakeven / kâr al kontrolü.
 
@@ -408,6 +409,7 @@ def _risk_exit(
         float(position.get("highest") or entry),
         risk,
         floor=position.get("stop_floor"),
+        period=period,
     )
     if stop_price is not None and low <= stop_price:
         # Gap'te (mum stopun altında açıldı) açılış fiyatından çıkılır; aksi
@@ -579,6 +581,8 @@ def run_backtest(params: Dict[str, Any]) -> Dict[str, Any]:
         definition = getattr(evaluator, "definition", None) or {}
         risk = definition.get("risk") if isinstance(definition, dict) else None
     risk = {**settings.DEFAULT_RISK, **(risk if isinstance(risk, dict) else {})}
+    # Canlı motorla aynı normalizasyon: periyot tavanı + sert stop garantisi.
+    risk, risk_warnings = risk_rules.normalize_risk(risk, period)
     atr = _atr_series(data) if risk else []
     adx: List[Any] = []
     if risk.get("dynamic_stop"):
@@ -613,7 +617,7 @@ def run_backtest(params: Dict[str, Any]) -> Dict[str, Any]:
             exec_price = price * (1 + slippage)
             entry_atr = (atr[idx] if atr and idx < len(atr) else None) or 0.0
             stop_price, _kind = risk_rules.effective_stop(
-                exec_price, entry_atr, exec_price, risk
+                exec_price, entry_atr, exec_price, risk, period=period
             )
             budget = risk_rules.position_budget(
                 cash, exec_price, stop_price, risk, max_position_pct
@@ -641,7 +645,7 @@ def run_backtest(params: Dict[str, Any]) -> Dict[str, Any]:
             exit_price = None
             reason = None
             if risk:
-                hit = _risk_exit(position, data, idx, atr, risk)
+                hit = _risk_exit(position, data, idx, atr, risk, period=period)
                 if hit:
                     # Stop/kâr al seviyesinden çıkarken de kayma uygulanır
                     # (canlı/paper motorla aynı varsayım).
@@ -900,6 +904,9 @@ def run_backtest(params: Dict[str, Any]) -> Dict[str, Any]:
             "risk_per_trade_pct": risk.get("risk_per_trade_pct") or 0,
             "cooldown": risk.get("cooldown") or 0,
             "cooldown_min_loss_pct": risk.get("cooldown_min_loss_pct") or 0,
+            "max_stop_pct": risk.get("max_stop_pct") or 0,
+            "stop_cap_pct": risk_rules.stop_cap_pct(period, risk),
+            "warnings": list(risk_warnings),
             "exit_reasons": exit_reasons,
         },
         "equity": curve,

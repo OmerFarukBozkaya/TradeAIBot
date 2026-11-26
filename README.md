@@ -589,23 +589,43 @@ korumasız bırakılmaz.
 Çökmüş botlar (yeniden başlatma açıksa) uygulama/container yeniden başladığında **otomatik geri
 getirilir** ve önceki hata mesajı temizlenir.
 
-### Stop nasıl hesaplanır? (`max_stop_pct`)
+### Stop nasıl hesaplanır? (periyot tavanı)
 
 `stop = giriş − (stop_atr × ATR)` — ATR(14), giriş mumundaki ortalama gerçek aralıktır ve
-pozisyon boyunca sabit kalır.
+pozisyon boyunca sabit kalır. **Etkin stop = max(ATR stop, giriş × (1 − tavan/100))**.
 
-Sorun: ATR **coin'in oynaklığına** bağlıdır. BTC'de ATR fiyatın ~%0,5'i iken 35×ATR ≈ %15-20
-makul; ama ATR fiyatın %3'ü olan bir coinde (ör. DODO 15m) 35×ATR stopu **%97 aşağıya** atar:
-`0.03126 − 35×0.00086 = 0.00104`. Bu stop çalışmaz; pratikte "coin sıfırlanmadıkça tut" olur.
+Sorun: ATR **coin'in oynaklığına** bağlıdır. Aynı `stop_atr` çarpanı sakin bir coinde
+%3, oynak bir coinde %50 uzaklık üretebilir. 26 Kasım 2026'da uzak sunucudaki 4 botta
+tam olarak bu yaşandı:
 
-Bu yüzden **`max_stop_pct`** üst sınırı vardır: `stop = max(giriş − stop_atr×ATR, giriş × (1 − max_stop_pct/100))`.
-15m Kısa Vade Pro'da `max_stop_pct = 15`, yani stop **girişten en fazla %15 aşağıda** olabilir.
-Aynı kural hem backtest hem canlı motorda uygulanır; bot kartında "(en çok %15)" olarak görünür.
+| Bot | Ayar | Sonuç |
+|---|---|---|
+| 1h | `stop_atr=20, trail_atr=25` | DODO stopu girişin **%52** altında; hiç tetiklenmedi, kârlar destek-stop ile %−4'e döndü |
+| 15m | `stop_atr=35, max_stop_pct=15` | FTT "stop" ile **−%16,25** kapandı |
+| 4h | risk bloğu boş | Sert stop yok; LISTA −%12'ye düştü |
+| 1d | risk bloğu boş | Stop yok; RARE −%5,78 destek-stop ile kapandı |
 
-Ölçüm (15m, 100.000 mum, BTC/XRP/SOL/DODO): sınırsız stop toplam fark 141 ama **en kötü coin
-+4,7**; %15 tavanla toplam 96 ama **en kötü coin +14,5** ve ortalama düşüş aynı. Yani biraz
-getiri karşılığında stop gerçekten işlevli hâle gelir. (%8 çok sık stop tetikleyip kötüleşiyor,
-%20 ise yüksek oynaklıklı coinde hâlâ etkisiz.)
+Bu yüzden üç katmanlı güvenlik vardır ve **canlı motor ile backtest aynı** fonksiyonları
+(`app/risk.py`) kullanır:
+
+1. **ATR çarpanı sınırı:** `stop_atr` ve `trail_atr` en fazla **6×ATR**. 20–35 gibi değerler
+   sessizce 6'ya çekilir ve panelde/logda uyarı gösterilir.
+2. **Periyot tavanı:** stop, periyodun izin verdiği mesafeden uzağa konamaz.
+
+   | Periyot | 1m | 5m | 15m | 1h | 4h | 1d |
+   |---|---|---|---|---|---|---|
+   | En çok stop | %2 | %3 | %4 | %6 | %8 | %12 |
+
+   Kullanıcı daha **sıkı** bir `max_stop_pct` girerse o kullanılır; daha geniş bir değer
+   (ör. 15m'de %15) tavanla sınırlanır.
+3. **Stop garantisi + kâr koruması:** hiç sert stop tanımlı değilse **2×ATR** eklenir
+   (periyot tavanıyla sınırlı). `breakeven_pct` boşsa stop mesafesinin ~%60'ı kadar kârda
+   stop **girişe** çekilir; pozisyon "kârdayken zarara" dönmez.
+
+Normalizasyon üç yerde uygulanır: bot kaydı (`_bot_config`), bot görüntüleme (`_enrich_risk`)
+ve motor/backtest başlangıcı. **Veritabanına dokunmadan** mevcut botların ayarları da
+güvenli aralığa çekilir; bot kartında "Stop güvenliği: …" satırı ne değiştiğini söyler.
+Strateji kaydında periyottan bağımsız sınırlar (6×ATR, %20 mutlak tavan) uygulanır.
 
 ---
 

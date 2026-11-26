@@ -2831,6 +2831,9 @@ function botCard(bot, seriesMap = {}) {
     <div class="muted small mt" title="Canlı motor, backtest ile aynı risk kurallarını uygular">
       Risk: ${esc(riskSummary(cfg.risk) || "yok (yalnızca sinyalle kapanır)")}
     </div>
+    ${(cfg.risk_warnings || []).length ? `<div class="mt small" style="color:var(--amber, #fbbf24)">
+      <b>Stop güvenliği:</b> ${esc((cfg.risk_warnings || []).join(" · "))}
+    </div>` : ""}
     ${exitReasonsHtml(st.exit_reasons)}
     ${pendingExitHtml(st.pending_exit)}
     <div class="row mt">
@@ -2976,28 +2979,28 @@ const RISK_ITEMS = [
 const RISK_NUM_FIELDS = [
   {
     key: "stop_atr", label: "Zarar durdur (stop)", unit: "× ATR", step: "0.1",
-    help: "Giriş fiyatının kaç ATR aşağısında satılacağı. ATR, coinin son 14 mumdaki ortalama oynaklığıdır. Büyük değer = stop uzak, daha az erken çıkış ama daha büyük zarar.",
-    rec: { "1m": 35, "5m": 35, "15m": 30, "1h": 20, "4h": 5, "1d": 2 },
+    help: "Giriş fiyatının kaç ATR aşağısında satılacağı. ATR, coinin son 14 mumdaki ortalama oynaklığıdır. Sağlıklı aralık 1,5–3×ATR; en fazla 6×ATR ve periyot tavanı (15m %4, 1h %6, 4h %8, 1d %12) uygulanır. Çok büyük değer stopu işe yaramaz hale getirir.",
+    rec: { "1m": 2, "5m": 2, "15m": 2, "1h": 2, "4h": 2.5, "1d": 3 },
   },
   {
     key: "max_stop_pct", label: "Stop üst sınırı", unit: "%", step: "0.5",
-    help: "ATR stop bu yüzdeden daha uzağa konamaz. Yüksek oynaklıklı coinlerde stopun %90 aşağıya düşmesini engelleyen felaket korumasıdır.",
-    rec: { "1m": 35, "5m": 35, "15m": 35, "1h": 30, "4h": 20, "1d": 15 },
+    help: "Stop bu yüzdeden daha uzağa konamaz. Periyot tavanı vardır (15m %4, 1h %6, 4h %8, 1d %12); daha geniş bir değer girilse bile tavan geçerlidir. Kârdan zarara dönmeyi engelleyen asıl sınırdır.",
+    rec: { "1m": 2, "5m": 3, "15m": 4, "1h": 6, "4h": 8, "1d": 12 },
   },
   {
     key: "static_stop_pct", label: "Sabit stop yüzdesi", unit: "%", step: "0.5",
     help: "Panelde 'Sabit stop' işaretliyse giriş fiyatının bu yüzde altında satılır. Varsayılan %2,5.",
-    rec: { "1m": 2.5, "5m": 2.5, "15m": 2.5, "1h": 2.5, "4h": 3, "1d": 4 },
+    rec: { "1m": 2, "5m": 2.5, "15m": 3, "1h": 3.5, "4h": 4.5, "1d": 6 },
   },
   {
     key: "trail_atr", label: "Takipli stop", unit: "× ATR", step: "0.1",
-    help: "Fiyat yükseldikçe stop yukarı taşınır. Zirveden kaç ATR aşağıda takip edileceği. Kârı kilitler, trend dönünce çıkar.",
-    rec: { "1m": 30, "5m": 30, "15m": 30, "1h": 25, "4h": 12, "1d": 8 },
+    help: "Fiyat yükseldikçe stop yukarı taşınır. Zirveden kaç ATR aşağıda takip edileceği (en fazla 6×ATR). Kârı kilitler, trend dönünce çıkar.",
+    rec: { "1m": 1.5, "5m": 1.5, "15m": 2, "1h": 2, "4h": 2.5, "1d": 3 },
   },
   {
     key: "trail_after_pct", label: "Takipli stop başlangıcı", unit: "% kâr", step: "0.5",
     help: "Kâr bu yüzdeyi geçmeden takipli stop devreye girmez. Erken dalgalanmada pozisyonun kesilmesini önler.",
-    rec: { "1m": 2, "5m": 2, "15m": 3, "1h": 5, "4h": 8, "1d": 10 },
+    rec: { "1m": 1, "5m": 1.5, "15m": 2, "1h": 3, "4h": 5, "1d": 7 },
   },
   {
     key: "take_profit_atr", label: "Kâr al (ATR)", unit: "× ATR", step: "0.1",
@@ -3011,8 +3014,8 @@ const RISK_NUM_FIELDS = [
   },
   {
     key: "breakeven_pct", label: "Breakeven eşiği", unit: "% kâr", step: "0.5",
-    help: "Kâr bu yüzdeyi geçince stop en az giriş fiyatına çekilir. Artık kaybetme ihtimali kalmaz; 0 = kapalı. Örnek: 3 → %3 kârda stop girişe gelir.",
-    rec: { "1m": 2, "5m": 2, "15m": 3, "1h": 4, "4h": 6, "1d": 8 },
+    help: "Kâr bu yüzdeyi geçince stop en az giriş fiyatına çekilir; artık kaybetme ihtimali kalmaz. 0 = kapalı. Boş bırakılırsa stop mesafesinin ~%60'ı otomatik uygulanır.",
+    rec: { "1m": 1, "5m": 1.5, "15m": 2.4, "1h": 3.6, "4h": 4.8, "1d": 7.2 },
   },
   {
     key: "partial_tp_pct", label: "Kısmi kâr hedefi", unit: "%", step: "0.5",

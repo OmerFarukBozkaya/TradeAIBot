@@ -151,17 +151,18 @@ def test_bot_config_inherits_strategy_risk(temp_db):
         risk={"dynamic_stop": False, "static_stop": False},
     )
     config = _bot_config(body)
-    assert config["risk"]["stop_atr"] == 35
+    # Eski stratejideki 35×ATR, kayıt sırasında güvenli sınıra çekilir.
+    assert config["risk"]["stop_atr"] == 6.0
     assert config["risk"]["cooldown"] == 10
     assert config["risk"]["profit_exit_donchian"] == 10
-    # Açıkça verilen değer devralınanı ezer.
+    # Açıkça verilen değer devralınanı ezer (yine güvenli sınıra çekilir).
     body2 = BotBody(
         name="Bot2",
         period="1h",
         strategies=[{"type": "custom", "id": created["id"]}],
-        risk={"stop_atr": 20},
+        risk={"stop_atr": 3},
     )
-    assert _bot_config(body2)["risk"]["stop_atr"] == 20
+    assert _bot_config(body2)["risk"]["stop_atr"] == 3
 
 
 def test_engine_inherits_risk_from_strategy(temp_db):
@@ -204,7 +205,7 @@ def test_engine_inherits_risk_from_strategy(temp_db):
         },
         "paper",
     )
-    assert engine.risk["stop_atr"] == 35
+    assert engine.risk["stop_atr"] == 6.0
     assert engine.risk["cooldown"] == 10
 
 

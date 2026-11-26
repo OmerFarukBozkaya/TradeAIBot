@@ -69,9 +69,17 @@ def test_stop_has_priority_over_take_profit():
     assert hit and hit[1] == "stop"
 
 
-def test_no_risk_returns_none():
+def test_no_risk_still_gets_default_stop():
+    """Stop tanımlı olmasa bile varsayılan yüzde stop uygulanır (stop garantisi)."""
     data = make_data([(100, 200, 1, 100)])
-    assert _risk_exit(pos(), data, 0, [2.0], {}) is None
+    hit = _risk_exit(pos(), data, 0, [2.0], {})
+    assert hit is not None
+    assert hit[1] == "stop"
+    # Bilinmeyen periyot için varsayılan %5 → 95
+    assert hit[0] == 95.0
+    # Varsayılan stopun üstünde kalan mum tetiklemez.
+    calm = make_data([(100, 101, 96, 100)])
+    assert _risk_exit(pos(), calm, 0, [2.0], {}) is None
 
 
 def test_no_time_limit_no_exit_without_stop():
