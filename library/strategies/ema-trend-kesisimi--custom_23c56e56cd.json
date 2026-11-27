@@ -1,0 +1,75 @@
+{
+  "kind": "strategy",
+  "schema": 1,
+  "id": "custom_23c56e56cd",
+  "name": "EMA Trend Kesişimi",
+  "version": 1,
+  "status": "archived",
+  "definition": {
+    "name": "EMA Trend Kesişimi",
+    "description": "BTCUSDT 4h'de ayarlandı, XRPUSDT 4h'de (görülmemiş coin) test edildi. AL: EMA(35) EMA(60)'ın üzerinde VE fiyat EMA200 üzerinde. SAT: EMA(35) EMA(60) altına iner. BTC 4h: +1525.4% (al-tut +505.4%), düşüş %56 vs %81, 96 işlem. XRP 4h: +1374.5% (al-tut +276.2%), düşüş %54 vs %85, 98 işlem. Geniş parametre bölgesi: fast 20-45 / slow 45-80 aralığının tamamı iki coinde de al-tut'u geçer. 4 SAATLİK içindir; 1 günlükte XRP'de al-tut'u geçemez.",
+    "buy": {
+      "logic": "AND",
+      "conditions": [
+        {
+          "left": {
+            "type": "indicator",
+            "id": "EMA",
+            "params": {
+              "length": 35
+            },
+            "output": "value"
+          },
+          "op": "gt",
+          "right": {
+            "type": "indicator",
+            "id": "EMA",
+            "params": {
+              "length": 60
+            },
+            "output": "value"
+          }
+        },
+        {
+          "left": {
+            "type": "price",
+            "field": "close"
+          },
+          "op": "gt",
+          "right": {
+            "type": "indicator",
+            "id": "EMA",
+            "params": {
+              "length": 200
+            },
+            "output": "value"
+          }
+        }
+      ]
+    },
+    "sell": {
+      "logic": "OR",
+      "conditions": [
+        {
+          "left": {
+            "type": "indicator",
+            "id": "EMA",
+            "params": {
+              "length": 35
+            },
+            "output": "value"
+          },
+          "op": "lt",
+          "right": {
+            "type": "indicator",
+            "id": "EMA",
+            "params": {
+              "length": 60
+            },
+            "output": "value"
+          }
+        }
+      ]
+    }
+  }
+}

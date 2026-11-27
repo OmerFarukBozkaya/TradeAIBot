@@ -241,13 +241,23 @@ def effective_stop(
     risk: Optional[Dict[str, Any]],
     floor: Optional[float] = None,
     period: Any = "",
+    atr_now: Optional[float] = None,
+    previous_stop: Optional[float] = None,
 ) -> Tuple[Optional[float], str]:
     """Etkin stop seviyesi ve türü.
 
     - ATR stop: ``giriş − stop_atr × ATR``, periyot tavanı ile sınırlanır.
-    - Takipli stop: kâr ``trail_after_pct`` eşiğini geçince ``zirve − trail_atr × ATR``.
+      Bu **girişteki** ATR ile sabitlenir (pozisyonun ilk koruması).
+    - Takipli stop: kâr ``trail_after_pct`` eşiğini geçince
+      ``zirve − trail_atr × ATR(şimdi)``. Güncel ATR kullanılır; böylece
+      oynaklık artınca stop sıkışıp trendi erken kesmez.
     - Breakeven: kâr ``breakeven_pct`` eşiğini geçince stop en az girişe çekilir.
     - ``floor``: kısmi kâr sonrası zorunlu taban (genelde giriş fiyatı).
+
+    **Stop asla geri gitmez (ratchet).** ``previous_stop`` verilirse dönen
+    seviye ondan aşağı olamaz. Aksi halde oynaklık artışı veya zirvenin
+    gerilemesi takipli stopu gevşetir; trend takibinde bu istenmeyen
+    davranıştır (kâr geri verilir).
 
     **Stop garantisi:** hiçbir kural stop üretmiyorsa periyodun varsayılan
     yüzdesi kullanılır. Ayrıca hiçbir stop periyot tavanından (``max_stop_pct``
@@ -258,6 +268,13 @@ def effective_stop(
     entry = float(entry)
     highest = float(highest or entry)
     atr = float(atr or 0.0)
+    # Güncel ATR: takipli stop için. Verilmezse giriş ATR'si.
+    try:
+        trail_atr_base = float(atr_now) if atr_now else 0.0
+    except (TypeError, ValueError):
+        trail_atr_base = 0.0
+    if trail_atr_base <= 0:
+        trail_atr_base = atr
     stop: Optional[float] = None
     kind = "stop"
 
@@ -278,8 +295,8 @@ def effective_stop(
     if trail_atr > 0:
         trail_atr = min(trail_atr, MAX_TRAIL_ATR)
         armed = trail_after <= 0 or highest >= entry * (1 + trail_after / 100)
-        if armed and atr > 0:
-            trail = highest - trail_atr * atr
+        if armed and trail_atr_base > 0:
+            trail = highest - trail_atr * trail_atr_base
             if stop is None or trail > stop:
                 stop = trail
                 kind = "takipli-stop"
@@ -308,6 +325,19 @@ def effective_stop(
     # Tavan: periyot/kullanıcı sınırından daha uzak stop yok.
     if stop < cap_price:
         stop = cap_price
+
+    # Ratchet: stop asla geri gitmez. Aksi halde oynaklık artışı ya da zirvenin
+    # gerilemesi takipli stopu gevşetir; trend takibinde kâr geri verilir.
+    prev = None
+    if previous_stop is not None:
+        try:
+            prev = float(previous_stop)
+        except (TypeError, ValueError):
+            prev = None
+    if prev is not None and prev > 0 and prev > stop:
+        stop = prev
+        if kind == "stop" and trail_atr > 0:
+            kind = "takipli-stop"
 
     return stop, kind
 
@@ -466,6 +496,25 @@ def support_stop(
 # ----------------------------------------------------------------------
 # Pozisyon boyutu
 # ----------------------------------------------------------------------
+def daily_loss_exceeded(
+    start_equity: float, current_equity: float, limit_pct: float
+) -> bool:
+    """Günlük zarar limiti aşıldı mı?
+
+    ``limit_pct`` 0 veya negatifse koruma kapalıdır. Gün başındaki özkaynak
+    bilinmiyorsa (0) da engelleme yapılmaz; aksi halde bot hiç işlem açamaz.
+    """
+    try:
+        limit = float(limit_pct or 0.0)
+        start = float(start_equity or 0.0)
+        current = float(current_equity or 0.0)
+    except (TypeError, ValueError):
+        return False
+    if limit <= 0 or start <= 0:
+        return False
+    return (current / start - 1.0) * 100.0 <= -limit
+
+
 def position_budget(
     cash: float,
     entry: float,

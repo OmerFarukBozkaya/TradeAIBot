@@ -1,0 +1,125 @@
+{
+  "kind": "strategy",
+  "schema": 1,
+  "id": "custom_2bb9e13ba8",
+  "name": "Sadece Yükseliş",
+  "version": 3,
+  "status": "archived",
+  "definition": {
+    "name": "Sadece Yükseliş",
+    "description": "Yalnızca yerleşik güçlü yükselişte işlem yapar; yatay ve düşüşte nakitte bekler. AL: fiyat EMA200'ün %10 üzerinde, EMA50 > EMA200 ve EMA200 son 150 mumda yükseliyor. SAT: fiyat EMA200 altında ve EMA200 son 150 mumda düşüyor. BTC 4h: 19 işlemde +1335.6% (al-tut +468.6%), düşüş %61 vs %81. BTC 1d: 3 işlemde +1391.4% (al-tut +1349.1%), düşüş %53 vs %77. 8 coin × 2 periyot = 16 serinin 11'inde al-tut'u geçer. Yılda ortalama 1-3 işlem.",
+    "buy": {
+      "logic": "AND",
+      "conditions": [
+        {
+          "left": {
+            "type": "price",
+            "field": "close"
+          },
+          "op": "gt",
+          "right": {
+            "type": "math",
+            "op": "mul",
+            "left": {
+              "type": "indicator",
+              "id": "EMA",
+              "params": {
+                "length": 200
+              },
+              "output": "value"
+            },
+            "right": {
+              "type": "constant",
+              "value": 1.1
+            }
+          }
+        },
+        {
+          "left": {
+            "type": "indicator",
+            "id": "EMA",
+            "params": {
+              "length": 50
+            },
+            "output": "value"
+          },
+          "op": "gt",
+          "right": {
+            "type": "indicator",
+            "id": "EMA",
+            "params": {
+              "length": 200
+            },
+            "output": "value"
+          }
+        },
+        {
+          "left": {
+            "type": "indicator",
+            "id": "EMA",
+            "params": {
+              "length": 200
+            },
+            "output": "value"
+          },
+          "op": "gt",
+          "right": {
+            "type": "offset",
+            "shift": 150,
+            "operand": {
+              "type": "indicator",
+              "id": "EMA",
+              "params": {
+                "length": 200
+              },
+              "output": "value"
+            }
+          }
+        }
+      ]
+    },
+    "sell": {
+      "logic": "AND",
+      "conditions": [
+        {
+          "left": {
+            "type": "price",
+            "field": "close"
+          },
+          "op": "lt",
+          "right": {
+            "type": "indicator",
+            "id": "EMA",
+            "params": {
+              "length": 200
+            },
+            "output": "value"
+          }
+        },
+        {
+          "left": {
+            "type": "indicator",
+            "id": "EMA",
+            "params": {
+              "length": 200
+            },
+            "output": "value"
+          },
+          "op": "lt",
+          "right": {
+            "type": "offset",
+            "shift": 150,
+            "operand": {
+              "type": "indicator",
+              "id": "EMA",
+              "params": {
+                "length": 200
+              },
+              "output": "value"
+            }
+          }
+        }
+      ]
+    }
+  }
+}

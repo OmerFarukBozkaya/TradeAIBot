@@ -74,24 +74,26 @@ class BuiltinStrategy:
             return result
         if not signals or len(signals) < 2:
             return result
-        last_sell = 0
-        for i in range(idx, -1, -1):
-            if signals[i] == "SELL":
-                last_sell = i
-                break
-        buy = signals[idx] == "BUY" and "BUY" not in signals[last_sell:idx]
-        sell = signals[idx] == "SELL"
+        # Kenar tetikleme (edge trigger): BUY yalnızca sinyalin **başladığı**
+        # mumda geçerli. Eski kod "son SELL'den beri hiç BUY olmamalı" diyordu;
+        # bu, stop ile çıkıldıktan sonra (SELL sinyali üretilmemişse) yeniden
+        # girişi kalıcı olarak engelliyordu. Trend takibinde stop sonrası yeni
+        # kırılıma girmek gerekir.
+        current = signals[idx]
+        previous = signals[idx - 1] if idx >= 1 else None
+        buy = current == "BUY" and previous != "BUY"
+        sell = current == "SELL"
         result["buy"] = bool(buy)
         result["sell"] = bool(sell)
         result["buy_detail"] = {
             "source": "builtin",
-            "closed_candle_signal": signals[idx],
-            "last_sell_index": last_sell,
+            "closed_candle_signal": current,
+            "previous_signal": previous,
             "result": bool(buy),
         }
         result["sell_detail"] = {
             "source": "builtin",
-            "closed_candle_signal": signals[idx],
+            "closed_candle_signal": current,
             "result": bool(sell),
         }
         return result

@@ -47,6 +47,7 @@ class BacktestBody(BaseModel):
     limit: int = 20000
     cash: float = 100.0
     risk: Dict[str, Any] = {}
+    filters: Dict[str, Any] = {}
     source: str = "auto"
     asset_class: str = ""
     start: Optional[str] = None
@@ -59,6 +60,7 @@ class BacktestAllBody(BaseModel):
     limit: int = 20000
     cash: float = 100.0
     risk: Dict[str, Any] = {}
+    filters: Dict[str, Any] = {}
     include_archived: bool = False
     keys: Optional[List[str]] = None
     source: str = "auto"
@@ -240,6 +242,7 @@ async def backtest(body: BacktestBody):
             "limit": body.limit,
             "cash": body.cash,
             "risk": body.risk,
+            "filters": body.filters,
             "source": body.source,
             "asset_class": body.asset_class,
             "start": body.start,
@@ -260,6 +263,7 @@ async def backtest_all(body: BacktestAllBody):
             "limit": body.limit,
             "cash": body.cash,
             "risk": body.risk,
+            "filters": body.filters,
             "include_archived": body.include_archived,
             "keys": body.keys,
             "source": body.source,

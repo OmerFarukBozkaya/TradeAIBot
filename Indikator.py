@@ -824,37 +824,41 @@ class Indikator:
 
     @staticmethod
     def local_min_max(high, low, length=3):
-        result = []
-        for i in range(length):
-            result.append(None)
-        for j in range(length, len(high) - length):
-            mevcut_fiyat_high = high[j]
-            mevcut_fiyat_low = low[j]
-            onceki_length_high = high[j - length:j]
-            sonraki_length_high = high[j + 1:j + length + 1]
-            onceki_length_low = low[j - length:j]
-            sonraki_length_low = low[j + 1:j + length + 1]
-            local_max = True
-            local_min = True
-            for l in range(length):
-                if mevcut_fiyat_low < onceki_length_low[l] and mevcut_fiyat_low < sonraki_length_low[l]:
-                    pass
-                else:
-                    local_min = False
-                if onceki_length_high[l] < mevcut_fiyat_high and sonraki_length_high[l] < mevcut_fiyat_high:
-                    pass
-                else:
-                    local_max = False
-            if local_max:
-                result.append(high[j])
-            elif local_min:
-                result.append(low[j])
-            else:
-                result.append(result[-1])
+        """Yerel dip/zirve seviyesi (nedensel / causal).
 
-            # print(f"{mevcut_fiyat}\n{onceki_length}\n{sonraki_length}")
-        for k in range(length):
-            result.append(result[-1])
+        ÖNEMLİ: pivot ancak ``length`` mum sonra **doğrulanabilir**. Eski sürüm
+        pivotu kendi mumunda döndürüyordu, yani gelecekteki barları kullanıyordu
+        (lookahead). Bu, backtest sonuçlarını gerçekçi olmayan biçimde
+        şişiriyordu (ör. Local_Min_Max stratejisi binlerce yüzde getiri
+        gösteriyordu). Artık değer ``length`` mum gecikmeyle yayınlanır; canlıda
+        ve backtest'te aynı bilgi kullanılır.
+        """
+        n = len(high)
+        confirmed = [None] * n
+        for j in range(length, n - length):
+            mevcut_high = high[j]
+            mevcut_low = low[j]
+            onc_high = high[j - length:j]
+            son_high = high[j + 1:j + length + 1]
+            onc_low = low[j - length:j]
+            son_low = low[j + 1:j + length + 1]
+            local_max = all(onc_high[l] < mevcut_high and son_high[l] < mevcut_high
+                            for l in range(length))
+            local_min = all(mevcut_low < onc_low[l] and mevcut_low < son_low[l]
+                            for l in range(length))
+            if local_max:
+                confirmed[j] = mevcut_high
+            elif local_min:
+                confirmed[j] = mevcut_low
+
+        # Pivot j, ancak j+length mumunda bilinir → gecikmeli yayınla.
+        result: list = [None] * n
+        last = None
+        for i in range(n):
+            src = i - length
+            if src >= 0 and confirmed[src] is not None:
+                last = confirmed[src]
+            result[i] = last
         return result
 
     @staticmethod

@@ -1,0 +1,151 @@
+{
+  "kind": "strategy",
+  "schema": 1,
+  "id": "custom_d9b8d852e7",
+  "name": "T3 + QQE Pro",
+  "version": 3,
+  "status": "active",
+  "definition": {
+    "name": "T3 + QQE Pro",
+    "description": "T3 (48/0.7) yeni yukarı dönüşü + QQE MOD (RSI 9) alım sinyali + ADX>=22 + hacim >= 20 mum ortalaması. Çıkış: kapanış üst üste iki mum T3'ün altında. BTCUSDT 15m/1h/4h/1d uzun geçmişte ve son dönem penceresinde doğrulandı.",
+    "buy": {
+      "logic": "AND",
+      "conditions": [
+        {
+          "left": {
+            "type": "indicator",
+            "id": "T3",
+            "params": {
+              "length": 48,
+              "factor": 0.7
+            },
+            "output": "direction"
+          },
+          "op": "eq",
+          "right": {
+            "type": "constant",
+            "value": 1
+          }
+        },
+        {
+          "left": {
+            "type": "offset",
+            "shift": 1,
+            "operand": {
+              "type": "indicator",
+              "id": "T3",
+              "params": {
+                "length": 48,
+                "factor": 0.7
+              },
+              "output": "direction"
+            }
+          },
+          "op": "neq",
+          "right": {
+            "type": "constant",
+            "value": 1
+          }
+        },
+        {
+          "left": {
+            "type": "indicator",
+            "id": "QQE_MOD",
+            "params": {
+              "rsi_length": 9,
+              "rsi_smoothing": 5,
+              "qqe_factor": 3.0,
+              "threshold": 3.0,
+              "secondary_rsi_length": 9,
+              "secondary_smoothing": 5,
+              "secondary_factor": 1.61,
+              "bb_length": 50,
+              "bb_mult": 0.35
+            },
+            "output": "signal"
+          },
+          "op": "eq",
+          "right": {
+            "type": "constant",
+            "value": 1
+          }
+        },
+        {
+          "left": {
+            "type": "indicator",
+            "id": "ADX",
+            "params": {
+              "length": 14
+            },
+            "output": "adx"
+          },
+          "op": "gte",
+          "right": {
+            "type": "constant",
+            "value": 22
+          }
+        },
+        {
+          "left": {
+            "type": "indicator",
+            "id": "VOLUME_SMA",
+            "params": {
+              "length": 20
+            },
+            "output": "ratio"
+          },
+          "op": "gte",
+          "right": {
+            "type": "constant",
+            "value": 1.0
+          }
+        }
+      ]
+    },
+    "sell": {
+      "logic": "AND",
+      "conditions": [
+        {
+          "left": {
+            "type": "price",
+            "field": "close"
+          },
+          "op": "lt",
+          "right": {
+            "type": "indicator",
+            "id": "T3",
+            "params": {
+              "length": 48,
+              "factor": 0.7
+            },
+            "output": "value"
+          }
+        },
+        {
+          "left": {
+            "type": "offset",
+            "shift": 1,
+            "operand": {
+              "type": "price",
+              "field": "close"
+            }
+          },
+          "op": "lt",
+          "right": {
+            "type": "offset",
+            "shift": 1,
+            "operand": {
+              "type": "indicator",
+              "id": "T3",
+              "params": {
+                "length": 48,
+                "factor": 0.7
+              },
+              "output": "value"
+            }
+          }
+        }
+      ]
+    }
+  }
+}

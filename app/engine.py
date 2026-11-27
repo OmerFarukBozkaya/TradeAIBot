@@ -1032,11 +1032,103 @@ class TradingEngine:
     # ------------------------------------------------------------------
     # Giriş
     # ------------------------------------------------------------------
+    def _mark_to_market(self) -> float:
+        """Botun anlık özkaynağı: nakit + açık pozisyonun piyasa değeri."""
+        cash = float(self.state.get("cash") or 0.0)
+        position = self.state.get("position")
+        if not position:
+            return cash
+        try:
+            mark = float(position.get("last_price") or position.get("entry_price") or 0.0)
+            qty = float(position.get("quantity") or 0.0)
+            return cash + qty * mark
+        except (TypeError, ValueError):
+            return cash
+
+    def _daily_loss_ok(self) -> bool:
+        """Günlük zarar limiti aşıldı mı? (``daily_loss_limit_pct``)
+
+        Limit, **UTC günü başındaki özkaynağa** göre ölçülür. Aşılırsa gün
+        bitene kadar yeni giriş yapılmaz; açık pozisyonun stop/çıkış kuralları
+        çalışmaya devam eder. ``0`` = kapalı.
+
+        Profesyonel para yönetiminde amaç, kötü bir günde art arda stop olup
+        hesabın tamamını riske atmamaktır; bu koruma strateji sinyaline
+        dokunmaz, yalnızca **yeni risk alımını** durdurur.
+        """
+        try:
+            limit = float(self.risk.get("daily_loss_limit_pct") or 0.0)
+        except (TypeError, ValueError):
+            limit = 0.0
+        if limit <= 0:
+            return True
+
+        today = utcnow()[:10]
+        if self.state.get("day_start_date") != today:
+            self.state["day_start_date"] = today
+            self.state["day_start_equity"] = round(self._mark_to_market(), 8)
+            self.state.pop("day_loss_logged", None)
+            self._safe_save_state()
+            return True
+
+        from app import risk as risk_rules
+
+        start = float(self.state.get("day_start_equity") or 0.0)
+        equity = self._mark_to_market()
+        if not risk_rules.daily_loss_exceeded(start, equity, limit):
+            return True
+        if self.state.get("day_loss_logged") != today:
+            self.state["day_loss_logged"] = today
+            self._safe_save_state()
+            loss_pct = (equity / start - 1.0) * 100.0 if start > 0 else 0.0
+            self._log(
+                self.bot_id,
+                f"Günlük zarar limiti aşıldı ({loss_pct:+.2f}% ≤ -%{limit:g}); "
+                "gün bitene kadar yeni giriş yok",
+                "warning",
+            )
+        return False
+
+    def _market_regime_ok(self) -> bool:
+        """BTC > EMA200 mü? (yalnızca ``filters.btc_regime`` açıksa.)
+
+        Altcoinlerin çoğu BTC ile yüksek korelasyonlu hareket eder. BTC
+        ortalamasının altındayken alım açmak, strateji doğru olsa bile art
+        arda stop üretir. Veri okunamazsa filtre uygulanmaz: bir ağ hatası
+        botu kilitlememeli.
+        """
+        if not self.filters.get("btc_regime"):
+            return True
+        if str(self.asset_class or "").lower() not in {"", "crypto"}:
+            return True
+        try:
+            data = self._data("BTCUSDT")
+            closes = data.get("close") or []
+        except Exception as exc:  # noqa: BLE001
+            self._log(
+                self.bot_id, f"BTC rejimi okunamadı, filtre atlandı: {exc}", "warning"
+            )
+            return True
+        if len(closes) < 201:
+            return True
+        from app.market_regime import last_regime
+
+        return last_regime(closes, 200)
+
     def _scan_for_entry(self) -> None:
         # Mum sayacı: cooldown hesabı için her taramada artar.
         self.state["candle_seq"] = int(self.state.get("candle_seq", 0)) + 1
         if int(self.state.get("candle_seq", 0)) <= int(self.state.get("cooldown_until", -1)):
             self._log(self.bot_id, "Bekleme süresi (cooldown) aktif, giriş yok", "debug")
+            return
+        if not self._daily_loss_ok():
+            return
+        if not self._market_regime_ok():
+            self._log(
+                self.bot_id,
+                "BTC rejimi risk-off (BTC < EMA200), yeni giriş yok",
+                "debug",
+            )
             return
         coinlist = self._coinlist()
         if not coinlist:
@@ -1966,11 +2058,15 @@ class TradingEngine:
         if atr_base <= 0:
             atr_base = self._atr_value(data)
             position["atr"] = atr_base
+        # Güncel ATR: takipli stop oynaklığa uyum sağlasın (giriş ATR'sine
+        # sabitlenirse trend sırasında stop ya çok sıkı ya çok gevşek kalır).
+        atr_now = self._atr_value(data) or atr_base
 
         # --- Stop / takipli stop / breakeven / kâr al (backtest ile ortak) ---
         stop_price, stop_kind = risk_rules.effective_stop(
             entry, atr_base, highest, self.risk,
             floor=position.get("stop_floor"), period=self.period,
+            atr_now=atr_now, previous_stop=position.get("stop_price"),
         )
         target = risk_rules.target_price(entry, atr_base, self.risk)
         partial_target = risk_rules.partial_target_price(entry, atr_base, self.risk)

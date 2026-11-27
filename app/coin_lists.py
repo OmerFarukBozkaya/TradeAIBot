@@ -144,15 +144,22 @@ def list_coins(list_id: str) -> Optional[List[str]]:
     return list(item["coins"]) if item else None
 
 
-def create_list(name: str, coins: Iterable[Any], builtin: bool = False) -> Dict[str, Any]:
+def create_list(
+    name: str,
+    coins: Iterable[Any],
+    builtin: bool = False,
+    list_id: Optional[str] = None,
+) -> Dict[str, Any]:
     text = normalize_name(name)
     items = normalize_coins(coins)
     if not items:
         raise ValueError("Listeye en az bir coin eklenmeli")
     if _name_taken(text):
         raise ValueError(f"Bu isimde bir liste zaten var: {text}")
+    if list_id and db.row("SELECT id FROM coin_lists WHERE id=?", (list_id,)):
+        raise ValueError(f"Bu kimlikle bir liste zaten var: {list_id}")
     now = db.utcnow()
-    list_id = f"lst_{uuid.uuid4().hex[:10]}"
+    list_id = list_id or f"lst_{uuid.uuid4().hex[:10]}"
     db.execute(
         "INSERT INTO coin_lists(id,name,coins_json,builtin,created_at,updated_at) "
         "VALUES(?,?,?,?,?,?)",

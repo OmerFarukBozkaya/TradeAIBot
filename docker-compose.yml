@@ -1,3 +1,22 @@
+# ============================================================
+# TradeAIBot — tek compose dosyası
+# ------------------------------------------------------------
+# Varsayılan (yalnız panel + yerel ağ):
+#   docker compose up -d
+#
+# AI ayrı profil (opsiyonel):
+#   docker compose --profile ai up -d
+#
+# Dış ağdan erişim (Cloudflare Tunnel):
+#   docker compose --profile tunnel up -d
+#
+# Hepsini birlikte:
+#   docker compose --profile ai --profile tunnel up -d
+#
+# Tunnel, dışa GİDEN bağlantı kurar; modemde port açmak gerekmez.
+# Erişim yalnızca telefonunuzdaki istemci sertifikasıyla sınırlanır
+# (Cloudflare mTLS + WAF). Kurulum: docs/CLOUDFLARE_TUNNEL.md
+# ============================================================
 services:
   tradeai:
     build:
@@ -42,3 +61,24 @@ services:
       - ./state:/app/state
     depends_on:
       - tradeai
+
+  # Cloudflare Tunnel: dışarıdan erişim. Yalnız "tunnel" profili etkinken
+  # başlar. Token .env içindeki TUNNEL_TOKEN'dan okunur.
+  # Public hostname (Cloudflare paneli): HTTP → tradeai:<TRADEAI_PORT>
+  cloudflared:
+    profiles: ["tunnel"]
+    image: cloudflare/cloudflared:latest
+    container_name: tradeai-tunnel
+    restart: unless-stopped
+    command: tunnel --no-autoupdate run
+    environment:
+      TUNNEL_TOKEN: ${TUNNEL_TOKEN:-}
+    depends_on:
+      tradeai:
+        condition: service_healthy
+    # Tunnel salt okunur bir köprüdür: ek yetki/volume gerekmez.
+    read_only: true
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL

@@ -1,0 +1,78 @@
+{
+  "kind": "strategy",
+  "schema": 1,
+  "id": "custom_e39ca359ec",
+  "name": "1h Kısa Vade",
+  "version": 10,
+  "status": "active",
+  "definition": {
+    "name": "1h Kısa Vade",
+    "description": "1 saatlik. AL: SuperTrend(ATR 20, x5) yukarı VE fiyat EMA200 üstünde. ÇIKIŞ: SuperTrend aşağı VEYA 20xATR stop VEYA zirveden 25xATR takipli stop. Zaman limiti YOK. Çıkış sonrası 10 mum bekleme. BTC: +3372% (al-tut +1686%), düşüş %63 vs %84. XRP: +1161% (al-tut +89%), düşüş %77 vs %85. Ortalama tutuş ~27-41 gün.",
+    "risk": {
+      "stop_atr": 3,
+      "trail_atr": 5,
+      "trail_after_pct": 5,
+      "breakeven_pct": 12,
+      "profit_exit_donchian": 10,
+      "cooldown": 5,
+      "take_profit": true
+    },
+    "buy": {
+      "logic": "AND",
+      "conditions": [
+        {
+          "left": {
+            "type": "indicator",
+            "id": "SUPERTREND",
+            "params": {
+              "atr_length": 20,
+              "factor": 5
+            },
+            "output": "direction"
+          },
+          "op": "eq",
+          "right": {
+            "type": "constant",
+            "value": 1
+          }
+        },
+        {
+          "left": {
+            "type": "price",
+            "field": "close"
+          },
+          "op": "gt",
+          "right": {
+            "type": "indicator",
+            "id": "EMA",
+            "params": {
+              "length": 200
+            },
+            "output": "value"
+          }
+        }
+      ]
+    },
+    "sell": {
+      "logic": "OR",
+      "conditions": [
+        {
+          "left": {
+            "type": "indicator",
+            "id": "SUPERTREND",
+            "params": {
+              "atr_length": 20,
+              "factor": 5
+            },
+            "output": "direction"
+          },
+          "op": "eq",
+          "right": {
+            "type": "constant",
+            "value": -1
+          }
+        }
+      ]
+    }
+  }
+}

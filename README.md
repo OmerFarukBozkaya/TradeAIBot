@@ -71,6 +71,37 @@ Kripto para analizi, backtest, tarama ve otomatik alım-satım için **web aray�
 > Değişiklikten sonra `docker compose up -d` (yeniden derleme gerekmez). Giriş
 > yapmış oturumlar yeni çerez adıyla bir kez yeniden giriş ister.
 
+### Dış ağdan erişim: Cloudflare Tunnel + backend erişim kapısı
+
+Paneli internete açmadan, **yalnızca yetkili cihazlardan** erişmek için:
+
+- Modemde **port açmadan** `cloudflared` tüneli (yalnız dışa bağlantı).
+- **Backend kapısı** (`REMOTE_ACCESS_MODE=key`): dış ağdan gelen istekte cihaz
+  anahtarı yoksa **hiçbir sayfa/API açılmaz**; Türkçe "Buraya erişim
+  yetkiniz yok" uyarısı döner. **Cloudflare'de WAF/Client Certificate kuralı
+  gerekmez.**
+- Yerel ağda oturum açıp `Ayarlar → Güvenlik → Cihaz anahtarlarını yönet`
+  (veya `/setup/device`) ile anahtar üretilir; telefonda bir kez
+  `/device-login`'de girilir, 1 yıl hatırlanır.
+- Kapı **yalnızca `REMOTE_ACCESS_HOST`** içindeki hostname'de çalışır; başka
+  siteler ve yerel ağ etkilenmez.
+- İsteğe bağlı: istemci sertifikası (1 Transform Rule) veya Cloudflare Access
+  e-posta OTP ile ikinci faktör.
+
+> Not: Cloudflare Tunnel TLS'i edge'de bitirdiği için backend istemci
+> sertifikasını **tek başına göremez**. "Cloudflare'de ayar yapmadan sertifika
+> zorunlu" teknik olarak mümkün değildir; bu yüzden cihaz anahtarı yolu
+> varsayılan öneridir.
+
+Tam kurulum, test komutları, anahtar yenileme/iptal ve sorun giderme:
+**[docs/CLOUDFLARE_TUNNEL.md](docs/CLOUDFLARE_TUNNEL.md)**
+
+Tunnel aynı `docker-compose.yml` içinde **`tunnel` profiliyle** tanımlıdır:
+`docker compose --profile tunnel up -d` (profil verilmezse başlamaz).
+Sertifika dönüştürme betiği: `scripts/client_cert_to_p12.sh`.
+Uygulama tarafında `TRADEAI_TRUST_PROXY=true` ile HTTPS isteklerinde çerez
+otomatik `Secure` işaretlenir ve HSTS gönderilir; yerel HTTP erişimi etkilenmez.
+
 ### Çoklu varlık: kripto, altın/gümüş, döviz, hisse ve TEFAS
 
 Backtest, tarama, analiz, AI eğitimi ve **test (paper) botları** Binance kripto
@@ -389,6 +420,35 @@ Kütüphanedeki her kartta işlem düğmeleri vardır:
 - **Hazır (kod tabanlı) stratejiler silinemez**; `Arşivle` ile listeden gizlenir. Kalıcı olarak
   kaldırmak istiyorsanız `Kopyala` ile kendi listeye alıp düzenleyebilirsiniz.
 
+### Strateji ve coin listelerini Git'e aktar
+
+Veritabanının tamamını yedeklemeden, yalnızca **kullanıcı stratejileri** ve
+**coin listeleri** Git dostu JSON dosyalarına aktarılabilir:
+
+```bash
+python scripts/library_sync.py export      # library/ altına yazar
+python scripts/library_sync.py import      # önizleme
+python scripts/library_sync.py import --apply
+```
+
+Ayrıntılar: [docs/LIBRARY.md](docs/LIBRARY.md).
+
+### Ölçülmüş 4h trend kurulumu
+
+`TrendRider` + 8 coinlik `Trend 4h` listesi + geniş trailing ayarları
+(3/6/10/20) + BTC rejim filtresi için ölçüm tablosu, risk ölçeği, R:R,
+Sharpe/Sortino ve maksimum işlem zararı:
+[docs/STRATEGY_4H.md](docs/STRATEGY_4H.md).
+
+```bash
+python scripts/setup_4h.py --apply          # 8 bot × 1 coin, risk %4 (paper)
+python scripts/bench_4h.py --risk-pct 4     # aynı ayarı yeniden ölç
+python scripts/bench_4h.py --no-btc-regime  # filtre etkisini karşılaştır
+```
+
+`library/` klasörü sunucu açılışında otomatik okunur; eksik strateji ve coin
+listeleri elle içe aktarma olmadan kullanılabilir.
+
 ### Tüm stratejileri karşılaştır
 
 Stratejiler sayfasındaki **Tümünü Karşılaştır** düğmesi, kütüphanedeki *tüm* hazır ve özel
@@ -439,13 +499,18 @@ eşiği aşarken birincil RSI'ın üst bandı geçmesiyle; satım sinyali simetr
 
 ## Bot Oluşturma
 
+Botlar sayfasındaki **Önerilen Botlar** düğmesi, ölçülmüş 4h trend kurulumunu
+(TrendRider + BTC rejim filtresi + 8 coin) tek tıkla kurar: başlangıç
+sermayesini sorar, sermayeyi 8 bot arasında böler ve botları durdurulmuş
+olarak oluşturur. Ayrıntılar: [docs/STRATEGY_4H.md](docs/STRATEGY_4H.md).
+
 Botlar → **Yeni Bot** ekranı beş adımlı bir akıştır:
 
 1. **Çalışma modu** — Test (paper) veya Canlı. Canlı seçmek için üst çubuktaki canlı işlem anahtarının açık olması yeterlidir.
 2. **Bot kimliği** — ad, zaman dilimi (chip olarak), başlangıç nakdi, maksimum pozisyon yüzdesi.
 3. **Coinler** — popüler coinler tek tıkla seçilir; başka sembol yazılıp eklenebilir. **Coin listesi** açılır menüsünden kayıtlı bir liste seçilirse listenin coinleri tek tıkla eklenir. Boş bırakılırsa `Data/coin_list.txt` tamamı izlenir.
 4. **Stratejiler** — özel ve hazır stratejiler kart olarak listelenir; özel stratejilerin AL/SAT kuralları kart üzerinde görünür. Birden fazla strateji seçilebilir.
-5. **Risk koruması** — dinamik/sabit/destek stop, kâr al, maksimum mum, EMA50 ve BB filtreleri, çökmede otomatik yeniden başlatma.
+5. **Risk koruması** — dinamik/sabit/destek stop, kâr al, maksimum mum, EMA50/BB ve **BTC rejim** filtreleri, **günlük zarar limiti**, çökmede otomatik yeniden başlatma.
 
 Alt bardaki özet, kaydetmeden önce tüm seçimleri tek satırda gösterir:
 
@@ -1004,6 +1069,49 @@ botun/stratejinin risk bloğu uygulanır.
 - Backtest sonucunda **pozisyon süreleri** kartı: ortalama/medyan/en uzun tutuş (gün-saat),
   uygulanan risk kuralları ve **çıkış nedenleri** (sinyal, stop, takipli stop, kâr koruma).
 - Bot oluştururken risk alanı boş bırakılırsa **stratejinin kendi risk bloğu** devralınır.
+
+#### Trend takibi: ölçülmüş ayarlar (1h / 4h)
+
+26–27 Kasım 2026'da fiyat verisiyle yapılan ölçümler ve düzeltmeler:
+
+| Sorun | Neden | Düzeltme |
+|---|---|---|
+| Stratejiler **geç giriyor** | EMA/SuperTrend(20, 5) **kesişimi** bekleniyordu; kesişim trendin ortasında gelir | Yeni **TrendRider**: 40 mumluk zirve kırılımı + EMA50>EMA200 rejimi + ADX>18 |
+| Stoplar **çok aşağıda** | `stop_atr=20…35` yüzde sanılarak yazılmıştı | 6×ATR ve periyot tavanı (15m %4, 1h %6, 4h %8, 1d %12) |
+| **Takipli stop kârı geri veriyordu** | Her mumda yeniden hesaplanıp **aşağı inebiliyordu**; ATR girişte dondurulmuştu | Stop **yalnızca yukarı** hareket eder (ratchet) ve **güncel ATR** kullanılır |
+| Trend **ortasında kesiliyordu** | Breakeven %3–4'te çalışıp stopu sürekli girişe çekiyordu; trailing 3–4×ATR çok dardı | Breakeven **%12**, takipli stop **5×ATR**, %5 kârda devreye girer |
+| Stop sonrası **tekrar giriş yok** | Hazır strateji sarmalayıcısı "son SELL'den beri BUY olmasın" diyordu | Kenar tetikleme: yeni kırılımda tekrar girer |
+| Backtest **gerçekdışı getiri** | `local_min_max` pivotu kendi mumunda dönüyordu (geleceğe bakıyordu) | Pivot `length` mum **gecikmeli** yayınlanır (nedensel) |
+
+**Ölçüm (4h, 5 coin, ~5,4 yıl, komisyon+kayma dahil):**
+
+| Kurulum | Ort. getiri | Medyan | En kötü coin | Maks. düşüş | İşlem |
+|---|---|---|---|---|---|
+| Eski risk (20/25 → 6×ATR, breakeven %4,8) | +%56 | +%51 | **−%53** | %68 | 145 |
+| Yeni risk (3×ATR stop, 5×ATR trail, breakeven %12) | **+%117** | **+%122** | **−%24** | %61 | 155 |
+| **TrendRider** (yeni sinyal + yeni risk) | **+%245** | **+%131** | +%19 | %46 | 84 |
+
+**1h hakkında dürüst not:** 1h grafiği gürültülüdür; trend takibi komisyon/kayma
+nedeniyle 4h kadar güçlü değildir. Aynı testlerde 1h Trend Sürücü medyanı
+**−%5** (eski SuperTrend sinyali **−%20**). 1h'de işlem sayısını düşük tutun
+(ADX>25, 4h yönüyle aynı taraf) veya trend takibini **4h/1d**'de çalıştırın.
+
+**Nasıl uygulanır:**
+
+1. **Bot sihirbazında** hazır strateji olarak `TrendRider` (4h/1d önerilir).
+2. **Stratejiler → Yeni Strateji → şablon**: "Trend Kırılım (4h)"
+   (veya "Trend Kırılım (1h, seçici)") — kurallarla birlikte **risk ayarlarını da** yükler.
+3. **Mevcut stratejileri güncelleme** (sunucuda):
+
+```bash
+python scripts/upgrade_trend_strategies.py                       # önizleme (yazmaz)
+python scripts/upgrade_trend_strategies.py --apply               # sadece risk
+python scripts/upgrade_trend_strategies.py --apply --signal --update-bots
+```
+
+Betik her değişikliği **yeni sürüm** olarak yazar (eskisi `strategy_versions`'ta
+kalır), DB yedeği alır ve zaten güncel olanları atlar. `--update-bots` olmadan
+çalışan botlar **eski sürüme sabit** kalır (botlar sürümü pinler).
 
 #### Neden geç çıkıyordu? (ve çözümü)
 

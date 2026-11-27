@@ -20,6 +20,14 @@ Trade_Durumu_AI/
 .env.*
 !.env.example
 
+# Cloudflare istemci sertifikası / anahtarları (asla repoya girmesin)
+*.p12
+*.pfx
+client*.pem
+cert.pem
+key.pem
+*.key
+
 # AI model çıktıları
 scaler.pkl
 tradeai_model.keras

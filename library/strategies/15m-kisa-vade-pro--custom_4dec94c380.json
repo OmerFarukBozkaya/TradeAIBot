@@ -1,0 +1,124 @@
+{
+  "kind": "strategy",
+  "schema": 1,
+  "id": "custom_4dec94c380",
+  "name": "15m Kısa Vade Pro",
+  "version": 7,
+  "status": "active",
+  "definition": {
+    "name": "15m Kısa Vade Pro",
+    "description": "15 dakikalık. AL: SuperTrend(10, ×5) yukarı VE fiyat EMA200 üstünde VE RSI(14) < 70 VE RSI(2) < 20 VE Bollinger(20, 2) percent_b < 0,7 (dip). ÇIKIŞ: SuperTrend aşağı VEYA 35×ATR stop — ancak stop girişten EN FAZLA %15 aşağıda olabilir. Çıkış sonrası 10 mum bekleme. %15 tavanı, ATR'si fiyatın %3'üne varan yüksek oynaklıklı coinlerde (ör. DODO) 35×ATR'nin %97'ye yaklaşıp işlevsiz kalmasını engeller; aksi hâlde stop 'coin sıfırlanmazsa tut' demek olur. Ölçüm (4 coin × 100.000 mum, 15m): sınırsız stop toplam fark 141 ama en kötü coin +4,7; %15 tavanla toplam 96, en kötü coin +14,5 ve ortalama düşüş aynı (%60). Yani biraz getiri karşılığında stop gerçekten çalışır hâle gelir.",
+    "risk": {
+      "stop_atr": 2.5,
+      "trail_atr": 4,
+      "trail_after_pct": 3,
+      "breakeven_pct": 8,
+      "profit_exit_donchian": 10,
+      "cooldown": 5,
+      "take_profit": true
+    },
+    "buy": {
+      "logic": "AND",
+      "conditions": [
+        {
+          "left": {
+            "type": "indicator",
+            "id": "SUPERTREND",
+            "params": {
+              "atr_length": 10,
+              "factor": 5
+            },
+            "output": "direction"
+          },
+          "op": "eq",
+          "right": {
+            "type": "constant",
+            "value": 1
+          }
+        },
+        {
+          "left": {
+            "type": "price",
+            "field": "close"
+          },
+          "op": "gt",
+          "right": {
+            "type": "indicator",
+            "id": "EMA",
+            "params": {
+              "length": 200
+            },
+            "output": "value"
+          }
+        },
+        {
+          "left": {
+            "type": "indicator",
+            "id": "RSI",
+            "params": {
+              "length": 14
+            },
+            "output": "value"
+          },
+          "op": "lt",
+          "right": {
+            "type": "constant",
+            "value": 70
+          }
+        },
+        {
+          "left": {
+            "type": "indicator",
+            "id": "RSI",
+            "params": {
+              "length": 2
+            },
+            "output": "value"
+          },
+          "op": "lt",
+          "right": {
+            "type": "constant",
+            "value": 20
+          }
+        },
+        {
+          "left": {
+            "type": "indicator",
+            "id": "BB",
+            "params": {
+              "length": 20,
+              "std": 2.0
+            },
+            "output": "percent_b"
+          },
+          "op": "lt",
+          "right": {
+            "type": "constant",
+            "value": 0.7
+          }
+        }
+      ]
+    },
+    "sell": {
+      "logic": "OR",
+      "conditions": [
+        {
+          "left": {
+            "type": "indicator",
+            "id": "SUPERTREND",
+            "params": {
+              "atr_length": 10,
+              "factor": 5
+            },
+            "output": "direction"
+          },
+          "op": "eq",
+          "right": {
+            "type": "constant",
+            "value": -1
+          }
+        }
+      ]
+    }
+  }
+}

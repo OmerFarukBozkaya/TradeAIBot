@@ -490,6 +490,75 @@ class Stratejiler:
         return signals
 
     @staticmethod
+    def TrendRider(high, low, close):
+        """Trend başında gir, trend sonuna kadar takip et (ölçülmüş sürüm).
+
+        Tasarım 5 yıllık 4h ve 1h verisinde ölçülerek seçildi; testere dişinde
+        işlem maliyetine yenilmemek için sinyaller **nadir** tutuldu:
+
+        Giriş (trendin başı):
+          * kapanış, önceki **40** mumun zirvesini aşar (kırılım),
+          * rejim yukarı: EMA50 > EMA200 (düşüş trendinde alım yok),
+          * ADX(14) > 18 (hareket var).
+
+        Çıkış (trendin sonu):
+          * kapanış, önceki **40** mumun dibinin altına iner, **veya**
+          * EMA50 < EMA200 (rejim bozuldu).
+
+        Amaçlanan kullanım: ``stop_atr ≈ 3``, ``trail_atr ≈ 5``,
+        ``trail_after_pct ≈ 5``, ``breakeven_pct ≈ 12``. Dar takipli stop ve
+        erken breakeven trendi ortasında keser; bu strateji geniş takiple
+        çalışacak şekilde ölçüldü.
+        """
+        n = len(close)
+        signals: list = [None] * n
+        if n < 210:
+            return signals
+
+        closes = pd.Series(close, dtype="float64")
+        # Kırılım seviyeleri kendi mumunu içermez (shift 1) → lookahead yok.
+        prior_high = closes.rolling(40).max().shift(1)
+        prior_low = closes.rolling(40).min().shift(1)
+
+        ema_fast = Indikator.EMA(close, 50)
+        ema_slow = Indikator.EMA(close, 200)
+        adx = Indikator.ADX(high, low, close)
+
+        for i in range(n):
+            if i < 2:
+                signals[i] = None
+                continue
+            px = close[i]
+            hi_box = prior_high.iloc[i]
+            lo_box = prior_low.iloc[i]
+            ef = ema_fast[i]
+            es = ema_slow[i]
+            a = adx[i]
+            if (
+                ef is None or es is None or a is None
+                or pd.isna(hi_box) or pd.isna(lo_box)
+            ):
+                signals[i] = None
+                continue
+            up = ef > es
+            # Son 10 mumda bantın altında kalmış mı? Bu, "kırılımın taze
+            # olduğunu" gösterir: hem ADX onayı gelene kadar girişe izin verir
+            # hem de trend sürerken tekrar tekrar alım yapmayı engeller.
+            start = max(0, i - 10)
+            recent_below = any(
+                (not pd.isna(prior_high.iloc[k])) and close[k] <= prior_high.iloc[k]
+                for k in range(start, i)
+            )
+            breakout = px > hi_box and recent_below
+            if breakout and up and a > 18:
+                signals[i] = "BUY"
+            elif px < lo_box or not up:
+                signals[i] = "SELL"
+            else:
+                signals[i] = False
+        return signals
+
+    @staticmethod
     def AI(high,low,close):
         from AI import predict_single_row
         bb = np.array(Indikator.BB(close), dtype='float32')

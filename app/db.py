@@ -224,6 +224,20 @@ CREATE TABLE IF NOT EXISTS coin_lists (
     updated_at TEXT NOT NULL
 );
 
+-- Uzaktan erişim cihaz anahtarları: telefon vb. cihazlara verilen uzun ömürlü
+-- jetonlar. Yalnızca SHA-256 özeti saklanır; ham anahtar bir daha gösterilmez.
+CREATE TABLE IF NOT EXISTS device_keys (
+    id TEXT PRIMARY KEY,
+    name TEXT NOT NULL,
+    key_hash TEXT NOT NULL UNIQUE,
+    created_at TEXT NOT NULL,
+    last_used_at TEXT,
+    last_ip TEXT,
+    revoked INTEGER NOT NULL DEFAULT 0
+);
+
+CREATE INDEX IF NOT EXISTS idx_device_keys_hash ON device_keys(key_hash);
+
 CREATE INDEX IF NOT EXISTS idx_trades_bot ON trades(bot_id, created_at);
 CREATE INDEX IF NOT EXISTS idx_trades_coin ON trades(coin, created_at);
 CREATE INDEX IF NOT EXISTS idx_events_bot ON events(bot_id, created_at);

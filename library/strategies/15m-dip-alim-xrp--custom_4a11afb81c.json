@@ -1,0 +1,103 @@
+{
+  "kind": "strategy",
+  "schema": 1,
+  "id": "custom_4a11afb81c",
+  "name": "15m Dip Alım (XRP)",
+  "version": 1,
+  "status": "active",
+  "definition": {
+    "name": "15m Dip Alım (XRP)",
+    "description": "15 dakikalık, XRP için ayarlanmış sürüm. AL: SuperTrend(ATR 10, ×5) yukarı VE fiyat EMA200 üstünde VE RSI(14) < 70 VE kapanış EMA50 altında (yükseliş trendi içinde geri çekilmede alır). ÇIKIŞ: SuperTrend aşağı VEYA 30×ATR stop. Çıkış sonrası 10 mum bekleme. Tam geçmiş (250.000 mum): XRP +1734% (al-tut +306%), düşüş %70; son 2,8 yıl +126% (al-tut +76%); son 1,4 yıl −25% (al-tut −55%). Üç pencerede de temel sürümden iyi ve daha az işlem yapar. BTC'de zayıftır (+741%) — BTC botlarında '15m Kısa Vade (BTC)' kullanın.",
+    "risk": {
+      "stop_atr": 30,
+      "cooldown": 10
+    },
+    "buy": {
+      "logic": "AND",
+      "conditions": [
+        {
+          "left": {
+            "type": "indicator",
+            "id": "SUPERTREND",
+            "params": {
+              "atr_length": 10,
+              "factor": 5
+            },
+            "output": "direction"
+          },
+          "op": "eq",
+          "right": {
+            "type": "constant",
+            "value": 1
+          }
+        },
+        {
+          "left": {
+            "type": "price",
+            "field": "close"
+          },
+          "op": "gt",
+          "right": {
+            "type": "indicator",
+            "id": "EMA",
+            "params": {
+              "length": 200
+            },
+            "output": "value"
+          }
+        },
+        {
+          "left": {
+            "type": "indicator",
+            "id": "RSI",
+            "params": {
+              "length": 14
+            },
+            "output": "value"
+          },
+          "op": "lt",
+          "right": {
+            "type": "constant",
+            "value": 70
+          }
+        },
+        {
+          "left": {
+            "type": "price",
+            "field": "close"
+          },
+          "op": "lt",
+          "right": {
+            "type": "indicator",
+            "id": "EMA",
+            "params": {
+              "length": 50
+            },
+            "output": "value"
+          }
+        }
+      ]
+    },
+    "sell": {
+      "logic": "OR",
+      "conditions": [
+        {
+          "left": {
+            "type": "indicator",
+            "id": "SUPERTREND",
+            "params": {
+              "atr_length": 10,
+              "factor": 5
+            },
+            "output": "direction"
+          },
+          "op": "eq",
+          "right": {
+            "type": "constant",
+            "value": -1
+          }
+        }
+      ]
+    }
+  }
+}

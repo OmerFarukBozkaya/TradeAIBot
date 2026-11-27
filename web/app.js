@@ -2586,6 +2586,65 @@ function botRow(bot, seriesMap = {}) {
   </div>`;
 }
 
+function openRecommendedBots() {
+  const wrap = document.createElement("div");
+  const liveReady = !!state.liveUnlocked;
+  wrap.innerHTML = `
+    <p class="muted">Ölçülmüş 4h kurulumu: <b>TrendRider</b> + BTC rejim filtresi + 8 coin.
+    Her coin <b>ayrı bot</b> olarak oluşturulur; bir bot aynı anda tek pozisyon tuttuğu
+    için 8 coini tek botta çalıştırmak çeşitlendirme sağlamaz.</p>
+    ${field("Başlangıç sermayesi (toplam, USDT)", `<input id="rb-cash" type="number" min="40" step="1" value="1000">`)}
+    ${field("İşlem başına risk", `<select id="rb-risk">
+      <option value="2.5">%2,5 — muhafazakâr (ort. DD ~%22)</option>
+      <option value="4" selected>%4 — önerilen (ort. DD ~%31)</option>
+      <option value="6">%6 — agresif (ort. DD ~%40)</option>
+    </select>`)}
+    ${field("Mod", `<select id="rb-mode">
+      <option value="paper" selected>Test (paper)</option>
+      <option value="live" ${liveReady ? "" : "disabled"}>Canlı${liveReady ? "" : " — anahtar kapalı"}</option>
+    </select>`)}
+    <div class="tool-note" id="rb-summary"></div>
+    <div class="row end mt">
+      <button class="ghost" id="rb-cancel" type="button">Vazgeç</button>
+      <button class="primary" id="rb-create" type="button">8 botu oluştur</button>
+    </div>`;
+  modal("Önerilen 4h Botları", wrap);
+
+  const summary = () => {
+    const cash = Number($("#rb-cash").value || 0);
+    const risk = Number($("#rb-risk").value || 0);
+    const mode = $("#rb-mode").value;
+    const per = cash / 8;
+    $("#rb-summary").innerHTML =
+      `Her bot: <b>${fmt(per, 2)} USDT</b> · işlem başına planlı zarar ≈ <b>${fmt(per * risk / 100, 2)} USDT</b>`
+      + ` · günlük limit: <b>${mode === "live" ? "%3" : "kapalı"}</b>`;
+  };
+  ["rb-cash", "rb-risk", "rb-mode"].forEach((id) => {
+    const el = $("#" + id);
+    el.addEventListener("input", summary);
+    el.addEventListener("change", summary);
+  });
+  summary();
+
+  $("#rb-cancel").addEventListener("click", closeModal);
+  $("#rb-create").addEventListener("click", async () => {
+    try {
+      const body = {
+        cash: Number($("#rb-cash").value),
+        risk: Number($("#rb-risk").value),
+        mode: $("#rb-mode").value,
+      };
+      if (!(body.cash > 0)) throw new Error("Sermaye pozitif olmalı");
+      const res = await api("/bots/recommended", { method: "POST", body });
+      closeModal();
+      const extra = res.skipped && res.skipped.length
+        ? `, ${res.skipped.length} zaten vardı` : "";
+      toast(`${res.created.length} bot oluşturuldu${extra}. Kartlardan başlatabilirsin.`);
+      route();
+    } catch (e) { toast(e.message, true); }
+  });
+}
+
 function quickBot() {
   openBotForm(null, { quick: true });
 }
@@ -2624,17 +2683,20 @@ async function renderBots(root) {
       </div>
       <div class="row">
         <button class="ghost" id="quick-bot">Hızlı Bot</button>
-        <button class="primary" id="new-bot">Yeni Bot</button>
+        <button class="ghost" id="new-bot">Yeni Bot</button>
+        <button class="primary" id="recommended-bots">Önerilen Botlar</button>
       </div>
     </div>
     <div class="stack mt" id="bot-list"></div>`;
   $("#new-bot").addEventListener("click", () => openBotForm());
   $("#quick-bot").addEventListener("click", quickBot);
+  $("#recommended-bots").addEventListener("click", openRecommendedBots);
   const list = $("#bot-list");
   if (!bots.length) {
     list.innerHTML = `<div class="card empty-state">
       <strong>Henüz bot yok</strong>
-      <p class="muted">“Hızlı Bot” ile mantıklı varsayılanlarla 5 saniyede başla, ya da “Yeni Bot” ile adım adım kur.</p>
+      <p class="muted">“Önerilen Botlar” ile ölçülmüş 4h kurulumunu (8 bot) tek tıkla oluştur,
+        “Hızlı Bot” ile 5 saniyede başla ya da “Yeni Bot” ile adım adım kur.</p>
     </div>`;
     return;
   }
@@ -2714,6 +2776,7 @@ function riskSummary(risk) {
     parts.push(`kısmi kâr %${fmt(r.partial_tp_pct, 1)}'de %${fmt((r.partial_tp_fraction || 0.5) * 100, 0)}`);
   }
   if (r.risk_per_trade_pct) parts.push(`işlem riski %${fmt(r.risk_per_trade_pct, 1)}`);
+  if (r.daily_loss_limit_pct) parts.push(`günlük zarar limiti %${fmt(r.daily_loss_limit_pct, 1)}`);
   if (r.support_stop) parts.push("destek stop");
   if (r.static_stop) parts.push(`sabit stop %${fmt(r.static_stop_pct || 2.5, 1)}`);
   if (r.dynamic_stop) parts.push("dinamik stop (ADX)");
@@ -2979,28 +3042,28 @@ const RISK_ITEMS = [
 const RISK_NUM_FIELDS = [
   {
     key: "stop_atr", label: "Zarar durdur (stop)", unit: "× ATR", step: "0.1",
-    help: "Giriş fiyatının kaç ATR aşağısında satılacağı. ATR, coinin son 14 mumdaki ortalama oynaklığıdır. Sağlıklı aralık 1,5–3×ATR; en fazla 6×ATR ve periyot tavanı (15m %4, 1h %6, 4h %8, 1d %12) uygulanır. Çok büyük değer stopu işe yaramaz hale getirir.",
-    rec: { "1m": 2, "5m": 2, "15m": 2, "1h": 2, "4h": 2.5, "1d": 3 },
+    help: "Giriş fiyatının kaç ATR aşağısında satılacağı. Trend takibinde 2,5–3×ATR iyidir: çok sıkı stop trendin normal geri çekilmesinde keser, çok geniş stop zararı büyütür. En fazla 6×ATR ve periyot tavanı (15m %4, 1h %6, 4h %8, 1d %12) uygulanır.",
+    rec: { "1m": 2, "5m": 2, "15m": 2, "1h": 3, "4h": 3, "1d": 3 },
   },
   {
     key: "max_stop_pct", label: "Stop üst sınırı", unit: "%", step: "0.5",
-    help: "Stop bu yüzdeden daha uzağa konamaz. Periyot tavanı vardır (15m %4, 1h %6, 4h %8, 1d %12); daha geniş bir değer girilse bile tavan geçerlidir. Kârdan zarara dönmeyi engelleyen asıl sınırdır.",
+    help: "Stop bu yüzdeden daha uzağa konamaz. Periyot tavanı vardır (15m %4, 1h %6, 4h %8, 1d %12); daha geniş bir değer girilse bile tavan geçerlidir.",
     rec: { "1m": 2, "5m": 3, "15m": 4, "1h": 6, "4h": 8, "1d": 12 },
   },
   {
     key: "static_stop_pct", label: "Sabit stop yüzdesi", unit: "%", step: "0.5",
-    help: "Panelde 'Sabit stop' işaretliyse giriş fiyatının bu yüzde altında satılır. Varsayılan %2,5.",
+    help: "Panelde 'Sabit stop' işaretliyse giriş fiyatının bu yüzde altında satılır.",
     rec: { "1m": 2, "5m": 2.5, "15m": 3, "1h": 3.5, "4h": 4.5, "1d": 6 },
   },
   {
     key: "trail_atr", label: "Takipli stop", unit: "× ATR", step: "0.1",
-    help: "Fiyat yükseldikçe stop yukarı taşınır. Zirveden kaç ATR aşağıda takip edileceği (en fazla 6×ATR). Kârı kilitler, trend dönünce çıkar.",
-    rec: { "1m": 1.5, "5m": 1.5, "15m": 2, "1h": 2, "4h": 2.5, "1d": 3 },
+    help: "Fiyat yükseldikçe stop yukarı taşınır (asla geri inmez). Trend takibinde 5–6×ATR: 3–4×ATR trendin normal geri çekilmesinde pozisyonu kesiyor. Güncel ATR ile ölçülür; oynaklık artınca trendi erken kesmez.",
+    rec: { "1m": 3, "5m": 3.5, "15m": 4, "1h": 5, "4h": 5, "1d": 6 },
   },
   {
     key: "trail_after_pct", label: "Takipli stop başlangıcı", unit: "% kâr", step: "0.5",
-    help: "Kâr bu yüzdeyi geçmeden takipli stop devreye girmez. Erken dalgalanmada pozisyonun kesilmesini önler.",
-    rec: { "1m": 1, "5m": 1.5, "15m": 2, "1h": 3, "4h": 5, "1d": 7 },
+    help: "Kâr bu yüzdeyi geçmeden takipli stop devreye girmez. Trend takibinde erken çalıştırmak faydalı: %5 (1h/4h). Çok erken (ör. %1) testere dişinde pozisyonu keser.",
+    rec: { "1m": 1.5, "5m": 2, "15m": 3, "1h": 5, "4h": 5, "1d": 8 },
   },
   {
     key: "take_profit_atr", label: "Kâr al (ATR)", unit: "× ATR", step: "0.1",
@@ -3014,8 +3077,8 @@ const RISK_NUM_FIELDS = [
   },
   {
     key: "breakeven_pct", label: "Breakeven eşiği", unit: "% kâr", step: "0.5",
-    help: "Kâr bu yüzdeyi geçince stop en az giriş fiyatına çekilir; artık kaybetme ihtimali kalmaz. 0 = kapalı. Boş bırakılırsa stop mesafesinin ~%60'ı otomatik uygulanır.",
-    rec: { "1m": 1, "5m": 1.5, "15m": 2.4, "1h": 3.6, "4h": 4.8, "1d": 7.2 },
+    help: "Kâr bu yüzdeyi geçince stop en az giriş fiyatına çekilir. DİKKAT: erken breakeven (ör. %3) trendi sürekli sıfıra çeker ve komisyon erozyonu yaratır. Trend takibinde %12 (1h/4h) ölçülmüş değerdir; 0 = kapalı.",
+    rec: { "1m": 4, "5m": 5, "15m": 8, "1h": 12, "4h": 12, "1d": 15 },
   },
   {
     key: "partial_tp_pct", label: "Kısmi kâr hedefi", unit: "%", step: "0.5",
@@ -3039,13 +3102,18 @@ const RISK_NUM_FIELDS = [
   },
   {
     key: "cooldown", label: "Yeni alım beklemesi (cooldown)", unit: "mum", step: "1",
-    help: "Bir satıştan sonra kaç mum boyunca yeni pozisyon açılmayacağı. Aynı sinyalin hemen tekrar girip komisyon erozyonu yaratmasını önler.",
-    rec: { "1m": 10, "5m": 8, "15m": 8, "1h": 5, "4h": 3, "1d": 2 },
+    help: "Bir satıştan sonra kaç mum boyunca yeni pozisyon açılmayacağı. Aynı sinyalin hemen tekrar girip komisyon erozyonu yaratmasını önler. Trend takibinde 3–5 mum yeterli.",
+    rec: { "1m": 6, "5m": 5, "15m": 5, "1h": 5, "4h": 5, "1d": 3 },
   },
   {
     key: "cooldown_min_loss_pct", label: "Bekleme yalnızca zarar ≥", unit: "%", step: "0.5",
     help: "0 = her satıştan sonra bekle. 5 = yalnızca %5 veya daha kötü zararla çıkıldıysa bekle; küçük zarar veya kârda bot hemen devam eder.",
     rec: { "1m": 5, "5m": 5, "15m": 5, "1h": 5, "4h": 5, "1d": 5 },
+  },
+  {
+    key: "daily_loss_limit_pct", label: "Günlük zarar limiti", unit: "%", step: "0.5",
+    help: "Gün başındaki özkaynağa göre bu yüzde kayıp aşılırsa gün bitene kadar YENİ pozisyon açılmaz; açık pozisyonun stopları çalışmaya devam eder. 0 = kapalı. Canlıda 2–3 önerilir.",
+    rec: { "1m": 0, "5m": 0, "15m": 0, "1h": 0, "4h": 3, "1d": 3 },
   },
 ];
 
@@ -3126,7 +3194,7 @@ async function openBotForm(existing = null, options = {}) {
             : "builtin:" + s.name)
       : quick && quickPick ? [quickPick.key] : [],
     risk: Object.assign({ dynamic_stop: false, static_stop: false, support_stop: true, take_profit: true }, (cfg && cfg.risk) || {}),
-    filters: Object.assign({ buy_ma_control: false, buy_bb_control: false }, (cfg && cfg.filters) || {}),
+    filters: Object.assign({ buy_ma_control: false, buy_bb_control: false, btc_regime: false }, (cfg && cfg.filters) || {}),
     autoRestart: existing ? !!existing.auto_restart : true,
   };
   const pick = (key) => catalog.find((c) => c.key === key);
@@ -3533,6 +3601,7 @@ async function openBotForm(existing = null, options = {}) {
   const FILTER_ITEMS = [
     ["buy_ma_control", "EMA50 üzeri alım filtresi", "Fiyat EMA50 üzerindeyken alım yapar."],
     ["buy_bb_control", "BB orta bandı altı alım filtresi", "Yalnızca Bollinger orta bandının altında alım yapar."],
+    ["btc_regime", "BTC rejimi filtresi (BTC > EMA200)", "BTC 200 periyotluk ortalamasının altındayken yeni alım açmaz. Altcoin çöküşlerinde art arda stop olmayı azaltır."],
   ];
   const renderFilters = () => {
     const box = $("#filter-list");
@@ -3575,7 +3644,8 @@ async function openBotForm(existing = null, options = {}) {
       };
       ["stop_atr", "max_stop_pct", "static_stop_pct", "trail_atr", "trail_after_pct", "take_profit_atr",
        "take_profit_pct", "breakeven_pct", "partial_tp_pct", "partial_tp_fraction",
-       "risk_per_trade_pct", "profit_exit_donchian", "cooldown", "cooldown_min_loss_pct"]
+       "risk_per_trade_pct", "profit_exit_donchian", "cooldown", "cooldown_min_loss_pct",
+       "daily_loss_limit_pct"]
         .forEach((key) => { draft.risk[key] = numVal(key); });
       const body = {
         name: $("#b-name").value.trim() || "İsimsiz bot",
@@ -3980,6 +4050,60 @@ function strategyTemplates() {
           ],
         },
         sell: { logic: "OR", conditions: [mkCond(px("close"), "lt", ind("EMA", { length: 200 }))] },
+      }),
+    },
+    {
+      key: "trend_rider",
+      title: "Trend Kırılım (4h)",
+      desc: "40 mumluk zirveyi kırınca al; EMA50>EMA200 rejimi ve ADX onayı ister. 40 mum dibi kırılınca veya rejim bozulunca sat. Geniş takipli stopla trendi sonuna kadar taşır.",
+      build: () => ({
+        name: "Trend Kırılım",
+        buy: {
+          logic: "AND",
+          conditions: [
+            mkCond(px("close"), "crosses_above", ind("DONCHIAN", { length: 40 }, "upper")),
+            mkCond(ind("EMA", { length: 50 }), "gt", ind("EMA", { length: 200 })),
+            mkCond(ind("ADX", { length: 14 }), "gt", num(18)),
+          ],
+        },
+        sell: {
+          logic: "OR",
+          conditions: [
+            mkCond(px("close"), "crosses_below", ind("DONCHIAN", { length: 40 }, "lower")),
+            mkCond(ind("EMA", { length: 50 }), "lt", ind("EMA", { length: 200 })),
+          ],
+        },
+        // Ölçülmüş risk: geniş takipli stop, geç breakeven, kâr koruma.
+        risk: {
+          stop_atr: 3, trail_atr: 5, trail_after_pct: 5, breakeven_pct: 12,
+          profit_exit_donchian: 10, cooldown: 5, take_profit: true,
+        },
+      }),
+    },
+    {
+      key: "trend_rider_1h",
+      title: "Trend Kırılım (1h, seçici)",
+      desc: "1h için daha seçici sürüm: 40 mum kırılımı, ADX>25, EMA rejimi. Daha az işlem, daha az komisyon. 4h kadar güçlü değildir; trend takibi için 4h tercih edin.",
+      build: () => ({
+        name: "Trend Kırılım 1h",
+        buy: {
+          logic: "AND",
+          conditions: [
+            mkCond(px("close"), "crosses_above", ind("DONCHIAN", { length: 40 }, "upper")),
+            mkCond(ind("EMA", { length: 50 }), "gt", ind("EMA", { length: 200 })),
+            mkCond(ind("ADX", { length: 14 }), "gt", num(25)),
+          ],
+        },
+        sell: {
+          logic: "OR",
+          conditions: [
+            mkCond(px("close"), "crosses_below", ind("DONCHIAN", { length: 20 }, "lower")),
+            mkCond(ind("EMA", { length: 50 }), "lt", ind("EMA", { length: 200 })),
+          ],
+        },        risk: {
+          stop_atr: 3, trail_atr: 5, trail_after_pct: 5, breakeven_pct: 12,
+          profit_exit_donchian: 10, cooldown: 5, take_profit: true,
+        },
       }),
     },
     {
@@ -4858,8 +4982,21 @@ function openStrategyEditor(existing) {
           draft.name = built.name;
           $("#s-name").value = built.name;
         }
+        // Şablon risk bloğu taşıyorsa uygula (trend şablonları geniş takipli
+        // stop ve geç breakeven ister; varsayılanlar trendi erken kesiyordu).
+        if (built.risk && typeof built.risk === "object") {
+          draft.risk = { ...(draft.risk || {}), ...built.risk };
+          Object.entries(built.risk).forEach(([k, v]) => {
+            const input = document.getElementById(`rk-${k}`);
+            if (input) {
+              input.value = v === null || v === undefined ? "" : String(v);
+              input.classList.add("just-set");
+              setTimeout(() => input.classList.remove("just-set"), 900);
+            }
+          });
+        }
         render();
-        toast(`${tpl.title} şablonu yüklendi`);
+        toast(`${tpl.title} şablonu yüklendi${built.risk ? " (risk ayarları dahil)" : ""}`);
       });
       grid.appendChild(card);
     });
@@ -5102,6 +5239,8 @@ function renderBacktest(job) {
   const bhCagr = bh ? Number(bh.cagr_pct || 0) : 0;
   const calmar = m.calmar;
   const bhCalmar = bh ? bh.calmar : null;
+  const sharpe = m.sharpe;
+  const sortino = m.sortino;
   const yearly = Array.isArray(r.yearly) ? r.yearly : [];
   const winYears = yearly.filter((y) => y.diff > 0).length;
   const lossYears = yearly.filter((y) => y.diff < 0).length;
@@ -5323,6 +5462,12 @@ function renderBacktest(job) {
     <div class="card"><h3>Yıllık bileşik (CAGR)</h3><div class="stat small ${cagr >= 0 ? "pos" : "neg"}">${fmt(cagr, 1)}%</div><div class="muted">al-tut ${bh ? fmt(bhCagr, 1) + "%" : "—"}</div></div>
     <div class="card"><h3>Calmar (CAGR / düşüş)</h3><div class="stat small ${Number(calmar) >= Number(bhCalmar) ? "pos" : "neg"}">${calmar === null || calmar === undefined ? "—" : fmt(calmar, 2)}</div><div class="muted">al-tut ${bhCalmar === null || bhCalmar === undefined ? "—" : fmt(bhCalmar, 2)} · yüksek = daha iyi</div></div>
     <div class="card"><h3>Kâr faktörü</h3><div class="stat small">${m.profit_factor ? fmt(m.profit_factor, 2) : "—"}</div><div class="muted">kazanç / kayıp</div></div>
+  </div>
+
+  <div class="grid c3 mt">
+    <div class="card"><h3>Sharpe</h3><div class="stat small ${Number(sharpe) >= 0 ? "pos" : "neg"}">${sharpe === null || sharpe === undefined ? "—" : fmt(sharpe, 2)}</div><div class="muted">yıllıklandırılmış · yüksek = daha iyi</div></div>
+    <div class="card"><h3>Sortino</h3><div class="stat small ${Number(sortino) >= 0 ? "pos" : "neg"}">${sortino === null || sortino === undefined ? "—" : fmt(sortino, 2)}</div><div class="muted">aşağı yönlü oynaklık</div></div>
+    <div class="card"><h3>İşlem başına ortalama</h3><div class="stat small ${Number(m.avg_trade_pct) >= 0 ? "pos" : "neg"}">${fmt(m.avg_trade_pct || 0, 2)}%</div><div class="muted">kazanma %${fmt(m.win_rate || 0, 1)} · ${m.trade_count || 0} işlem</div></div>
   </div>
 
   ${holdBlock}
@@ -8112,6 +8257,15 @@ async function renderSettings(root) {
             ${field("Mevcut şifre", `<input id="pw-old" type="password" autocomplete="current-password">`)}
             ${field("Yeni şifre", `<input id="pw-new" type="password" autocomplete="new-password">`)}
             <button class="primary mt" id="pw-save" type="button">Şifreyi değiştir</button>
+            <hr class="sep">
+            <h3>Uzaktan erişim anahtarları</h3>
+            <p class="muted small">
+              Dış ağdan (telefon) giriş için cihaz anahtarı oluştur. Bu sayfa yalnızca
+              yerel ağda açılabilir; dış ağdan anahtarsız hiçbir sayfa görünmez.
+            </p>
+            <a class="small" href="/setup/device" target="_blank" rel="noopener">
+              Cihaz anahtarlarını yönet →
+            </a>
           </div>
           <div class="card danger-card">
             <h3>Tehlikeli işlemler</h3>

@@ -1,0 +1,75 @@
+{
+  "kind": "strategy",
+  "schema": 1,
+  "id": "custom_f5314647e7",
+  "name": "4h Trend Avcısı",
+  "version": 1,
+  "status": "archived",
+  "definition": {
+    "name": "4h Trend Avcısı",
+    "description": "4 saatlik trend takibi. AL: EMA(35) EMA(60) üzerinde VE fiyat EMA200 üzerinde. SAT: EMA(35) EMA(60) altına iner. BTC: +1525.4% (al-tut +500.1%), düşüş %56 vs %81, 96 işlem. XRP: +1374.4% (al-tut +265.4%), düşüş %54 vs %84, 98 işlem. Parametre platosu çok geniş: EMA 25-45 / 50-70 aralığının tamamı iki coinde de geçer.",
+    "buy": {
+      "logic": "AND",
+      "conditions": [
+        {
+          "left": {
+            "type": "indicator",
+            "id": "EMA",
+            "params": {
+              "length": 35
+            },
+            "output": "value"
+          },
+          "op": "gt",
+          "right": {
+            "type": "indicator",
+            "id": "EMA",
+            "params": {
+              "length": 60
+            },
+            "output": "value"
+          }
+        },
+        {
+          "left": {
+            "type": "price",
+            "field": "close"
+          },
+          "op": "gt",
+          "right": {
+            "type": "indicator",
+            "id": "EMA",
+            "params": {
+              "length": 200
+            },
+            "output": "value"
+          }
+        }
+      ]
+    },
+    "sell": {
+      "logic": "OR",
+      "conditions": [
+        {
+          "left": {
+            "type": "indicator",
+            "id": "EMA",
+            "params": {
+              "length": 35
+            },
+            "output": "value"
+          },
+          "op": "lt",
+          "right": {
+            "type": "indicator",
+            "id": "EMA",
+            "params": {
+              "length": 60
+            },
+            "output": "value"
+          }
+        }
+      ]
+    }
+  }
+}

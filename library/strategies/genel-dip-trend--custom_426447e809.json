@@ -1,0 +1,129 @@
+{
+  "kind": "strategy",
+  "schema": 1,
+  "id": "custom_426447e809",
+  "name": "Genel Dip-Trend",
+  "version": 4,
+  "status": "active",
+  "definition": {
+    "name": "Genel Dip-Trend",
+    "description": "GENEL strateji DENEMESİ. AL: (1) DİP: SuperTrend(10, ×5) yukarı + RSI(2) < 20 + fiyat EMA200 üstünde; (2) TREND GERİ GİRİŞİ: SuperTrend yeniden yukarı dönerse + EMA200 üstünde. SAT: SuperTrend aşağı dönerse. STOP: 5×ATR. Çıkış sonrası 10 mum bekleme. Ölçüm (6 coin × 1h/4h/1d = 18 seri): 11/18 seride al-tut'u geçer, 13/18 kârlı; 1h 6/6, 4h 4/6; medyan fark +38, medyan Calmar 0,24. ANCAK hold-out testi (ayarda hiç kullanılmayan BNB ve LINK, 1h/4h) yalnızca 1/4 seride al-tut'u geçti — özellikle güçlü boğa koşularında (BNB 4h al-tut +5886%) strateji nakitte kalıyor. Bu, kural setinin ayar setine uyduğunu (overfit) ve 'tek kural seti her coin'de al-tut'u geçsin' hedefinin ölçülen bir sınırı olduğunu gösterir. Bu yüzden bunu ana strateji olarak değil, 1h/4h'de düşük düşüşlü bir yardımcı/deneme olarak kullanın; yüksek getiri için periyoda özel (4h Kırılım Swing, 1h Kısa Vade, 1d Kırılım Pozisyon) veya coin'e özel stratejiler gerekir. 15m ve 1d için önerilmez.",
+    "risk": {
+      "stop_atr": 5,
+      "cooldown": 10
+    },
+    "buy": {
+      "logic": "OR",
+      "conditions": [
+        {
+          "logic": "AND",
+          "conditions": [
+            {
+              "left": {
+                "type": "indicator",
+                "id": "SUPERTREND",
+                "params": {
+                  "atr_length": 10,
+                  "factor": 5
+                },
+                "output": "direction"
+              },
+              "op": "eq",
+              "right": {
+                "type": "constant",
+                "value": 1
+              }
+            },
+            {
+              "left": {
+                "type": "indicator",
+                "id": "RSI",
+                "params": {
+                  "length": 2
+                },
+                "output": "value"
+              },
+              "op": "lt",
+              "right": {
+                "type": "constant",
+                "value": 20
+              }
+            },
+            {
+              "left": {
+                "type": "price",
+                "field": "close"
+              },
+              "op": "gt",
+              "right": {
+                "type": "indicator",
+                "id": "EMA",
+                "params": {
+                  "length": 200
+                },
+                "output": "value"
+              }
+            }
+          ]
+        },
+        {
+          "logic": "AND",
+          "conditions": [
+            {
+              "left": {
+                "type": "indicator",
+                "id": "SUPERTREND",
+                "params": {
+                  "atr_length": 10,
+                  "factor": 5
+                },
+                "output": "direction"
+              },
+              "op": "crosses_above",
+              "right": {
+                "type": "constant",
+                "value": 0
+              }
+            },
+            {
+              "left": {
+                "type": "price",
+                "field": "close"
+              },
+              "op": "gt",
+              "right": {
+                "type": "indicator",
+                "id": "EMA",
+                "params": {
+                  "length": 200
+                },
+                "output": "value"
+              }
+            }
+          ]
+        }
+      ]
+    },
+    "sell": {
+      "logic": "OR",
+      "conditions": [
+        {
+          "left": {
+            "type": "indicator",
+            "id": "SUPERTREND",
+            "params": {
+              "atr_length": 10,
+              "factor": 5
+            },
+            "output": "direction"
+          },
+          "op": "eq",
+          "right": {
+            "type": "constant",
+            "value": -1
+          }
+        }
+      ]
+    }
+  }
+}

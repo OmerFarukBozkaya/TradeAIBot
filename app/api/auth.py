@@ -6,7 +6,6 @@ from fastapi import APIRouter, Cookie, HTTPException, Request, Response
 from pydantic import BaseModel
 
 from app import db
-from app.config import settings
 from app.security import (
     COOKIE_NAME,
     authenticate,
@@ -37,12 +36,14 @@ async def login(body: LoginBody, request: Request, response: Response):
     if not user:
         raise HTTPException(status_code=401, detail="Kullanıcı adı veya şifre hatalı")
     token, csrf = create_session(int(user["id"]))
+    from app.proxy import cookie_secure
+
     response.set_cookie(
         COOKIE_NAME,
         token,
         httponly=True,
         samesite="lax",
-        secure=settings.COOKIE_SECURE,
+        secure=cookie_secure(request),
         max_age=60 * 60 * 24,
     )
     return {
@@ -56,12 +57,17 @@ async def login(body: LoginBody, request: Request, response: Response):
 
 @router.post("/logout")
 async def logout(
+    request: Request,
     response: Response,
     tradeai_session: Optional[str] = Cookie(default=None, alias=COOKIE_NAME),
 ):
     if tradeai_session:
         delete_session(tradeai_session)
-    response.delete_cookie(COOKIE_NAME, httponly=True, samesite="lax", secure=settings.COOKIE_SECURE)
+    from app.proxy import cookie_secure
+
+    response.delete_cookie(
+        COOKIE_NAME, httponly=True, samesite="lax", secure=cookie_secure(request)
+    )
     return {"ok": True}
 
 

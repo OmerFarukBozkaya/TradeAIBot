@@ -1,0 +1,69 @@
+{
+  "kind": "strategy",
+  "schema": 1,
+  "id": "custom_aee50dba54",
+  "name": "1d Kırılım Pozisyon",
+  "version": 13,
+  "status": "active",
+  "definition": {
+    "name": "1d Kırılım Pozisyon",
+    "description": "Günlük kırılım. AL: fiyat son 20 günün zirvesini kırar. ÇIKIŞ: 20 günün dibinin altı VEYA 2xATR stop VEYA zirveden 8xATR takipli stop VEYA kâr koruma (kârdayken son 10 günün dibi kırılırsa hızlı çıkış). Zaman limiti YOK. Çıkış sonrası 10 gün bekleme. BTC: +1261% (al-tut +1192%), düşüş %53 vs %83, ortalama tutuş 26 gün. XRP: +303% (al-tut +114%), düşüş %71 vs %83, ortalama tutuş 19 gün.",
+    "risk": {
+      "stop_atr": 3,
+      "trail_atr": 6,
+      "trail_after_pct": 8,
+      "breakeven_pct": 15,
+      "profit_exit_donchian": 20,
+      "cooldown": 3,
+      "take_profit": true
+    },
+    "buy": {
+      "logic": "AND",
+      "conditions": [
+        {
+          "left": {
+            "type": "price",
+            "field": "close"
+          },
+          "op": "crosses_above",
+          "right": {
+            "type": "offset",
+            "shift": 1,
+            "operand": {
+              "type": "indicator",
+              "id": "DONCHIAN",
+              "params": {
+                "length": 20
+              },
+              "output": "upper"
+            }
+          }
+        }
+      ]
+    },
+    "sell": {
+      "logic": "OR",
+      "conditions": [
+        {
+          "left": {
+            "type": "price",
+            "field": "close"
+          },
+          "op": "crosses_below",
+          "right": {
+            "type": "offset",
+            "shift": 1,
+            "operand": {
+              "type": "indicator",
+              "id": "DONCHIAN",
+              "params": {
+                "length": 20
+              },
+              "output": "lower"
+            }
+          }
+        }
+      ]
+    }
+  }
+}

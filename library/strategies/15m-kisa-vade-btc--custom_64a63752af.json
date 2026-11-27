@@ -1,0 +1,104 @@
+{
+  "kind": "strategy",
+  "schema": 1,
+  "id": "custom_64a63752af",
+  "name": "15m Kısa Vade (BTC)",
+  "version": 1,
+  "status": "active",
+  "definition": {
+    "name": "15m Kısa Vade (BTC)",
+    "description": "15 dakikalık, BTC için ayarlanmış sürüm. AL: SuperTrend(ATR 10, ×5) yukarı VE fiyat EMA200 üstünde VE RSI(14) < 70 VE Bollinger percent_b < 0,9 (bantın tepesinden, aşırı uzamış noktadan giriş yapmaz). ÇIKIŞ: SuperTrend aşağı VEYA 30×ATR stop. Çıkış sonrası 10 mum bekleme. Tam geçmiş (250.000 mum): BTC +1191% (al-tut +724%), düşüş %57; XRP +769% (al-tut +306%). Son 2,8 yıl: BTC +72% (al-tut +59%), XRP +92%. Bollinger filtresi BTC'de üç pencerede de temel sürümden iyi; bu yüzden BTC botlarında bunu, XRP botlarında '15m Kısa Vade' veya '15m Dip Alım (XRP)' kullanın.",
+    "risk": {
+      "stop_atr": 30,
+      "cooldown": 10
+    },
+    "buy": {
+      "logic": "AND",
+      "conditions": [
+        {
+          "left": {
+            "type": "indicator",
+            "id": "SUPERTREND",
+            "params": {
+              "atr_length": 10,
+              "factor": 5
+            },
+            "output": "direction"
+          },
+          "op": "eq",
+          "right": {
+            "type": "constant",
+            "value": 1
+          }
+        },
+        {
+          "left": {
+            "type": "price",
+            "field": "close"
+          },
+          "op": "gt",
+          "right": {
+            "type": "indicator",
+            "id": "EMA",
+            "params": {
+              "length": 200
+            },
+            "output": "value"
+          }
+        },
+        {
+          "left": {
+            "type": "indicator",
+            "id": "RSI",
+            "params": {
+              "length": 14
+            },
+            "output": "value"
+          },
+          "op": "lt",
+          "right": {
+            "type": "constant",
+            "value": 70
+          }
+        },
+        {
+          "left": {
+            "type": "indicator",
+            "id": "BB",
+            "params": {
+              "length": 20,
+              "std": 2.0
+            },
+            "output": "percent_b"
+          },
+          "op": "lt",
+          "right": {
+            "type": "constant",
+            "value": 0.9
+          }
+        }
+      ]
+    },
+    "sell": {
+      "logic": "OR",
+      "conditions": [
+        {
+          "left": {
+            "type": "indicator",
+            "id": "SUPERTREND",
+            "params": {
+              "atr_length": 10,
+              "factor": 5
+            },
+            "output": "direction"
+          },
+          "op": "eq",
+          "right": {
+            "type": "constant",
+            "value": -1
+          }
+        }
+      ]
+    }
+  }
+}

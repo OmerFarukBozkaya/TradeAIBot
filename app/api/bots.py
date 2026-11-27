@@ -36,6 +36,15 @@ class BotBody(BaseModel):
     confirm: Optional[str] = None
 
 
+class RecommendedBotsBody(BaseModel):
+    """Dashboard'dan ölçülmüş 4h kurulumunu tek tıkla oluşturma."""
+
+    cash: float = 1000.0
+    mode: str = "paper"
+    risk: float = 4.0
+    prefix: str = "Trend 4h"
+
+
 class PromoteBody(BaseModel):
     password: Optional[str] = None
     confirm: Optional[str] = None
@@ -67,6 +76,53 @@ def _builtin_label(name: str) -> str:
         if item["name"] == name:
             return item.get("label") or name
     return name
+
+
+# Ölçülmüş 4h kurulumu (docs/STRATEGY_4H.md). Dashboard'daki "Önerilen
+# Botlar" düğmesi bu değerlerle 8 ayrı bot oluşturur.
+RECOMMENDED_COINS = [
+    "BTCUSDT", "SOLUSDT", "XRPUSDT", "BNBUSDT",
+    "SUIUSDT", "ENAUSDT", "WLDUSDT", "PEPEUSDT",
+]
+RECOMMENDED_RISK: Dict[str, Any] = {
+    "stop_atr": 3.0,
+    "trail_atr": 6.0,
+    "trail_after_pct": 10.0,
+    "breakeven_pct": 20.0,
+    "profit_exit_donchian": 10,
+    "cooldown": 5,
+    "take_profit": False,
+}
+
+
+def _recommended_coins() -> tuple[List[str], Optional[Dict[str, Any]]]:
+    """`Trend 4h` listesini kullanır; yoksa ölçülen sabit listeye düşer."""
+    for item in coin_lists.list_lists():
+        if item["name"] == "Trend 4h" and not item.get("builtin"):
+            meta = {"id": item["id"], "name": item["name"], "count": item["count"]}
+            return list(item["coins"]), meta
+    return list(RECOMMENDED_COINS), None
+
+
+def _recommended_config(
+    coin: str, cash: float, risk: Dict[str, Any]
+) -> Dict[str, Any]:
+    return {
+        "period": "4h",
+        "strategies": [
+            {
+                "type": "builtin",
+                "name": "TrendRider",
+                "label": _builtin_label("TrendRider"),
+            }
+        ],
+        "coins": [coin],
+        "cash": round(float(cash), 8),
+        "asset_class": "crypto",
+        "risk": risk,
+        "filters": {"btc_regime": True},
+        "max_position_pct": 100,
+    }
 
 
 def _bot_config(body: BotBody) -> Dict[str, Any]:
@@ -579,6 +635,95 @@ async def create_bot(body: BotBody):
     )
     db.log_event(bot_id, f"Bot oluşturuldu ({mode}, {body.period})", "info")
     return _serialize(db.row("SELECT * FROM bots WHERE id=?", (bot_id,)))
+
+
+@router.post("/recommended")
+async def create_recommended_bots(body: RecommendedBotsBody):
+    """Ölçülmüş 4h kurulumuyla **8 ayrı bot** oluşturur.
+
+    Bir bot aynı anda tek pozisyon tuttuğu için 8 coini tek botta çalıştırmak
+    çeşitlendirme sağlamaz; bu yüzden her coin kendi botunda, sermayenin
+    1/8'i ile çalışır. Botlar **durdurulmuş** oluşturulur; panelden başlatılır.
+    Aynı isimde bot varsa atlanır (komut idempotenttir).
+    """
+    mode = (body.mode or "paper").lower()
+    if mode not in {"paper", "live"}:
+        raise HTTPException(400, "Mod paper veya live olmalı")
+    if mode == "live":
+        _live_gate()
+
+    coins, _meta = _recommended_coins()
+    if not coins:
+        raise HTTPException(400, "Önerilen coin listesi boş")
+
+    try:
+        cash = float(body.cash)
+        risk_pct = float(body.risk)
+    except (TypeError, ValueError):
+        raise HTTPException(400, "Sermaye ve risk sayı olmalı")
+    min_cash = len(coins) * 5  # borsa minimum emir tutarı (~5 USDT) altına düşmesin
+    if cash < min_cash:
+        raise HTTPException(
+            400, f"Sermaye en az {min_cash} USDT olmalı (bot başına 5 USDT)"
+        )
+    if not 0.1 <= risk_pct <= 8:
+        raise HTTPException(400, "İşlem riski %0,1 – %8 aralığında olmalı")
+
+    # Strateji gerçekten kurulabiliyor mu? (kod güncellemelerinde erken uyarı)
+    try:
+        build_evaluator({"type": "builtin", "name": "TrendRider"})
+    except Exception as exc:  # noqa: BLE001
+        raise HTTPException(400, f"TrendRider yüklenemedi: {exc}")
+
+    from app import risk as risk_rules
+
+    risk_block: Dict[str, Any] = {
+        **RECOMMENDED_RISK,
+        "risk_per_trade_pct": risk_pct,
+    }
+    if mode == "live":
+        risk_block["daily_loss_limit_pct"] = 3.0
+    risk, warnings = risk_rules.normalize_risk(risk_block, "4h")
+
+    prefix = str(body.prefix or "").strip()[:60] or "Trend 4h"
+    per_bot = cash / len(coins)
+    created: List[Dict[str, str]] = []
+    skipped: List[str] = []
+
+    for coin in coins:
+        name = f"{prefix} · {coin}"
+        if db.row("SELECT id FROM bots WHERE name=?", (name,)):
+            skipped.append(name)
+            continue
+        bot_id = f"bot_{uuid.uuid4().hex[:10]}"
+        now = db.utcnow()
+        config = _recommended_config(coin, per_bot, risk)
+        if warnings:
+            config["risk_warnings"] = list(warnings)
+        db.execute(
+            "INSERT INTO bots(id,name,type,mode,period,config_json,status,"
+            "auto_restart,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?)",
+            (
+                bot_id, name, "trade", mode, "4h",
+                json.dumps(config, ensure_ascii=False),
+                "stopped", 1, now, now,
+            ),
+        )
+        db.log_event(
+            bot_id,
+            f"Önerilen 4h kurulumuyla oluşturuldu ({mode}, risk %{risk_pct:g})",
+            "info",
+        )
+        created.append({"id": bot_id, "name": name, "coin": coin})
+
+    return {
+        "mode": mode,
+        "coins": coins,
+        "per_bot": round(per_bot, 8),
+        "risk": risk,
+        "created": created,
+        "skipped": skipped,
+    }
 
 
 @router.get("/{bot_id}")

@@ -332,7 +332,59 @@ def _cagr(initial: float, final: float, start_ms: float, end_ms: float) -> float
         return 0.0
     if years <= 0 or initial <= 0 or final <= 0:
         return 0.0
-    return (pow(final / initial, 1.0 / years) - 1.0) * 100
+    try:
+        return (pow(final / initial, 1.0 / years) - 1.0) * 100
+    except OverflowError:
+        # Çok kısa veri penceresinde (veya sahte zaman damgasında) yıllık
+        # oran taşabilir; raporu çökertmek yerine 0 döndür.
+        return 0.0
+
+
+def _periods_per_year(period: str) -> Optional[float]:
+    """Bir yılda kaç mum var? (Sharpe/Sortino yıllıklandırması için.)"""
+    interval = _INTERVAL_MS.get(period)
+    if not interval:
+        try:
+            from app.market_data.periods import parse_period
+
+            interval = parse_period(period).ms
+        except Exception:  # noqa: BLE001 - bilinmeyen periyot
+            return None
+    if not interval or interval <= 0:
+        return None
+    return 365.25 * 24 * 3600 * 1000 / interval
+
+
+def _risk_ratios(
+    equity: List[float], period: str
+) -> tuple[Optional[float], Optional[float]]:
+    """Yıllıklandırılmış Sharpe ve Sortino (risksiz faiz = 0).
+
+    Equity her mum sonunda işaretlenir; getiriler mumluk hesaplanır ve
+    yıllıklandırılır. Az sayıda mumda oran anlamsız olduğu için ``None``
+    döner. Downside sapma, negatif getirilerin karelerinin **tüm** mum
+    sayısına bölünmesiyle hesaplanır (Sortino'nun standart tanımı).
+    """
+    ppy = _periods_per_year(period)
+    if not ppy or len(equity) < 3:
+        return None, None
+    returns: List[float] = []
+    for previous, current in zip(equity, equity[1:]):
+        if previous and previous > 0:
+            returns.append(current / previous - 1.0)
+    if len(returns) < 2:
+        return None, None
+    mean = sum(returns) / len(returns)
+    variance = sum((r - mean) ** 2 for r in returns) / len(returns)
+    std = math.sqrt(variance)
+    sharpe = mean / std * math.sqrt(ppy) if std > 0 else None
+    downside = [r for r in returns if r < 0]
+    dstd = math.sqrt(sum(r * r for r in downside) / len(returns)) if downside else 0.0
+    sortino = mean / dstd * math.sqrt(ppy) if dstd > 0 else None
+    return (
+        round(sharpe, 2) if sharpe is not None else None,
+        round(sortino, 2) if sortino is not None else None,
+    )
 
 
 def _yearly_breakdown(points: List[tuple]) -> List[Dict[str, Any]]:
@@ -402,6 +454,8 @@ def _risk_exit(
     open_price = float(data["open"][idx]) if data.get("open") else None
     entry = float(position["entry"])
     base_atr = position.get("atr") or (atr[idx] if atr and idx < len(atr) else 0.0)
+    # Takipli stop güncel ATR ile ölçülür; giriş ATR'si yalnızca ilk stop için.
+    atr_now = atr[idx] if atr and idx < len(atr) and atr[idx] else base_atr
 
     stop_price, stop_kind = risk_rules.effective_stop(
         entry,
@@ -410,7 +464,12 @@ def _risk_exit(
         risk,
         floor=position.get("stop_floor"),
         period=period,
+        atr_now=atr_now,
+        previous_stop=position.get("stop_high"),
     )
+    # Ratchet durumunu pozisyonda sakla (canlı motorla aynı davranış).
+    if stop_price is not None:
+        position["stop_high"] = float(stop_price)
     if stop_price is not None and low <= stop_price:
         # Gap'te (mum stopun altında açıldı) açılış fiyatından çıkılır; aksi
         # halde stop seviyesinden. İkisi de kötümser senaryodur.
@@ -549,6 +608,9 @@ def run_backtest(params: Dict[str, Any]) -> Dict[str, Any]:
     initial_cash = cash
     fee = float(params.get("fee", settings.PAPER_FEE))
     slippage = float(params.get("slippage", settings.PAPER_SLIPPAGE))
+    filters = params.get("filters")
+    if not isinstance(filters, dict):
+        filters = {}
 
     # Backtest teşhis amaçlıdır: arşivlenmiş modelin geçmiş performansı da
     # yeniden ölçülebilir (canlı bota eklenmesi yine engellidir).
@@ -594,6 +656,24 @@ def run_backtest(params: Dict[str, Any]) -> Dict[str, Any]:
         vals = IndicatorCache(data).compute("DONCHIAN", {"length": profit_don}, "lower")
         profit_lower = [None if (v is None or v != v) else float(v) for v in vals]
 
+    # Piyasa rejimi: BTC > EMA200 değilse yeni alım yok. Veri çekilemezse
+    # filtre uygulanmaz (botu veri hatası yüzünden kilitlememek için).
+    btc_regime: Optional[Dict[int, bool]] = None
+    if filters.get("btc_regime") and asset_class in {"", "crypto"} and period in _INTERVAL_MS:
+        btc_data = params.get("_btc_data")
+        if not isinstance(btc_data, dict) or not btc_data.get("close"):
+            try:
+                btc_data, _ = _history(
+                    None, "BTCUSDT", period, limit, source="binance",
+                    start=start, end=end,
+                )
+            except Exception:  # noqa: BLE001 - ağ hatasında filtre atlanır
+                btc_data = None
+        if isinstance(btc_data, dict) and btc_data.get("close"):
+            from app.market_regime import regime_map
+
+            btc_regime = regime_map(btc_data, 200)
+
     position = None
     trades: List[Dict[str, Any]] = []
     equity = [cash]
@@ -612,8 +692,11 @@ def run_backtest(params: Dict[str, Any]) -> Dict[str, Any]:
             result = evaluator.evaluate_at(data, idx)
         price = float(data["close"][idx])
         candle_time = data["opendate"][idx]
+        market_ok = True
+        if btc_regime:
+            market_ok = btc_regime.get(int(candle_time), True)
 
-        if position is None and result["buy"] and idx > cooldown_until:
+        if position is None and result["buy"] and idx > cooldown_until and market_ok:
             exec_price = price * (1 + slippage)
             entry_atr = (atr[idx] if atr and idx < len(atr) else None) or 0.0
             stop_price, _kind = risk_rules.effective_stop(
@@ -842,6 +925,7 @@ def run_backtest(params: Dict[str, Any]) -> Dict[str, Any]:
     end_ms = float(data["opendate"][end_idx]) if 0 <= end_idx < n else 0.0
     cagr = _cagr(initial_cash, cash, start_ms, end_ms)
     bh_cagr = _cagr(initial_cash, bh_final, start_ms, end_ms)
+    sharpe, sortino = _risk_ratios(equity, period)
 
     import datetime as _dt
 
@@ -886,6 +970,8 @@ def run_backtest(params: Dict[str, Any]) -> Dict[str, Any]:
             "avg_candles": round(sum(t["candles"] for t in trades) / len(trades), 1) if trades else 0.0,
             "cagr_pct": round(cagr, 2),
             "calmar": round(cagr / max_dd, 2) if max_dd > 0 else None,
+            "sharpe": sharpe,
+            "sortino": sortino,
             "avg_hold_candles": avg_hold,
             "median_hold_candles": med_hold,
             "max_hold_candles": max(hold) if hold else 0,
@@ -998,6 +1084,21 @@ def run_backtest_all(params: Dict[str, Any]) -> Dict[str, Any]:
     )
     report = _data_report(data, period, history_meta)
 
+    # BTC rejim filtresi açıksa BTC verisi **bir kez** çekilir; her strateji
+    # için yeniden indirmek yavaş ve gereksiz olur.
+    filters = params.get("filters")
+    if not isinstance(filters, dict):
+        filters = {}
+    btc_data = None
+    if filters.get("btc_regime") and asset_class in {"", "crypto"} and period in _INTERVAL_MS:
+        try:
+            btc_data, _ = _history(
+                None, "BTCUSDT", period, limit, source="binance",
+                start=start, end=end,
+            )
+        except Exception:  # noqa: BLE001
+            btc_data = None
+
     rows: List[Dict[str, Any]] = []
     starts: List[float] = []
     ends: List[float] = []
@@ -1023,8 +1124,10 @@ def run_backtest_all(params: Dict[str, Any]) -> Dict[str, Any]:
                     "source": source,
                     "asset_class": asset_class,
                     "risk": params.get("risk") or {},
+                    "filters": filters,
                     "_data": data,
                     "_history_meta": history_meta,
+                    "_btc_data": btc_data,
                 }
             )
             metrics = result["metrics"]

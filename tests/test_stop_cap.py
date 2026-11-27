@@ -47,8 +47,10 @@ def test_period_cap_applies_in_backtest():
     hit = jr._risk_exit(pos, _data(low=95.5), 0, [], {"stop_atr": 35}, period="15m")
     assert hit is not None
     assert hit[0] == pytest.approx(96.0)
-    # 1h tavanı %6 → 94
-    hit = jr._risk_exit(pos, _data(low=93.0), 0, [], {"stop_atr": 35}, period="1h")
+    # 1h tavanı %6 → 94 (her çağrı kendi pozisyonuyla; ratchet taşınmasın)
+    hit = jr._risk_exit(
+        _position(entry=100.0, atr=2.0), _data(low=93.0), 0, [], {"stop_atr": 35}, period="1h"
+    )
     assert hit[0] == pytest.approx(94.0)
 
 

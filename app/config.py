@@ -156,6 +156,10 @@ class Settings(metaclass=_SettingsMeta):
     SECRET_KEY = os.getenv("TRADEAI_SECRET_KEY", "")
     SESSION_HOURS = _int("TRADEAI_SESSION_HOURS", 12)
     COOKIE_SECURE = _bool("TRADEAI_COOKIE_SECURE", False)
+    # Cloudflare Tunnel / ters proxy arkasında gerçek şema `X-Forwarded-Proto`
+    # başlığında gelir. Bu açıksa HTTPS isteklerinde çerez otomatik `Secure`
+    # işaretlenir ve HSTS gönderilir; yerel HTTP erişimi etkilenmez.
+    TRUST_PROXY = _bool("TRADEAI_TRUST_PROXY", True)
     # Aynı tarayıcıda iki panel (ör. localhost:8089 + localhost:8080) açılınca
     # çerezler port ayrımı yapmadığı için oturumlar birbirini ezer. Her örneğe
     # farklı isim verilerek bu çakışma önlenir.
@@ -166,6 +170,29 @@ class Settings(metaclass=_SettingsMeta):
     ADMIN_USER = os.getenv("ADMIN_USER", "admin")
     ADMIN_PASSWORD = os.getenv("ADMIN_PASSWORD", "")
 
+    # --- Uzaktan erişim kapısı (Cloudflare Tunnel) ---
+    # off | key | cert | cert-or-key
+    #   off         : hiçbir şey engellenmez (varsayılan; yerel ağ gibi çalışır)
+    #   key         : yalnızca cihaz anahtarı (Cloudflare'de ayar GEREKMEZ)
+    #   cert        : yalnızca istemci sertifikası (Cloudflare başlığı iletmeli)
+    #   cert-or-key : ikisinden biri yeterli
+    REMOTE_ACCESS_MODE = (os.getenv("REMOTE_ACCESS_MODE", "off").strip().lower() or "off")
+    # Bu kapı yalnızca listelenen hostname'lerde uygulanır (virgülle ayrılır).
+    # Boşsa kapı kapalıdır: yanlışlıkla her hostname'i kilitlememek için.
+    REMOTE_ACCESS_HOST = os.getenv("REMOTE_ACCESS_HOST", "").strip()
+    # Cloudflare Transform Rule bu başlığa cf.tls_client_auth.cert_verified yazar.
+    REMOTE_CERT_HEADER = (
+        os.getenv("REMOTE_CERT_HEADER", "cf-client-cert-verified").strip().lower()
+        or "cf-client-cert-verified"
+    )
+    # Yerel ağdan (aynı LAN) erişim her zaman serbest kalsın.
+    REMOTE_ALLOW_LAN = _bool("REMOTE_ALLOW_LAN", True)
+    # Cihaz anahtarı çerezi (oturum çerezinden ayrı).
+    DEVICE_COOKIE_NAME = (
+        os.getenv("TRADEAI_DEVICE_COOKIE", "tradeai_device").strip()
+        or "tradeai_device"
+    )
+
     # İşlem güvenliği
     LIVE_ENABLED = _bool("LIVE_TRADING_ENABLED", True)
     DEFAULT_MODE = os.getenv("DEFAULT_TRADE_MODE", "paper").strip().lower()
@@ -174,6 +201,9 @@ class Settings(metaclass=_SettingsMeta):
     DEFAULT_CASH = _float("DEFAULT_CASH", 100.0)
 
     # Botlar
+    # `library/` altındaki strateji ve coin listelerini açılışta ekle
+    # (yalnızca eksik olanlar; mevcut kayıtların üzerine yazmaz).
+    LIBRARY_AUTO_IMPORT = _bool("LIBRARY_AUTO_IMPORT", True)
     HEARTBEAT_SECONDS = _int("BOT_HEARTBEAT_SECONDS", 5)
     HEARTBEAT_TIMEOUT_SECONDS = _int("BOT_HEARTBEAT_TIMEOUT_SECONDS", 90)
     AUTO_RESTART = _bool("BOT_AUTO_RESTART", True)

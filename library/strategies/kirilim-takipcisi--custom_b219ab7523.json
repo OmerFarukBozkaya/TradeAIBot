@@ -1,0 +1,75 @@
+{
+  "kind": "strategy",
+  "schema": 1,
+  "id": "custom_b219ab7523",
+  "name": "Kırılım Takipçisi",
+  "version": 1,
+  "status": "archived",
+  "definition": {
+    "name": "Kırılım Takipçisi",
+    "description": "Walk-forward ile seçilmiş trend stratejisi (aşırı-uyum testinden geçti). AL: fiyat son 100 mumun zirvesini kırar ve EMA200 üzerinde. SAT: fiyat son 10 mumun dibinin altına iner. Yükselişte trend boyunca pozisyonda kalır, kırılınca hızlı çıkar; ayı piyasasında nakitte bekler. BTC 1d: 19 işlem, +451.7% (al-tut +1353.4%) ama düşüş %58 vs %77. 2025-2026 düşüşünde 14/16 seride al-tut'u geçti (medyan -11.2% vs -53.5%). Boğa piyasasında al-tut'un gerisinde kalır; bunu gizlemiyoruz.",
+    "buy": {
+      "logic": "AND",
+      "conditions": [
+        {
+          "left": {
+            "type": "price",
+            "field": "close"
+          },
+          "op": "gt",
+          "right": {
+            "type": "offset",
+            "shift": 1,
+            "operand": {
+              "type": "indicator",
+              "id": "DONCHIAN",
+              "params": {
+                "length": 100
+              },
+              "output": "upper"
+            }
+          }
+        },
+        {
+          "left": {
+            "type": "price",
+            "field": "close"
+          },
+          "op": "gt",
+          "right": {
+            "type": "indicator",
+            "id": "EMA",
+            "params": {
+              "length": 200
+            },
+            "output": "value"
+          }
+        }
+      ]
+    },
+    "sell": {
+      "logic": "OR",
+      "conditions": [
+        {
+          "left": {
+            "type": "price",
+            "field": "close"
+          },
+          "op": "lt",
+          "right": {
+            "type": "offset",
+            "shift": 1,
+            "operand": {
+              "type": "indicator",
+              "id": "DONCHIAN",
+              "params": {
+                "length": 10
+              },
+              "output": "lower"
+            }
+          }
+        }
+      ]
+    }
+  }
+}

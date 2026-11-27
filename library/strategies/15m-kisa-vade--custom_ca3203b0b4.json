@@ -1,0 +1,93 @@
+{
+  "kind": "strategy",
+  "schema": 1,
+  "id": "custom_ca3203b0b4",
+  "name": "15m Kısa Vade",
+  "version": 11,
+  "status": "active",
+  "definition": {
+    "name": "15m Kısa Vade",
+    "description": "15 dakikalık. AL: SuperTrend(ATR 10, ×5) yukarı VE fiyat EMA200 üstünde VE RSI(14) < 70. RSI filtresi, trendin sonuna (aşırı alım bölgesi) denk gelen geç girişleri eler; işlem sayısını azaltır, düşüşü küçültür. ÇIKIŞ: SuperTrend aşağı VEYA 30×ATR stop (felaket koruması). Zaman limiti YOK. Çıkış sonrası 10 mum bekleme. Tam geçmiş (250.000 mum): BTC +1042% (al-tut +734%), düşüş %57 vs %77; XRP +876% (al-tut +308%), düşüş %76 vs %85. RSI filtresi iki coinde de getiriyi ve düşüşü iyileştirir; dar stop, takipli stop ve kâr koruma 15m'de zararlı (ölçüldü).",
+    "risk": {
+      "stop_atr": 2.5,
+      "trail_atr": 4,
+      "trail_after_pct": 3,
+      "breakeven_pct": 8,
+      "profit_exit_donchian": 10,
+      "cooldown": 5,
+      "take_profit": true
+    },
+    "buy": {
+      "logic": "AND",
+      "conditions": [
+        {
+          "left": {
+            "type": "indicator",
+            "id": "SUPERTREND",
+            "params": {
+              "atr_length": 10,
+              "factor": 5
+            },
+            "output": "direction"
+          },
+          "op": "eq",
+          "right": {
+            "type": "constant",
+            "value": 1
+          }
+        },
+        {
+          "left": {
+            "type": "price",
+            "field": "close"
+          },
+          "op": "gt",
+          "right": {
+            "type": "indicator",
+            "id": "EMA",
+            "params": {
+              "length": 200
+            },
+            "output": "value"
+          }
+        },
+        {
+          "left": {
+            "type": "indicator",
+            "id": "RSI",
+            "params": {
+              "length": 14
+            },
+            "output": "value"
+          },
+          "op": "lt",
+          "right": {
+            "type": "constant",
+            "value": 70
+          }
+        }
+      ]
+    },
+    "sell": {
+      "logic": "OR",
+      "conditions": [
+        {
+          "left": {
+            "type": "indicator",
+            "id": "SUPERTREND",
+            "params": {
+              "atr_length": 10,
+              "factor": 5
+            },
+            "output": "direction"
+          },
+          "op": "eq",
+          "right": {
+            "type": "constant",
+            "value": -1
+          }
+        }
+      ]
+    }
+  }
+}
